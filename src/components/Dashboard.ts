@@ -20,10 +20,16 @@ export function mountDashboard(root: HTMLElement): void {
   })
 
   root.innerHTML = `
+    <header class="topbar">
+      <div class="topbar__inner">
+        <span class="topbar__mark" aria-hidden="true">H</span>
+        <span class="topbar__name">Household</span>
+      </div>
+    </header>
     <div class="dashboard">
       <header class="dashboard__header">
         <div class="dashboard__title">
-          <h1>Household Expenses</h1>
+          <h1>Dashboard.</h1>
           <p>Track spending across your household, together.</p>
         </div>
       </header>

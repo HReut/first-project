@@ -71,7 +71,7 @@ export class TransactionsTable {
           </span>
         </td>
         <td>
-          <span class="category-badge">
+          <span class="category-badge" data-category="${tx.category}">
             <span class="category-dot" style="background: var(${CATEGORY_COLOR_VAR[tx.category]})"></span>
             ${tx.category}
           </span>
