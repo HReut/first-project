@@ -6,7 +6,7 @@ interface MerchantSpec {
   emailLikely?: boolean
 }
 
-const MERCHANTS: Record<Category, MerchantSpec[]> = {
+const MERCHANTS: Record<string, MerchantSpec[]> = {
   Groceries: [{ name: 'Shufersal' }, { name: 'Rami Levy' }, { name: 'Victory' }],
   Dining: [{ name: 'Aroma Espresso Bar' }, { name: 'Cafe Cafe' }, { name: 'Wolt', emailLikely: true }],
   Transport: [{ name: 'Pango' }, { name: 'Paz Gas Station' }, { name: 'Rav-Kav Recharge' }],
@@ -25,7 +25,7 @@ const MERCHANTS: Record<Category, MerchantSpec[]> = {
   Housing: [{ name: 'Monthly Rent', emailLikely: true }, { name: 'Home Center' }, { name: 'ACE Hardware' }],
 }
 
-const AMOUNT_RANGE: Record<Category, [number, number]> = {
+const AMOUNT_RANGE: Record<string, [number, number]> = {
   Groceries: [60, 450],
   Dining: [25, 220],
   Transport: [20, 350],
@@ -35,8 +35,6 @@ const AMOUNT_RANGE: Record<Category, [number, number]> = {
   Health: [30, 500],
   Housing: [300, 4500],
 }
-
-const CATEGORIES = Object.keys(MERCHANTS) as Category[]
 
 // Deterministic PRNG (mulberry32) so the mock dataset looks the same across reloads.
 function mulberry32(seed: number): () => number {
@@ -66,10 +64,14 @@ function randomAmount(range: [number, number], rand: () => number): number {
 const MONTHS_OF_HISTORY = 4
 const TRANSACTIONS_PER_PERSON_PER_MONTH = 14
 
-export function createMockTransactions(referenceDate = new Date()): Transaction[] {
+/** Seeds a plausible transaction history against whatever categories exist
+ * (by name) — used only by the localStorage mock data source. */
+export function createMockTransactions(categories: Category[], referenceDate = new Date()): Transaction[] {
   const rand = mulberry32(42)
   const transactions: Transaction[] = []
-  const people: Person[] = ['me', 'partner']
+  const people: Person[] = ['Reut', 'Keren']
+  const categoryIdByName = new Map(categories.map((category) => [category.name, category.id]))
+  const categoryNames = Object.keys(MERCHANTS).filter((name) => categoryIdByName.has(name))
   let counter = 0
 
   for (let monthOffset = 0; monthOffset < MONTHS_OF_HISTORY; monthOffset++) {
@@ -80,21 +82,26 @@ export function createMockTransactions(referenceDate = new Date()): Transaction[
 
     for (const person of people) {
       for (let i = 0; i < TRANSACTIONS_PER_PERSON_PER_MONTH; i++) {
-        const category = pick(CATEGORIES, rand)
-        const merchant = pick(MERCHANTS[category], rand)
+        const categoryName = pick(categoryNames, rand)
+        const merchant = pick(MERCHANTS[categoryName], rand)
         const day = Math.max(1, Math.floor(rand() * maxDay) + 1)
         const date = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), day)
         const emailChance = merchant.emailLikely ? 0.85 : 0.15
+        const isEmailAuto = rand() < emailChance
+        // A slice of auto-imported invoices still await 1-click approval —
+        // seeds the Review Center widget with something to show.
+        const status = isEmailAuto && rand() < 0.4 ? 'needs_review' : 'approved'
 
         counter++
         transactions.push({
           id: `tx-${counter}`,
           date: isoDate(date),
           merchant: merchant.name,
-          category,
+          categoryId: categoryIdByName.get(categoryName)!,
           person,
-          amount: randomAmount(AMOUNT_RANGE[category], rand),
-          source: rand() < emailChance ? 'email' : 'manual',
+          amount: randomAmount(AMOUNT_RANGE[categoryName], rand),
+          status,
+          source: isEmailAuto ? 'email_auto' : 'manual',
         })
       }
     }

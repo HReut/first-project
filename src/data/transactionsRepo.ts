@@ -1,0 +1,73 @@
+import { supabase } from '../lib/supabaseClient.ts'
+import type { NewTransaction, Transaction } from '../types.ts'
+import type { TransactionRow } from '../types/database.ts'
+import { loadLocalCategories, loadLocalTransactions, saveLocalTransactions } from './localStore.ts'
+
+function fromRow(row: TransactionRow): Transaction {
+  return {
+    id: row.id,
+    date: row.date,
+    merchant: row.merchant,
+    amount: row.amount,
+    categoryId: row.category_id,
+    person: row.person,
+    status: row.status,
+    source: row.source,
+  }
+}
+
+function toRow(input: Partial<NewTransaction>): Partial<Omit<TransactionRow, 'id' | 'created_at'>> {
+  const row: Partial<Omit<TransactionRow, 'id' | 'created_at'>> = {}
+  if (input.date !== undefined) row.date = input.date
+  if (input.merchant !== undefined) row.merchant = input.merchant
+  if (input.amount !== undefined) row.amount = input.amount
+  if (input.categoryId !== undefined) row.category_id = input.categoryId
+  if (input.person !== undefined) row.person = input.person
+  if (input.status !== undefined) row.status = input.status
+  if (input.source !== undefined) row.source = input.source
+  return row
+}
+
+export async function listTransactions(): Promise<Transaction[]> {
+  if (supabase) {
+    const { data, error } = await supabase.from('transactions').select('*').order('date', { ascending: false })
+    if (error) throw error
+    return (data as TransactionRow[]).map(fromRow)
+  }
+  return loadLocalTransactions(loadLocalCategories())
+}
+
+export async function createTransaction(input: NewTransaction): Promise<Transaction> {
+  if (supabase) {
+    const { data, error } = await supabase.from('transactions').insert(toRow(input)).select().single()
+    if (error) throw error
+    return fromRow(data as TransactionRow)
+  }
+  const transactions = loadLocalTransactions(loadLocalCategories())
+  const created: Transaction = { ...input, id: crypto.randomUUID() }
+  saveLocalTransactions([created, ...transactions])
+  return created
+}
+
+export async function updateTransaction(id: string, patch: Partial<NewTransaction>): Promise<Transaction> {
+  if (supabase) {
+    const { data, error } = await supabase.from('transactions').update(toRow(patch)).eq('id', id).select().single()
+    if (error) throw error
+    return fromRow(data as TransactionRow)
+  }
+  const transactions = loadLocalTransactions(loadLocalCategories())
+  const updated = transactions.map((tx) => (tx.id === id ? { ...tx, ...patch } : tx))
+  saveLocalTransactions(updated)
+  return updated.find((tx) => tx.id === id)!
+}
+
+export async function deleteTransactions(ids: string[]): Promise<void> {
+  if (supabase) {
+    const { error } = await supabase.from('transactions').delete().in('id', ids)
+    if (error) throw error
+    return
+  }
+  const idSet = new Set(ids)
+  const transactions = loadLocalTransactions(loadLocalCategories())
+  saveLocalTransactions(transactions.filter((tx) => !idSet.has(tx.id)))
+}

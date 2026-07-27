@@ -1,4 +1,4 @@
 import './style.css'
-import { mountDashboard } from './components/Dashboard.ts'
+import { mountApp } from './components/App.ts'
 
-mountDashboard(document.querySelector<HTMLDivElement>('#app')!)
+mountApp(document.querySelector<HTMLDivElement>('#app')!)

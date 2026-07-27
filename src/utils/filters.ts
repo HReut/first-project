@@ -7,10 +7,12 @@ export function matchesPeriod(date: string, period: Filters['period']): boolean 
 }
 
 export function filterTransactions(transactions: Transaction[], filters: Filters): Transaction[] {
+  const search = filters.search.trim().toLowerCase()
   return transactions.filter((tx) => {
-    if (filters.category !== 'all' && tx.category !== filters.category) return false
+    if (filters.categoryId !== 'all' && tx.categoryId !== filters.categoryId) return false
     if (filters.person !== 'all' && tx.person !== filters.person) return false
     if (!matchesPeriod(tx.date, filters.period)) return false
+    if (search && !tx.merchant.toLowerCase().includes(search)) return false
     return true
   })
 }

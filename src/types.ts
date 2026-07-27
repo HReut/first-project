@@ -1,26 +1,40 @@
-export type Person = 'me' | 'partner'
+export type Person = 'Reut' | 'Keren'
+export type TransactionStatus = 'approved' | 'needs_review'
+export type TransactionSource = 'manual' | 'email_auto'
 
-export type Category =
-  | 'Groceries'
-  | 'Dining'
-  | 'Transport'
-  | 'Utilities'
-  | 'Shopping'
-  | 'Entertainment'
-  | 'Health'
-  | 'Housing'
+export interface Category {
+  id: string
+  name: string
+  colorCode: string
+  icon: string
+  monthlyBudgetLimit: number | null
+}
 
-export type TransactionSource = 'manual' | 'email'
+export type NewCategory = Omit<Category, 'id'>
 
 export interface Transaction {
   id: string
   date: string // ISO yyyy-mm-dd
   merchant: string
-  category: Category
-  person: Person
   amount: number
+  categoryId: string
+  person: Person
+  status: TransactionStatus
   source: TransactionSource
 }
+
+export type NewTransaction = Omit<Transaction, 'id'>
+
+export interface EmailSyncRule {
+  id: string
+  targetEmail: string
+  merchantKeyword: string
+  defaultCategoryId: string
+  defaultPerson: Person
+  isActive: boolean
+}
+
+export type NewEmailSyncRule = Omit<EmailSyncRule, 'id'>
 
 export type PeriodFilter =
   | { kind: 'month'; month: string } // YYYY-MM
@@ -28,12 +42,22 @@ export type PeriodFilter =
   | { kind: 'all' }
 
 export interface Filters {
-  category: Category | 'all'
+  categoryId: string | 'all'
   person: Person | 'all'
   period: PeriodFilter
+  search: string
 }
 
+export type View = 'overview' | 'transactions' | 'insights' | 'settings'
+
+export type LoadStatus = 'loading' | 'ready' | 'error'
+
 export interface AppState {
+  view: View
+  status: LoadStatus
+  error: string | null
+  categories: Category[]
   transactions: Transaction[]
+  emailRules: EmailSyncRule[]
   filters: Filters
 }
