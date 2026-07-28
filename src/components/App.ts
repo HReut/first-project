@@ -45,39 +45,60 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   })
 
   root.innerHTML = `
-    <header class="topbar">
-      <div class="topbar__inner">
-        <div class="topbar__brand">
-          <span class="topbar__mark" aria-hidden="true">${catLogoMarkup()}</span>
-          <div class="topbar__wordmark">
-            <span class="topbar__name">Opa! Tulik</span>
-            <span class="topbar__subtitle">Smart Household Finance</span>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar__brand">
+          <span class="sidebar__mark" aria-hidden="true">${catLogoMarkup()}</span>
+          <div class="sidebar__wordmark">
+            <span class="sidebar__name">Opa!</span>
+            <span class="sidebar__subtitle">Tulik Finance</span>
           </div>
         </div>
-        <nav class="topbar__nav" aria-label="Primary">
-          ${VIEWS.map((v) => `<button type="button" class="topbar__link" data-view="${v.id}">${v.label}</button>`).join('')}
+        <nav class="sidebar__nav" aria-label="Primary">
+          ${VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}
         </nav>
         ${
           userEmail
-            ? `<div class="topbar__account">
-                <span class="topbar__email">${userEmail}</span>
-                <button type="button" class="btn btn--sm" id="sign-out-btn">Sign out</button>
+            ? `<div class="sidebar__footer">
+                <span class="sidebar__email">${userEmail}</span>
+                <button type="button" class="btn btn--sm js-sign-out">Sign out</button>
               </div>`
             : ''
         }
+      </aside>
+      <div class="main-col">
+        <header class="topbar">
+          <div class="topbar__inner">
+            <div class="topbar__brand">
+              <span class="topbar__mark" aria-hidden="true">${catLogoMarkup()}</span>
+              <div class="topbar__wordmark">
+                <span class="topbar__name">Opa! Tulik</span>
+                <span class="topbar__subtitle">Smart Household Finance</span>
+              </div>
+            </div>
+            ${
+              userEmail
+                ? `<div class="topbar__account">
+                    <span class="topbar__email">${userEmail}</span>
+                    <button type="button" class="btn btn--sm js-sign-out">Sign out</button>
+                  </div>`
+                : ''
+            }
+          </div>
+        </header>
+        <main id="main">
+          <p class="view-loading" id="view-loading">Loading your household data…</p>
+          <p class="view-error" id="view-error" hidden></p>
+          <section id="view-overview" hidden></section>
+          <section id="view-transactions" hidden></section>
+          <section id="view-insights" hidden></section>
+          <section id="view-settings" hidden></section>
+        </main>
       </div>
-    </header>
+    </div>
     <nav class="bottom-nav" aria-label="Primary (mobile)">
       ${VIEWS.map((v) => `<button type="button" class="bottom-nav__link" data-view="${v.id}">${v.icon()}<span>${v.shortLabel}</span></button>`).join('')}
     </nav>
-    <main id="main">
-      <p class="view-loading" id="view-loading">Loading your household data…</p>
-      <p class="view-error" id="view-error" hidden></p>
-      <section id="view-overview" hidden></section>
-      <section id="view-transactions" hidden></section>
-      <section id="view-insights" hidden></section>
-      <section id="view-settings" hidden></section>
-    </main>
   `
 
   const loadingEl = root.querySelector<HTMLElement>('#view-loading')!
@@ -88,7 +109,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     insights: root.querySelector<HTMLElement>('#view-insights')!,
     settings: root.querySelector<HTMLElement>('#view-settings')!,
   }
-  const navButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.topbar__link, .bottom-nav__link'))
+  const navButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.sidebar__link, .bottom-nav__link'))
   let mounted = false
 
   function applyViewVisibility(state: AppState): void {
@@ -108,10 +129,12 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   })
   window.addEventListener('hashchange', () => store.setState({ view: viewFromHash() }))
 
-  root.querySelector<HTMLButtonElement>('#sign-out-btn')?.addEventListener('click', () => {
-    signOut()
-      .catch(() => {})
-      .finally(() => mountAuthGate(root))
+  root.querySelectorAll<HTMLButtonElement>('.js-sign-out').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      signOut()
+        .catch(() => {})
+        .finally(() => mountAuthGate(root))
+    })
   })
 
   store.subscribe((state) => {

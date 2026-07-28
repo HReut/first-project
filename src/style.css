@@ -7,14 +7,15 @@
   --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
   --shadow-card: rgba(11, 11, 11, 0.05) 0 1px 2px, rgba(11, 11, 11, 0.06) 0 12px 28px -10px;
 
-  /* Aegean Blue */
-  --accent: #1c6ea4;
-  --accent-bg: rgba(28, 110, 164, 0.1);
-  --accent-border: rgba(28, 110, 164, 0.5);
+  /* Opa! brand blue */
+  --accent: #2f6fed;
+  --accent-bg: rgba(47, 111, 237, 0.1);
+  --accent-border: rgba(47, 111, 237, 0.5);
 
   --radius-lg: 28px;
   --radius-md: 20px;
   --bottom-nav-h: 64px;
+  --sidebar-w: 248px;
 
   /* Categorical palette (dataviz skill default order) */
   --cat-1: #2a78d6; /* Groceries — blue */
@@ -59,9 +60,9 @@
     --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
     --shadow-card: rgba(0, 0, 0, 0.5) 0 1px 2px, rgba(0, 0, 0, 0.45) 0 12px 28px -10px;
 
-    --accent: #4fa8e0;
-    --accent-bg: rgba(79, 168, 224, 0.15);
-    --accent-border: rgba(79, 168, 224, 0.5);
+    --accent: #5b8dff;
+    --accent-bg: rgba(91, 141, 255, 0.15);
+    --accent-border: rgba(91, 141, 255, 0.5);
 
     --cat-1: #3987e5;
     --cat-2: #d95926;
@@ -98,7 +99,126 @@ p {
   margin: 0;
 }
 
-/* ---------- Top bar ---------- */
+/* ---------- App shell (sidebar + main column) ---------- */
+
+.app-shell {
+  display: flex;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+.main-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- Sidebar (desktop, >=1024px — see the 1024px media query) ---------- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 20px 14px;
+  gap: 4px;
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 22px;
+}
+
+.sidebar__wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.sidebar__name {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--text-h);
+}
+
+.sidebar__subtitle {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: 12px;
+  padding: 11px 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar__link svg {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+}
+
+.sidebar__link:hover {
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.sidebar__link.is-active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.sidebar__link:focus-visible,
+.segmented-btn:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sidebar__footer {
+  margin-top: auto;
+  padding: 14px 10px 4px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar__email {
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+/* ---------- Top bar (mobile header, <1024px — see the 1024px media query) ---------- */
 
 .topbar {
   position: sticky;
@@ -116,18 +236,19 @@ p {
   padding: 10px 24px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   flex-wrap: wrap;
 }
 
 .topbar__brand {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 10px;
 }
 
-.topbar__mark {
+.topbar__mark,
+.sidebar__mark {
   width: 30px;
   height: 30px;
   border-radius: 8px;
@@ -138,7 +259,8 @@ p {
   flex-shrink: 0;
 }
 
-.topbar__mark svg {
+.topbar__mark svg,
+.sidebar__mark svg {
   width: 18px;
   height: 18px;
   display: block;
@@ -160,44 +282,6 @@ p {
   font-size: 11px;
   font-weight: 500;
   color: var(--text);
-}
-
-.topbar__nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.topbar__link {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-  background: transparent;
-  border: none;
-  border-radius: 999px;
-  padding: 7px 16px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  white-space: nowrap;
-}
-
-.topbar__link:hover {
-  color: var(--text-h);
-}
-
-.topbar__link.is-active {
-  color: var(--text-h);
-  background: var(--bg);
-  font-weight: 600;
-}
-
-.topbar__link:focus-visible,
-.segmented-btn:focus-visible,
-.btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .topbar__account {
@@ -457,8 +541,16 @@ p {
    modal/filter→bottom sheet. Kept separate from the 860px/640px blocks
    above/below, which only do density/reflow tuning. ---------- */
 @media (max-width: 1024px) {
-  .topbar__nav {
+  .sidebar {
     display: none;
+  }
+
+  .topbar__brand {
+    display: flex;
+  }
+
+  .topbar__inner {
+    justify-content: space-between;
   }
 
   .bottom-nav {
