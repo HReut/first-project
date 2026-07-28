@@ -120,7 +120,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
         <p class="stat-card__sub">${insights.deltaPercent === null ? 'No spending last month to compare' : `${formatPercent(insights.deltaPercent)} vs last month`}</p>
       </article>
 
-      <article class="stat-card">
+      <article class="stat-card stat-card--balance${balance ? ' has-balance' : ''}">
         <p class="stat-card__label">Split balance</p>
         <p class="stat-card__value">${balance ? formatCurrency(balance.amount) : 'Settled up'}</p>
         <p class="stat-card__sub">${balance ? `${balance.owingPerson} owes ${balance.owedPerson}` : 'Reut and Keren are even this month'}</p>

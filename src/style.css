@@ -637,6 +637,14 @@ p {
   background: radial-gradient(130% 160% at 100% 0%, var(--accent-bg), transparent 60%), var(--surface);
 }
 
+.stat-card--balance.has-balance {
+  background: radial-gradient(130% 160% at 100% 0%, var(--accent-bg), transparent 60%), var(--surface);
+}
+
+.stat-card--balance.has-balance .stat-card__value {
+  color: var(--accent);
+}
+
 .stat-card__label {
   font-size: 13px;
   color: var(--text);
@@ -768,7 +776,7 @@ p {
 }
 
 .progress-bar__track {
-  height: 10px;
+  height: 12px;
   border-radius: 999px;
   background: var(--bg);
   overflow: hidden;
