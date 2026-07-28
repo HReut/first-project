@@ -46,10 +46,10 @@ create table if not exists email_sync_rules (
 );
 
 -- ---------- Row Level Security ----------
--- No auth in this pass — this is a private household app accessed via the
--- anon key, so RLS is enabled with a permissive "allow all" policy rather
--- than left disabled. Tighten this (e.g. scope to an authenticated user_id)
--- before ever exposing this project's anon key beyond this household.
+-- Enabled here with a permissive "allow all" policy as a starting point.
+-- Tightened to the household's Google account whitelist in
+-- 0002_tighten_rls.sql — run that migration too before exposing this
+-- project's anon key beyond this household.
 
 alter table categories enable row level security;
 alter table transactions enable row level security;

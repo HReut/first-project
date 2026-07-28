@@ -3,6 +3,8 @@ import type { AppState, View } from '../types.ts'
 import { listCategories } from '../data/categoriesRepo.ts'
 import { listTransactions } from '../data/transactionsRepo.ts'
 import { listEmailRules } from '../data/emailRulesRepo.ts'
+import { signOut } from '../lib/auth.ts'
+import { mountAuthGate } from './AuthGate.ts'
 import { catLogoMarkup } from './icons/CatLogo.ts'
 import { mountOverviewView } from './views/OverviewView.ts'
 import { mountTransactionsView } from './views/TransactionsView.ts'
@@ -25,7 +27,7 @@ function viewFromHash(): View {
   return VIEWS.some((v) => v.id === hash) ? (hash as View) : 'overview'
 }
 
-export function mountApp(root: HTMLElement): void {
+export function mountApp(root: HTMLElement, userEmail: string | null = null): void {
   const store = new Store<AppState>({
     view: viewFromHash(),
     status: 'loading',
@@ -54,6 +56,14 @@ export function mountApp(root: HTMLElement): void {
         <nav class="topbar__nav" aria-label="Primary">
           ${VIEWS.map((v) => `<button type="button" class="topbar__link" data-view="${v.id}">${v.label}</button>`).join('')}
         </nav>
+        ${
+          userEmail
+            ? `<div class="topbar__account">
+                <span class="topbar__email">${userEmail}</span>
+                <button type="button" class="btn btn--sm" id="sign-out-btn">Sign out</button>
+              </div>`
+            : ''
+        }
       </div>
     </header>
     <main id="main">
@@ -93,6 +103,12 @@ export function mountApp(root: HTMLElement): void {
     btn.addEventListener('click', () => navigate((btn.dataset.view as View) ?? 'overview'))
   })
   window.addEventListener('hashchange', () => store.setState({ view: viewFromHash() }))
+
+  root.querySelector<HTMLButtonElement>('#sign-out-btn')?.addEventListener('click', () => {
+    signOut()
+      .catch(() => {})
+      .finally(() => mountAuthGate(root))
+  })
 
   store.subscribe((state) => {
     loadingEl.hidden = state.status !== 'loading'

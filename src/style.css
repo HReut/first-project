@@ -199,6 +199,18 @@ p {
   outline-offset: 2px;
 }
 
+.topbar__account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar__email {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
 /* ---------- Loading / error states ---------- */
 
 .view-loading,
@@ -213,6 +225,66 @@ p {
 
 .view-error {
   color: var(--status-critical);
+}
+
+/* ---------- Auth gate ---------- */
+
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 40px 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.auth-card__mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-card__mark svg {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.auth-card--danger .auth-card__mark {
+  background: var(--status-critical);
+}
+
+.auth-card__title {
+  font-family: var(--heading);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.auth-card__message {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.auth-card__action {
+  margin-top: 8px;
 }
 
 /* ---------- Bands ---------- */
