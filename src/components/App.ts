@@ -35,6 +35,12 @@ function themeToggleIcon(): string {
   return effectiveTheme() === 'dark' ? sunIconMarkup() : moonIconMarkup()
 }
 
+const SIDEBAR_COLLAPSED_KEY = 'opa-sidebar-collapsed'
+
+function isSidebarCollapsed(): boolean {
+  return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+}
+
 export function mountApp(root: HTMLElement, userEmail: string | null = null): void {
   const store = new Store<AppState>({
     view: viewFromHash(),
@@ -53,7 +59,10 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
 
   root.innerHTML = `
     <div class="app-shell">
-      <aside class="sidebar">
+      <aside class="sidebar${isSidebarCollapsed() ? ' sidebar--collapsed' : ''}">
+        <button type="button" class="sidebar-edge-toggle" id="sidebar-edge-toggle" aria-label="${isSidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'}">
+          <span aria-hidden="true">${isSidebarCollapsed() ? '›' : '‹'}</span>
+        </button>
         <div class="sidebar__brand">
           <span class="sidebar__mark" aria-hidden="true">${catLogoMarkup()}</span>
           <div class="sidebar__wordmark">
@@ -142,6 +151,16 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     btn.addEventListener('click', () => navigate((btn.dataset.view as View) ?? 'overview'))
   })
   window.addEventListener('hashchange', () => store.setState({ view: viewFromHash() }))
+
+  const sidebarEl = root.querySelector<HTMLElement>('.sidebar')!
+  const edgeToggleBtn = root.querySelector<HTMLButtonElement>('#sidebar-edge-toggle')!
+  edgeToggleBtn.addEventListener('click', () => {
+    const collapsed = !sidebarEl.classList.contains('sidebar--collapsed')
+    sidebarEl.classList.toggle('sidebar--collapsed', collapsed)
+    edgeToggleBtn.querySelector('span')!.textContent = collapsed ? '›' : '‹'
+    edgeToggleBtn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar')
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
+  })
 
   const themeToggleButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.js-theme-toggle'))
   themeToggleButtons.forEach((btn) => {

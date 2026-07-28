@@ -186,6 +186,64 @@ p {
   border-right: 1px solid var(--border);
   padding: 20px 14px;
   gap: 4px;
+  transition: width 0.2s ease;
+}
+
+/* ---------- Floating edge toggle (collapses the sidebar to icon-only) ---------- */
+
+.sidebar-edge-toggle {
+  position: absolute;
+  top: 28px;
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-card);
+  opacity: 0.55;
+  cursor: pointer;
+  z-index: 5;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.sidebar-edge-toggle:hover,
+.sidebar-edge-toggle:focus-visible {
+  opacity: 1;
+  color: var(--text-h);
+}
+
+.sidebar-edge-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sidebar--collapsed {
+  width: 76px;
+}
+
+.sidebar--collapsed .sidebar__brand,
+.sidebar--collapsed .sidebar__link,
+.sidebar--collapsed .theme-toggle {
+  justify-content: center;
+}
+
+.sidebar--collapsed .sidebar__wordmark,
+.sidebar--collapsed .sidebar__link span,
+.sidebar--collapsed .theme-toggle span,
+.sidebar--collapsed .sidebar__email,
+.sidebar--collapsed .sidebar__footer .btn {
+  display: none;
+}
+
+.sidebar--collapsed .sidebar__footer {
+  align-items: center;
 }
 
 .sidebar__brand {
