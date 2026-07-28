@@ -14,6 +14,7 @@
 
   --radius-lg: 28px;
   --radius-md: 20px;
+  --bottom-nav-h: 64px;
 
   /* Categorical palette (dataviz skill default order) */
   --cat-1: #2a78d6; /* Groceries — blue */
@@ -211,6 +212,56 @@ p {
   white-space: nowrap;
 }
 
+/* ---------- Bottom nav (mobile, <1024px — see the 1024px media query) ---------- */
+
+.bottom-nav {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  height: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-top: 1px solid var(--border);
+  align-items: stretch;
+  justify-content: space-around;
+}
+
+.bottom-nav__link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.bottom-nav__link svg {
+  width: 22px;
+  height: 22px;
+}
+
+.bottom-nav__link.is-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.bottom-nav__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 /* ---------- Loading / error states ---------- */
 
 .view-loading,
@@ -307,14 +358,16 @@ p {
   padding-bottom: 40px;
 }
 
+/* Opacity-only on purpose: a `transform` here (even settling on translateY(0)
+   via `animation-fill-mode: both`) would make .band a containing block for
+   any `position: fixed` descendant (e.g. the mobile filter sheet), pinning
+   it to the band's box instead of the viewport. */
 @keyframes view-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -397,6 +450,81 @@ p {
 @media (max-width: 860px) {
   .stat-cards {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- "lg" cutover (1024px): nav model, Transactions table→cards,
+   modal/filter→bottom sheet. Kept separate from the 860px/640px blocks
+   above/below, which only do density/reflow tuning. ---------- */
+@media (max-width: 1024px) {
+  .topbar__nav {
+    display: none;
+  }
+
+  .bottom-nav {
+    display: flex;
+  }
+
+  #main {
+    padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
+  }
+
+  .transactions__table-wrap {
+    display: none;
+  }
+
+  .tx-cards {
+    display: flex;
+  }
+
+  .filters-toggle-btn {
+    display: inline-flex;
+  }
+
+  .filter-bar {
+    display: none;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    max-height: 80vh;
+    overflow-y: auto;
+    flex-direction: column;
+    align-items: stretch;
+    background: var(--surface);
+    border: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: var(--shadow);
+    padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+    margin-bottom: 0;
+    animation: sheet-up 0.25s ease;
+  }
+
+  .filter-bar.is-open {
+    display: flex;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    max-width: none;
+    max-height: 85vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding: 24px 24px calc(24px + env(safe-area-inset-bottom));
+    animation: sheet-up 0.25s ease;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 
@@ -661,6 +789,29 @@ p {
 
 /* ---------- Filter bar (toolbar inside the transactions card) ---------- */
 
+.transactions__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.filters-toggle-btn {
+  display: none;
+  margin-right: auto;
+}
+
+/* No unconditional `display` here on purpose — visibility is driven purely
+   by the `hidden` attribute (JS toggles `el.hidden`), so the UA [hidden]
+   rule is enough and can't be shadowed by equal-specificity author CSS. */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.4);
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -885,6 +1036,69 @@ p {
 
 .select-cell {
   width: 32px;
+}
+
+/* ---------- Transactions cards (mobile, <1024px) ---------- */
+
+.tx-cards {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tx-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.tx-card__select {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.tx-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tx-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tx-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tx-card__date {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tx-card__amount {
+  font-weight: 600;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .editable-cell {

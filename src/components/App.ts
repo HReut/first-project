@@ -6,16 +6,17 @@ import { listEmailRules } from '../data/emailRulesRepo.ts'
 import { signOut } from '../lib/auth.ts'
 import { mountAuthGate } from './AuthGate.ts'
 import { catLogoMarkup } from './icons/CatLogo.ts'
+import { chartIconMarkup, gearIconMarkup, homeIconMarkup, listIconMarkup } from './icons/NavIcons.ts'
 import { mountOverviewView } from './views/OverviewView.ts'
 import { mountTransactionsView } from './views/TransactionsView.ts'
 import { mountInsightsView } from './views/InsightsView.ts'
 import { mountSettingsView } from './views/SettingsView.ts'
 
-const VIEWS: { id: View; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'transactions', label: 'Transactions' },
-  { id: 'insights', label: 'Insights & Budgets' },
-  { id: 'settings', label: 'Settings & Automations' },
+const VIEWS: { id: View; label: string; shortLabel: string; icon: () => string }[] = [
+  { id: 'overview', label: 'Overview', shortLabel: 'Overview', icon: homeIconMarkup },
+  { id: 'transactions', label: 'Transactions', shortLabel: 'Transactions', icon: listIconMarkup },
+  { id: 'insights', label: 'Insights & Budgets', shortLabel: 'Insights', icon: chartIconMarkup },
+  { id: 'settings', label: 'Settings & Automations', shortLabel: 'Settings', icon: gearIconMarkup },
 ]
 
 function currentMonthKey(): string {
@@ -66,6 +67,9 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         }
       </div>
     </header>
+    <nav class="bottom-nav" aria-label="Primary (mobile)">
+      ${VIEWS.map((v) => `<button type="button" class="bottom-nav__link" data-view="${v.id}">${v.icon()}<span>${v.shortLabel}</span></button>`).join('')}
+    </nav>
     <main id="main">
       <p class="view-loading" id="view-loading">Loading your household data…</p>
       <p class="view-error" id="view-error" hidden></p>
@@ -84,7 +88,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     insights: root.querySelector<HTMLElement>('#view-insights')!,
     settings: root.querySelector<HTMLElement>('#view-settings')!,
   }
-  const navButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.topbar__link'))
+  const navButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.topbar__link, .bottom-nav__link'))
   let mounted = false
 
   function applyViewVisibility(state: AppState): void {

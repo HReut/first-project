@@ -82,6 +82,11 @@ export class TransactionsView {
       <section class="band">
         <div class="band__inner">
           <div class="transactions">
+            <div class="transactions__toolbar">
+              <button type="button" class="btn filters-toggle-btn" id="filters-toggle-btn">Filters</button>
+              <button type="button" class="btn btn--primary" id="add-expense-btn">+ Add Expense</button>
+            </div>
+
             <div class="filter-bar" id="filter-bar">
               <div class="filter-group filter-group--search">
                 <span class="filter-group__label">Search</span>
@@ -123,9 +128,8 @@ export class TransactionsView {
                   <input type="date" class="filter-input" id="range-end">
                 </label>
               </div>
-
-              <button type="button" class="btn btn--primary" id="add-expense-btn">+ Add Expense</button>
             </div>
+            <div class="sheet-backdrop" id="filters-backdrop" hidden></div>
 
             <div class="bulk-bar" id="bulk-bar" hidden></div>
 
@@ -150,6 +154,7 @@ export class TransactionsView {
                 <tbody id="transactions-body"></tbody>
               </table>
             </div>
+            <div class="tx-cards" id="transactions-cards"></div>
           </div>
         </div>
       </section>
@@ -199,7 +204,30 @@ export class TransactionsView {
     startInput.addEventListener('change', applyCustomRange)
     endInput.addEventListener('change', applyCustomRange)
 
-    this.#container.querySelector<HTMLButtonElement>('#add-expense-btn')!.addEventListener('click', () => this.openAddExpenseModal())
+    this.#container.querySelector<HTMLButtonElement>('#add-expense-btn')!.addEventListener('click', () => this.openExpenseModal())
+
+    this.wireFilterSheet()
+  }
+
+  private wireFilterSheet(): void {
+    const filterBar = this.#container.querySelector<HTMLElement>('#filter-bar')!
+    const backdrop = this.#container.querySelector<HTMLElement>('#filters-backdrop')!
+    const toggleBtn = this.#container.querySelector<HTMLButtonElement>('#filters-toggle-btn')!
+
+    const close = () => {
+      filterBar.classList.remove('is-open')
+      backdrop.hidden = true
+    }
+    const open = () => {
+      filterBar.classList.add('is-open')
+      backdrop.hidden = false
+    }
+
+    toggleBtn.addEventListener('click', () => (filterBar.classList.contains('is-open') ? close() : open()))
+    backdrop.addEventListener('click', close)
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && filterBar.classList.contains('is-open')) close()
+    })
   }
 
   private updateCategoryOptions(categories: Category[]): void {
@@ -246,41 +274,9 @@ export class TransactionsView {
     })
 
     const tbody = this.#container.querySelector<HTMLElement>('#transactions-body')!
-
-    tbody.addEventListener('change', (event) => {
-      const checkbox = (event.target as HTMLElement).closest<HTMLInputElement>('.row-select')
-      if (checkbox) {
-        const id = checkbox.dataset.id!
-        if (checkbox.checked) this.#selection.add(id)
-        else this.#selection.delete(id)
-        this.renderTable(this.#store.getState())
-      }
-    })
-
-    tbody.addEventListener('click', (event) => {
-      const target = event.target as HTMLElement
-
-      const approveBtn = target.closest<HTMLButtonElement>('[data-approve-id]')
-      if (approveBtn) {
-        this.approveOne(approveBtn.dataset.approveId!)
-        return
-      }
-
-      const cell = target.closest<HTMLElement>('.editable-cell')
-      if (!cell || cell.classList.contains('is-editing')) return
-      const id = cell.dataset.id!
-      const field = cell.dataset.field as 'merchant' | 'amount' | 'category' | 'person'
-      const tx = this.#store.getState().transactions.find((t) => t.id === id)
-      if (!tx) return
-
-      if (field === 'person') {
-        this.commitEdit(id, { person: tx.person === 'Reut' ? 'Keren' : 'Reut' })
-      } else if (field === 'category') {
-        this.editCategoryCell(cell, tx)
-      } else {
-        this.editTextCell(cell, tx, field)
-      }
-    })
+    const cards = this.#container.querySelector<HTMLElement>('#transactions-cards')!
+    this.wireRowContainer(tbody)
+    this.wireRowContainer(cards)
 
     this.#container.querySelector<HTMLElement>('#bulk-bar')!.addEventListener('click', (event) => {
       const target = event.target as HTMLElement
@@ -291,6 +287,57 @@ export class TransactionsView {
     this.#container.querySelector<HTMLElement>('#bulk-bar')!.addEventListener('change', (event) => {
       const select = (event.target as HTMLElement).closest<HTMLSelectElement>('[data-bulk-recategorize]')
       if (select && select.value) this.bulkRecategorize(select.value)
+    })
+  }
+
+  /** Shared selection/approve/edit wiring for both the desktop `<tbody>` and
+   * the mobile `#transactions-cards` container — same data, two markups. */
+  private wireRowContainer(container: HTMLElement): void {
+    container.addEventListener('change', (event) => {
+      const checkbox = (event.target as HTMLElement).closest<HTMLInputElement>('.row-select')
+      if (checkbox) {
+        const id = checkbox.dataset.id!
+        if (checkbox.checked) this.#selection.add(id)
+        else this.#selection.delete(id)
+        this.renderTable(this.#store.getState())
+      }
+    })
+
+    container.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement
+
+      if (target.closest('.row-select')) return // handled by the 'change' listener above
+
+      const approveBtn = target.closest<HTMLButtonElement>('[data-approve-id]')
+      if (approveBtn) {
+        this.approveOne(approveBtn.dataset.approveId!)
+        return
+      }
+
+      const cell = target.closest<HTMLElement>('.editable-cell')
+      if (cell) {
+        if (cell.classList.contains('is-editing')) return
+        const id = cell.dataset.id!
+        const field = cell.dataset.field as 'merchant' | 'amount' | 'category' | 'person'
+        const tx = this.#store.getState().transactions.find((t) => t.id === id)
+        if (!tx) return
+
+        if (field === 'person') {
+          this.commitEdit(id, { person: tx.person === 'Reut' ? 'Keren' : 'Reut' })
+        } else if (field === 'category') {
+          this.editCategoryCell(cell, tx)
+        } else {
+          this.editTextCell(cell, tx, field)
+        }
+        return
+      }
+
+      // Mobile cards have no .editable-cell — tapping the card body opens the edit sheet instead.
+      const card = target.closest<HTMLElement>('.tx-card')
+      if (card) {
+        const tx = this.#store.getState().transactions.find((t) => t.id === card.dataset.id)
+        if (tx) this.openExpenseModal(tx)
+      }
     })
   }
 
@@ -397,44 +444,45 @@ export class TransactionsView {
     })
   }
 
-  private openAddExpenseModal(): void {
+  private openExpenseModal(existing?: Transaction): void {
     const { categories } = this.#store.getState()
+    const isEdit = !!existing
     const today = isoDate(new Date())
     const modal = new Modal(
       `
-        <h2 class="modal__title">Add expense</h2>
+        <h2 class="modal__title">${isEdit ? 'Edit expense' : 'Add expense'}</h2>
         <form class="modal__form" id="add-expense-form">
           <label class="filter-group">
             <span class="filter-group__label">Date</span>
-            <input type="date" class="filter-input" name="date" value="${today}" required>
+            <input type="date" class="filter-input" name="date" value="${existing?.date ?? today}" required>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Merchant</span>
-            <input type="text" class="filter-input" name="merchant" placeholder="e.g. Shufersal" required>
+            <input type="text" class="filter-input" name="merchant" placeholder="e.g. Shufersal" value="${existing?.merchant ?? ''}" required>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Amount</span>
-            <input type="number" class="filter-input" name="amount" min="0" step="0.01" required>
+            <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing?.amount ?? ''}" required>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Category</span>
             <select class="filter-select" name="categoryId" required>
-              ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
+              ${categories.map((c) => `<option value="${c.id}" ${c.id === existing?.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
             </select>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Person</span>
             <select class="filter-select" name="person" required>
-              ${PEOPLE.map((p) => `<option value="${p}">${p}</option>`).join('')}
+              ${PEOPLE.map((p) => `<option value="${p}" ${p === existing?.person ? 'selected' : ''}>${p}</option>`).join('')}
             </select>
           </label>
           <div class="modal__actions">
             <button type="button" class="btn" id="modal-cancel">Cancel</button>
-            <button type="submit" class="btn btn--primary">Add expense</button>
+            <button type="submit" class="btn btn--primary">${isEdit ? 'Save changes' : 'Add expense'}</button>
           </div>
         </form>
       `,
-      { ariaLabel: 'Add expense' },
+      { ariaLabel: isEdit ? 'Edit expense' : 'Add expense' },
     )
 
     modal.element.querySelector<HTMLButtonElement>('#modal-cancel')!.addEventListener('click', () => modal.close())
@@ -448,14 +496,19 @@ export class TransactionsView {
         amount: Number(data.get('amount')),
         categoryId: String(data.get('categoryId')),
         person: data.get('person') as Person,
-        status: 'approved',
-        source: 'manual',
+        status: existing?.status ?? 'approved',
+        source: existing?.source ?? 'manual',
       }
-      createTransaction(input).then((created) => {
-        const { transactions } = this.#store.getState()
-        this.#store.setState({ transactions: [created, ...transactions] })
+      if (isEdit) {
+        this.commitEdit(existing.id, input)
         modal.close()
-      })
+      } else {
+        createTransaction(input).then((created) => {
+          const { transactions } = this.#store.getState()
+          this.#store.setState({ transactions: [created, ...transactions] })
+          modal.close()
+        })
+      }
     })
   }
 
@@ -493,6 +546,12 @@ export class TransactionsView {
         ? `<tr><td colspan="7" class="transactions__empty">No transactions match these filters.</td></tr>`
         : rows.map((tx) => this.renderRow(tx, categoryById)).join('')
 
+    const cardsContainer = this.#container.querySelector<HTMLElement>('#transactions-cards')!
+    cardsContainer.innerHTML =
+      rows.length === 0
+        ? `<p class="transactions__empty">No transactions match these filters.</p>`
+        : rows.map((tx) => this.renderCard(tx, categoryById)).join('')
+
     this.renderBulkBar(state.categories)
   }
 
@@ -507,6 +566,31 @@ export class TransactionsView {
         <td class="is-numeric editable-cell" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.amount)}</td>
         <td>${tx.status === 'needs_review' ? `<button type="button" class="btn btn--approve btn--sm" data-approve-id="${tx.id}">Approve</button>` : ''}</td>
       </tr>
+    `
+  }
+
+  private renderCard(tx: Transaction, categoryById: Map<string, Category>): string {
+    return `
+      <article class="tx-card" data-id="${tx.id}">
+        <input type="checkbox" class="row-select tx-card__select" data-id="${tx.id}" aria-label="Select transaction" ${this.#selection.has(tx.id) ? 'checked' : ''}>
+        <div class="tx-card__body">
+          <div class="tx-card__top">
+            ${renderMerchantCell(tx)}
+            <span class="tx-card__amount">${formatCurrency(tx.amount)}</span>
+          </div>
+          <div class="tx-card__meta">
+            ${renderCategoryBadge(categoryById.get(tx.categoryId))}
+            ${renderPersonBadge(tx.person)}
+            ${renderStatusBadge(tx.status)}
+            <span class="tx-card__date">${formatDateShort(tx.date)}</span>
+          </div>
+          ${
+            tx.status === 'needs_review'
+              ? `<div class="tx-card__footer"><button type="button" class="btn btn--approve btn--sm" data-approve-id="${tx.id}">Approve</button></div>`
+              : ''
+          }
+        </div>
+      </article>
     `
   }
 

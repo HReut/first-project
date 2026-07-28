@@ -21,7 +21,7 @@ After each code change, commit it and push to the current branch's remote — do
 
 "Opa! Tulik" — a household expense tracker for two people (Reut and Keren). Client-only Vite + TypeScript SPA (no framework — no React/Vue/etc., just hand-rolled DOM via template-string `innerHTML`), optionally backed by Supabase, gated behind Google OAuth once Supabase is configured.
 
-A responsive mobile UX (bottom nav bar, card rows, bottom sheets in place of the current desktop table/centered-modal patterns) is planned but **not yet implemented** — the app is currently desktop-oriented only, with narrow-viewport CSS that reflows existing components rather than replacing their interaction model.
+Below the **1024px "lg" breakpoint** the layout model itself switches: an iOS-style fixed bottom nav bar replaces the top nav, the Transactions table becomes touch-friendly cards, and the Add/Edit-expense modal and the filter panel present as bottom slide-up sheets instead of a centered dialog / inline row. See "Responsive mobile UX" below.
 
 ## Architecture
 
@@ -54,6 +54,16 @@ When `isSupabaseConfigured` is true, `src/main.ts` mounts `mountAuthGate()` (`sr
 Reusable pieces live under `src/components/shared/` (`Modal`, `ProgressBar`, `transactionCells` — the read-only merchant/category/person/status cell renderers shared between Overview and Transactions) and `src/components/icons/` (hand-drawn SVG markup, no icon library).
 
 `TransactionsView` is the most involved component: it owns local (non-store) UI state for sort column/direction and bulk-selection, does Monday.com-style inline cell editing (click a cell → swap in an `<input>`/`<select>` → commit on blur/change/Enter, revert on Escape), and drives everything through a single delegated listener per event type rather than per-row listeners.
+
+### Responsive mobile UX (<1024px "lg" breakpoint)
+
+`App.ts` renders both a `.topbar__nav` (desktop) and a `.bottom-nav` (mobile, icons from `src/components/icons/NavIcons.ts`) from the same `VIEWS` array; both are queried together (`'.topbar__link, .bottom-nav__link'`) so navigation/active-state logic doesn't fork. The CSS `@media (max-width: 1024px)` block in `src/style.css` is what actually swaps the layout model (nav, table↔cards, modal/filter↔sheet) — it's kept deliberately separate from the older `860px`/`640px` blocks, which only do density/reflow tuning and aren't part of this system.
+
+- **Modal → bottom sheet is pure CSS** — `src/components/shared/Modal.ts` is unchanged; under 1024px `.modal-backdrop`/`.modal` just render bottom-anchored instead of centered.
+- **`TransactionsView` renders both a `<table>` and a `.tx-cards` list on every update** (`renderTable`/`renderCards`, sharing one `visibleRows()` computation) — CSS shows only one, based on viewport. There's no `matchMedia` listener; this avoids resize edge cases at the cost of some extra always-present DOM.
+- **Desktop keeps inline blur-commit cell editing; mobile edits via the sheet instead** — tapping a `.tx-card` calls `openExpenseModal(existing)`, the same sheet used for "+ Add Expense" (unified add/edit, since inline editing doesn't translate to touch). `wireRowContainer()` wires the identical selection/approve/edit-or-open logic onto both the `<tbody>` and the cards container.
+- **The mobile filter panel is a real bottom sheet, not just a reflowed row** — "+ Add Expense" lives in an always-visible `.transactions__toolbar` so it's reachable even when the sheet is closed; a mobile-only "Filters" button toggles `.filter-bar.is-open` plus a `#filters-backdrop` (shown/hidden via the `hidden` attribute, per the gotcha below — not an unconditional `display`).
+- **Gotcha this system tripped on**: `.band` has a page-load `animation` (`view-in`). Any ancestor with an active/fill-mode-applied `transform` — even one that settles on `translateY(0)` — becomes a new containing block for `position: fixed` descendants, so a fixed-position sheet nested inside an animated `.band` gets pinned to the band's box instead of the viewport. `view-in` is opacity-only for exactly this reason; don't reintroduce a `transform` there (or in any ancestor of `.filter-bar`/similar fixed elements) without re-checking this.
 
 ### Domain model quirks worth knowing
 
