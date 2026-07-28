@@ -1,8 +1,8 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category } from '../../types.ts'
 import { computeCategoryBreakdown, computeMonthlyInsights, computeSplitBalance } from '../../utils/insights.ts'
-import type { CategoryBreakdownEntry } from '../../utils/insights.ts'
 import { formatCurrency, formatDateShort, formatPercent, formatSignedCurrency } from '../../utils/format.ts'
+import { budgetPercent } from '../../utils/budget.ts'
 import { updateTransaction } from '../../data/transactionsRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
@@ -10,14 +10,15 @@ import { CategoryBreakdown } from '../CategoryBreakdown.ts'
 
 const RECENT_ACTIVITY_LIMIT = 5
 const REVIEW_CENTER_LIMIT = 6
+const BUDGET_PROGRESS_LIMIT = 3
 
-function computeOverallBudget(categories: Category[], breakdown: CategoryBreakdownEntry[]): { spent: number; limit: number } | null {
+function topBudgetedCategories(state: AppState): { category: Category; spent: number }[] {
+  const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' })
   const spentByCategory = new Map(breakdown.map((entry) => [entry.categoryId, entry.amount]))
-  const budgeted = categories.filter((category) => category.monthlyBudgetLimit !== null && category.monthlyBudgetLimit > 0)
-  if (budgeted.length === 0) return null
-  const spent = budgeted.reduce((sum, category) => sum + (spentByCategory.get(category.id) ?? 0), 0)
-  const limit = budgeted.reduce((sum, category) => sum + (category.monthlyBudgetLimit ?? 0), 0)
-  return { spent, limit }
+  return state.categories
+    .filter((category) => category.monthlyBudgetLimit !== null && category.monthlyBudgetLimit > 0)
+    .map((category) => ({ category, spent: spentByCategory.get(category.id) ?? 0 }))
+    .sort((a, b) => budgetPercent(b.spent, b.category.monthlyBudgetLimit) - budgetPercent(a.spent, a.category.monthlyBudgetLimit))
 }
 
 export function mountOverviewView(root: HTMLElement, store: Store<AppState>): void {
@@ -167,23 +168,37 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   }
 
   function renderBudgetSummary(state: AppState): void {
-    const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' })
-    const overall = computeOverallBudget(state.categories, breakdown)
+    const budgeted = topBudgetedCategories(state)
 
-    if (!overall) {
+    if (budgeted.length === 0) {
       budgetEl.innerHTML = `
-        <h2 class="budget-summary__title">Monthly budget</h2>
+        <h2 class="budget-summary__title">Budget progress</h2>
         <p class="budget-summary__empty">No category budgets set yet — set some in Insights &amp; Budgets.</p>
       `
       return
     }
 
+    const visible = budgeted.slice(0, BUDGET_PROGRESS_LIMIT)
     budgetEl.innerHTML = `
       <div class="budget-summary__header">
-        <h2 class="budget-summary__title">Monthly budget</h2>
-        <span class="budget-summary__amounts">${formatCurrency(overall.spent)} of ${formatCurrency(overall.limit)}</span>
+        <h2 class="budget-summary__title">Budget progress</h2>
+        <a class="budget-summary__link" href="#insights">View all ${budgeted.length}</a>
       </div>
-      ${renderProgressBar(overall.spent, overall.limit)}
+      <div class="budget-progress-grid">
+        ${visible
+          .map(
+            (row) => `
+          <div class="budget-progress-item">
+            <div class="budget-progress-item__row">
+              <span class="budget-progress-item__name">${row.category.icon} ${row.category.name}</span>
+              <span class="budget-progress-item__amounts">${formatCurrency(row.spent)} / ${formatCurrency(row.category.monthlyBudgetLimit ?? 0)}</span>
+            </div>
+            ${renderProgressBar(row.spent, row.category.monthlyBudgetLimit)}
+          </div>
+        `,
+          )
+          .join('')}
+      </div>
     `
   }
 

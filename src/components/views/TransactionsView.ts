@@ -8,7 +8,14 @@ import { Modal } from '../shared/Modal.ts'
 
 type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'amount'
 type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'all' | 'custom'
+type GroupBy = 'none' | 'category'
 const PEOPLE: Person[] = ['Reut', 'Keren']
+
+interface CategoryGroup {
+  category: Category
+  rows: Transaction[]
+  total: number
+}
 
 function monthKey(monthsAgo: number, from = new Date()): string {
   const d = new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1)
@@ -53,6 +60,8 @@ export class TransactionsView {
   #preset: PeriodPreset = 'this-month'
   #sort: { column: SortColumn; direction: 'asc' | 'desc' } = { column: 'date', direction: 'desc' }
   #selection = new Set<string>()
+  #groupBy: GroupBy = 'none'
+  #collapsedGroups = new Set<string>()
 
   constructor(container: HTMLElement, store: Store<AppState>) {
     this.#container = container
@@ -92,6 +101,14 @@ export class TransactionsView {
                 <span class="filter-group__label">Search</span>
                 <input type="search" class="filter-input" id="search-input" placeholder="Merchant…" value="${filters.search}">
               </div>
+
+              <label class="filter-group">
+                <span class="filter-group__label">Group by</span>
+                <select class="filter-select" id="group-select">
+                  <option value="none">None</option>
+                  <option value="category">Category</option>
+                </select>
+              </label>
 
               <div class="filter-group filter-group--person" role="group" aria-label="Filter by person">
                 <button type="button" class="segmented-btn" data-person="all">All</button>
@@ -183,6 +200,13 @@ export class TransactionsView {
     const categorySelect = this.#container.querySelector<HTMLSelectElement>('#category-select')!
     categorySelect.value = filters.categoryId
     categorySelect.addEventListener('change', () => this.patchFilters({ categoryId: categorySelect.value }))
+
+    const groupSelect = this.#container.querySelector<HTMLSelectElement>('#group-select')!
+    groupSelect.value = this.#groupBy
+    groupSelect.addEventListener('change', () => {
+      this.#groupBy = groupSelect.value as GroupBy
+      this.renderTable(this.#store.getState())
+    })
 
     const periodSelect = this.#container.querySelector<HTMLSelectElement>('#period-select')!
     periodSelect.value = this.#preset
@@ -307,6 +331,15 @@ export class TransactionsView {
       const target = event.target as HTMLElement
 
       if (target.closest('.row-select')) return // handled by the 'change' listener above
+
+      const groupToggle = target.closest<HTMLElement>('[data-group-toggle]')
+      if (groupToggle) {
+        const categoryId = groupToggle.dataset.groupToggle!
+        if (this.#collapsedGroups.has(categoryId)) this.#collapsedGroups.delete(categoryId)
+        else this.#collapsedGroups.add(categoryId)
+        this.renderTable(this.#store.getState())
+        return
+      }
 
       const approveBtn = target.closest<HTMLButtonElement>('[data-approve-id]')
       if (approveBtn) {
@@ -541,18 +574,72 @@ export class TransactionsView {
     selectAll.checked = rows.length > 0 && rows.every((tx) => this.#selection.has(tx.id))
 
     const tbody = this.#container.querySelector<HTMLElement>('#transactions-body')!
-    tbody.innerHTML =
-      rows.length === 0
-        ? `<tr><td colspan="7" class="transactions__empty">No transactions match these filters.</td></tr>`
-        : rows.map((tx) => this.renderRow(tx, categoryById)).join('')
-
     const cardsContainer = this.#container.querySelector<HTMLElement>('#transactions-cards')!
-    cardsContainer.innerHTML =
-      rows.length === 0
-        ? `<p class="transactions__empty">No transactions match these filters.</p>`
-        : rows.map((tx) => this.renderCard(tx, categoryById)).join('')
+    this.#container.querySelector<HTMLTableElement>('.transactions__table')!.classList.toggle('is-grouped', this.#groupBy === 'category')
+
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="transactions__empty">No transactions match these filters.</td></tr>`
+      cardsContainer.innerHTML = `<p class="transactions__empty">No transactions match these filters.</p>`
+    } else if (this.#groupBy === 'category') {
+      const groups = this.buildGroups(rows, categoryById)
+      tbody.innerHTML = groups.map((g) => this.renderGroupRows(g)).join('')
+      cardsContainer.innerHTML = groups.map((g) => this.renderGroupCards(g)).join('')
+    } else {
+      tbody.innerHTML = rows.map((tx) => this.renderRow(tx, categoryById)).join('')
+      cardsContainer.innerHTML = rows.map((tx) => this.renderCard(tx, categoryById)).join('')
+    }
 
     this.renderBulkBar(state.categories)
+  }
+
+  private buildGroups(rows: Transaction[], categoryById: Map<string, Category>): CategoryGroup[] {
+    const byCategory = new Map<string, Transaction[]>()
+    for (const tx of rows) {
+      const arr = byCategory.get(tx.categoryId) ?? []
+      arr.push(tx)
+      byCategory.set(tx.categoryId, arr)
+    }
+    const groups: CategoryGroup[] = []
+    for (const [categoryId, txs] of byCategory) {
+      const category = categoryById.get(categoryId)
+      if (!category) continue
+      groups.push({ category, rows: txs, total: txs.reduce((sum, tx) => sum + tx.amount, 0) })
+    }
+    return groups.sort((a, b) => b.total - a.total)
+  }
+
+  private renderGroupHeader(g: CategoryGroup): string {
+    const collapsed = this.#collapsedGroups.has(g.category.id)
+    return `
+      <button type="button" class="group-header" data-group-toggle="${g.category.id}" aria-expanded="${!collapsed}">
+        <span class="group-header__chevron" aria-hidden="true">${collapsed ? '›' : '⌄'}</span>
+        <span class="group-header__name">${g.category.icon} ${g.category.name}</span>
+        <span class="group-header__count">${g.rows.length} ${g.rows.length === 1 ? 'item' : 'items'}</span>
+        <span class="group-header__total">${formatCurrency(g.total)}</span>
+      </button>
+    `
+  }
+
+  private renderGroupRows(g: CategoryGroup): string {
+    const categoryById = new Map([[g.category.id, g.category]])
+    const collapsed = this.#collapsedGroups.has(g.category.id)
+    return `
+      <tr class="group-header-row">
+        <td colspan="7">${this.renderGroupHeader(g)}</td>
+      </tr>
+      ${collapsed ? '' : g.rows.map((tx) => this.renderRow(tx, categoryById)).join('')}
+    `
+  }
+
+  private renderGroupCards(g: CategoryGroup): string {
+    const categoryById = new Map([[g.category.id, g.category]])
+    const collapsed = this.#collapsedGroups.has(g.category.id)
+    return `
+      <div class="tx-group">
+        ${this.renderGroupHeader(g)}
+        ${collapsed ? '' : g.rows.map((tx) => this.renderCard(tx, categoryById)).join('')}
+      </div>
+    `
   }
 
   private renderRow(tx: Transaction, categoryById: Map<string, Category>): string {

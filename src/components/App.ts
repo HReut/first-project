@@ -4,9 +4,11 @@ import { listCategories } from '../data/categoriesRepo.ts'
 import { listTransactions } from '../data/transactionsRepo.ts'
 import { listEmailRules } from '../data/emailRulesRepo.ts'
 import { signOut } from '../lib/auth.ts'
+import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
 import { mountAuthGate } from './AuthGate.ts'
 import { catLogoMarkup } from './icons/CatLogo.ts'
 import { chartIconMarkup, gearIconMarkup, homeIconMarkup, listIconMarkup } from './icons/NavIcons.ts'
+import { moonIconMarkup, sunIconMarkup } from './icons/ThemeIcons.ts'
 import { mountOverviewView } from './views/OverviewView.ts'
 import { mountTransactionsView } from './views/TransactionsView.ts'
 import { mountInsightsView } from './views/InsightsView.ts'
@@ -26,6 +28,11 @@ function currentMonthKey(): string {
 function viewFromHash(): View {
   const hash = location.hash.replace('#', '')
   return VIEWS.some((v) => v.id === hash) ? (hash as View) : 'overview'
+}
+
+/** Icon shows the mode a click switches *to* (moon while light, sun while dark). */
+function themeToggleIcon(): string {
+  return effectiveTheme() === 'dark' ? sunIconMarkup() : moonIconMarkup()
 }
 
 export function mountApp(root: HTMLElement, userEmail: string | null = null): void {
@@ -57,14 +64,18 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         <nav class="sidebar__nav" aria-label="Primary">
           ${VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}
         </nav>
-        ${
-          userEmail
-            ? `<div class="sidebar__footer">
-                <span class="sidebar__email">${userEmail}</span>
-                <button type="button" class="btn btn--sm js-sign-out">Sign out</button>
-              </div>`
-            : ''
-        }
+        <div class="sidebar__footer">
+          <button type="button" class="theme-toggle js-theme-toggle" aria-label="Switch color theme">
+            <span class="theme-toggle__icon" aria-hidden="true">${themeToggleIcon()}</span>
+            <span>Theme</span>
+          </button>
+          ${
+            userEmail
+              ? `<span class="sidebar__email">${userEmail}</span>
+                 <button type="button" class="btn btn--sm js-sign-out">Sign out</button>`
+              : ''
+          }
+        </div>
       </aside>
       <div class="main-col">
         <header class="topbar">
@@ -76,14 +87,17 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
                 <span class="topbar__subtitle">Smart Household Finance</span>
               </div>
             </div>
-            ${
-              userEmail
-                ? `<div class="topbar__account">
-                    <span class="topbar__email">${userEmail}</span>
-                    <button type="button" class="btn btn--sm js-sign-out">Sign out</button>
-                  </div>`
-                : ''
-            }
+            <div class="topbar__account">
+              <button type="button" class="theme-toggle js-theme-toggle" aria-label="Switch color theme">
+                <span class="theme-toggle__icon" aria-hidden="true">${themeToggleIcon()}</span>
+              </button>
+              ${
+                userEmail
+                  ? `<span class="topbar__email">${userEmail}</span>
+                     <button type="button" class="btn btn--sm js-sign-out">Sign out</button>`
+                  : ''
+              }
+            </div>
           </div>
         </header>
         <main id="main">
@@ -128,6 +142,17 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     btn.addEventListener('click', () => navigate((btn.dataset.view as View) ?? 'overview'))
   })
   window.addEventListener('hashchange', () => store.setState({ view: viewFromHash() }))
+
+  const themeToggleButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.js-theme-toggle'))
+  themeToggleButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      toggleTheme()
+      const icon = themeToggleIcon()
+      themeToggleButtons.forEach((b) => {
+        b.querySelector<HTMLElement>('.theme-toggle__icon')!.innerHTML = icon
+      })
+    })
+  })
 
   root.querySelectorAll<HTMLButtonElement>('.js-sign-out').forEach((btn) => {
     btn.addEventListener('click', () => {

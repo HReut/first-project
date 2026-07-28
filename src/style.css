@@ -78,6 +78,66 @@
   }
 }
 
+/* ---------- Manual theme override (theme toggle button) ----------
+   Higher specificity than the plain `:root` selectors above (with or without
+   the media query), so an explicit choice always wins over the OS setting. */
+
+:root[data-theme='light'] {
+  --text: #6b6375;
+  --text-h: #1d1d1f;
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --border: rgba(0, 0, 0, 0.07);
+  --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --shadow-card: rgba(11, 11, 11, 0.05) 0 1px 2px, rgba(11, 11, 11, 0.06) 0 12px 28px -10px;
+
+  --accent: #2f6fed;
+  --accent-bg: rgba(47, 111, 237, 0.1);
+  --accent-border: rgba(47, 111, 237, 0.5);
+
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-4: #eda100;
+  --cat-5: #e87ba4;
+  --cat-6: #008300;
+  --cat-7: #4a3aa7;
+  --cat-8: #e34948;
+
+  --person-reut: #1c6ea4;
+  --person-keren: #c7511f;
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --text: #9ca3af;
+  --text-h: #f5f5f7;
+  --bg: #000000;
+  --surface: #1a1a19;
+  --border: rgba(255, 255, 255, 0.09);
+  --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  --shadow-card: rgba(0, 0, 0, 0.5) 0 1px 2px, rgba(0, 0, 0, 0.45) 0 12px 28px -10px;
+
+  --accent: #5b8dff;
+  --accent-bg: rgba(91, 141, 255, 0.15);
+  --accent-border: rgba(91, 141, 255, 0.5);
+
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-4: #c98500;
+  --cat-5: #d55181;
+  --cat-6: #008300;
+  --cat-7: #9085e9;
+  --cat-8: #e66767;
+
+  --person-reut: #3d8ecf;
+  --person-keren: #c97438;
+
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -218,9 +278,46 @@ p {
   word-break: break-all;
 }
 
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.theme-toggle:hover {
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.theme-toggle__icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+}
+
+.theme-toggle__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar .theme-toggle {
+  align-self: flex-start;
+}
+
 /* ---------- Top bar (mobile header, <1024px — see the 1024px media query) ---------- */
 
 .topbar {
+  display: none;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -545,6 +642,10 @@ p {
     display: none;
   }
 
+  .topbar {
+    display: block;
+  }
+
   .topbar__brand {
     display: flex;
   }
@@ -773,6 +874,54 @@ p {
 .budget-summary__empty {
   font-size: 14px;
   color: var(--text);
+}
+
+.budget-summary__link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.budget-summary__link:hover {
+  text-decoration: underline;
+}
+
+.budget-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 860px) {
+  .budget-progress-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.budget-progress-item__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.budget-progress-item__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.budget-progress-item__amounts {
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .progress-bar__track {
@@ -1136,6 +1285,83 @@ p {
 
 .select-cell {
   width: 32px;
+}
+
+/* ---------- Transactions grouped-by-category view ---------- */
+
+.group-header-row:hover {
+  background: transparent;
+}
+
+.group-header-row td {
+  padding: 0;
+  border-bottom: none;
+  white-space: normal;
+}
+
+.group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  text-align: left;
+  background: var(--bg);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 14px 0 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.group-header:hover {
+  background: var(--accent-bg);
+}
+
+.group-header__chevron {
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.group-header__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-header__count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.group-header__total {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tx-group .group-header {
+  margin: 4px 0 0;
+}
+
+.transactions__table.is-grouped th:nth-child(4),
+.transactions__table.is-grouped td:nth-child(4) {
+  display: none;
 }
 
 /* ---------- Transactions cards (mobile, <1024px) ---------- */
