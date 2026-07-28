@@ -13,6 +13,10 @@ npm run preview   # preview the production build locally
 
 There is no test suite/framework configured in this repo currently.
 
+## Git workflow
+
+After each code change, commit it and push to the current branch's remote — don't wait to be asked. Stage only the files actually touched by the change (never `git add -A`/`.`). Don't commit broken/uncompiled code, don't force-push, and don't sweep in unrelated pre-existing untracked/modified files.
+
 ## What this is
 
 "Opa! Tulik" — a household expense tracker for two people (Reut and Keren). Client-only Vite + TypeScript SPA (no framework — no React/Vue/etc., just hand-rolled DOM via template-string `innerHTML`), optionally backed by Supabase, gated behind Google OAuth once Supabase is configured.
