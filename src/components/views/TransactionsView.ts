@@ -666,7 +666,7 @@ export class TransactionsView {
     const today = isoDate(new Date())
     const modal = new Modal(
       `
-        <h2 class="modal__title">${isEdit ? 'Edit expense' : 'Add expense'}</h2>
+        <h2 class="modal__title">${isEdit ? 'Edit transaction' : 'Add transaction'}</h2>
         <form class="modal__form" id="add-expense-form">
           <label class="filter-group">
             <span class="filter-group__label">Date</span>
@@ -694,11 +694,11 @@ export class TransactionsView {
           </label>
           <div class="modal__actions">
             <button type="button" class="btn" id="modal-cancel">Cancel</button>
-            <button type="submit" class="btn btn--primary">${isEdit ? 'Save changes' : 'Add expense'}</button>
+            <button type="submit" class="btn btn--primary">${isEdit ? 'Save changes' : 'Add transaction'}</button>
           </div>
         </form>
       `,
-      { ariaLabel: isEdit ? 'Edit expense' : 'Add expense' },
+      { ariaLabel: isEdit ? 'Edit transaction' : 'Add transaction' },
     )
 
     modal.element.querySelector<HTMLButtonElement>('#modal-cancel')!.addEventListener('click', () => modal.close())
