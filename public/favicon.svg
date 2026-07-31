@@ -1,10 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <rect width="24" height="24" rx="6" fill="#2F6FED" />
+  <style>
+    .badge { fill: #2F6FED; }
+    .mark { fill: #ffffff; }
+    .cutout { fill: #2F6FED; }
+    @media (prefers-color-scheme: dark) {
+      .badge { fill: #5B8DFF; }
+      .mark { fill: #000000; }
+      .cutout { fill: #5B8DFF; }
+    }
+  </style>
+  <rect width="24" height="24" rx="6" class="badge" />
   <path
     d="M5.5 2 L12 6.5 L18.5 2 L20 9 C20 16 16.5 20 12 22 C7.5 20 4 16 4 9 Z"
-    fill="#ffffff"
+    class="mark"
   />
-  <circle cx="9.3" cy="13" r="1.15" fill="#2F6FED" />
-  <circle cx="14.7" cy="13" r="1.15" fill="#2F6FED" />
-  <polygon points="11.2,15.6 12.8,15.6 12,16.7" fill="#2F6FED" />
+  <circle cx="9.3" cy="13" r="1.15" class="cutout" />
+  <circle cx="14.7" cy="13" r="1.15" class="cutout" />
+  <polygon points="11.2,15.6 12.8,15.6 12,16.7" class="cutout" />
 </svg>

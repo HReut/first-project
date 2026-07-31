@@ -2,8 +2,11 @@
  * edge peaks into two cat ears, with eyes/nose punched out in a second
  * color. Used in the topbar/sidebar badge and as the favicon. */
 export function catLogoMarkup(options: { fill?: string; eyeFill?: string } = {}): string {
-  const fill = options.fill ?? '#ffffff'
-  const eyeFill = options.eyeFill ?? 'currentColor'
+  // Knockout look: the mark reads as "cut out" of the badge, so its body
+  // matches the page background and the eyes/nose show the badge's accent
+  // color through — both flip automatically with the light/dark theme vars.
+  const fill = options.fill ?? 'var(--bg)'
+  const eyeFill = options.eyeFill ?? 'var(--accent)'
 
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
