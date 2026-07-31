@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category, NewTransaction, Person, Transaction } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
-import { formatCurrency, formatDateShort, formatSignedCurrency } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, formatMonthLabel, formatSignedCurrency } from '../../utils/format.ts'
 import { topBudgetedCategories } from '../../utils/insights.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge, renderStatusBadge } from '../shared/transactionCells.ts'
@@ -14,11 +14,14 @@ const BUDGET_CARD_LIMIT = 3
 
 type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'amount'
 type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'all' | 'custom'
-type GroupBy = 'none' | 'category'
+type GroupBy = 'none' | 'category' | 'person' | 'month'
 const PEOPLE: Person[] = ['Reut', 'Keren']
 
-interface CategoryGroup {
-  category: Category
+interface TxGroup {
+  key: string
+  label: string
+  icon: string
+  color: string | null
   rows: Transaction[]
   total: number
 }
@@ -179,8 +182,22 @@ export class TransactionsView {
                 <select class="toolbar-control__input" id="group-select">
                   <option value="none">None</option>
                   <option value="category">Category</option>
+                  <option value="person">Person</option>
+                  <option value="month">Month</option>
                 </select>
               </label>
+
+              <label class="toolbar-control">
+                <span class="toolbar-control__label">Sort by</span>
+                <select class="toolbar-control__input" id="sort-select">
+                  <option value="date">Date</option>
+                  <option value="merchant">Merchant</option>
+                  <option value="category">Category</option>
+                  <option value="person">Person</option>
+                  <option value="amount">Amount</option>
+                </select>
+              </label>
+              <button type="button" class="icon-btn" id="sort-direction-btn" aria-label="Toggle sort direction"></button>
 
               <label class="toolbar-control">
                 <span class="toolbar-control__label">Period</span>
@@ -201,10 +218,17 @@ export class TransactionsView {
               <div class="transactions__toolbar-spacer"></div>
 
               <button type="button" class="btn btn--sm" id="export-csv-btn">${downloadIconMarkup()}<span>Export</span></button>
-              <button type="button" class="icon-btn" id="filters-toggle-btn" aria-label="More filters">${filterIconMarkup()}</button>
+              <button type="button" class="btn btn--sm" id="filters-toggle-btn" aria-label="Filter by person or category">
+                ${filterIconMarkup()}<span>Filter</span><span class="filter-badge" id="filter-badge" hidden>0</span>
+              </button>
               <button type="button" class="icon-btn" id="columns-toggle-btn" disabled title="Coming soon" aria-label="Choose columns">${columnsIconMarkup()}</button>
 
               <div class="filter-bar" id="filter-bar">
+                <div class="filter-bar__header">
+                  <span class="filter-bar__title">Filter by</span>
+                  <button type="button" class="filter-bar__clear" id="clear-filters-btn">Clear</button>
+                </div>
+
                 <div class="filter-group filter-group--person" role="group" aria-label="Filter by person">
                   <button type="button" class="segmented-btn" data-person="all">All</button>
                   ${PEOPLE.map((p) => `<button type="button" class="segmented-btn" data-person="${p}">${p}</button>`).join('')}
@@ -270,7 +294,7 @@ export class TransactionsView {
     const searchInput = this.#container.querySelector<HTMLInputElement>('#search-input')!
     searchInput.addEventListener('input', () => this.patchFilters({ search: searchInput.value }))
 
-    const personButtons = Array.from(this.#container.querySelectorAll<HTMLButtonElement>('[data-person]'))
+    const personButtons = Array.from(this.#container.querySelectorAll<HTMLButtonElement>('.segmented-btn[data-person]'))
     const setActivePerson = (person: Person | 'all') => {
       personButtons.forEach((btn) => btn.classList.toggle('is-active', btn.dataset.person === person))
     }
@@ -292,6 +316,25 @@ export class TransactionsView {
     groupSelect.addEventListener('change', () => {
       this.#groupBy = groupSelect.value as GroupBy
       this.renderTable(this.#store.getState())
+    })
+
+    const sortSelect = this.#container.querySelector<HTMLSelectElement>('#sort-select')!
+    sortSelect.value = this.#sort.column
+    sortSelect.addEventListener('change', () => {
+      this.#sort = { column: sortSelect.value as SortColumn, direction: this.#sort.direction }
+      this.renderTable(this.#store.getState())
+    })
+
+    const sortDirBtn = this.#container.querySelector<HTMLButtonElement>('#sort-direction-btn')!
+    sortDirBtn.addEventListener('click', () => {
+      this.#sort = { column: this.#sort.column, direction: this.#sort.direction === 'asc' ? 'desc' : 'asc' }
+      this.renderTable(this.#store.getState())
+    })
+
+    this.#container.querySelector<HTMLButtonElement>('#clear-filters-btn')!.addEventListener('click', () => {
+      setActivePerson('all')
+      categorySelect.value = 'all'
+      this.patchFilters({ person: 'all', categoryId: 'all' })
     })
 
     const periodSelect = this.#container.querySelector<HTMLSelectElement>('#period-select')!
@@ -655,21 +698,30 @@ export class TransactionsView {
       th.classList.toggle('is-sorted', column === this.#sort.column)
       th.dataset.sortDirection = column === this.#sort.column ? this.#sort.direction : ''
     })
+    this.#container.querySelector<HTMLSelectElement>('#sort-select')!.value = this.#sort.column
+    const sortDirBtn = this.#container.querySelector<HTMLButtonElement>('#sort-direction-btn')!
+    sortDirBtn.textContent = this.#sort.direction === 'asc' ? '↑' : '↓'
+    sortDirBtn.setAttribute('aria-label', this.#sort.direction === 'asc' ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending')
+
+    const activeFilterCount = (state.filters.person !== 'all' ? 1 : 0) + (state.filters.categoryId !== 'all' ? 1 : 0)
+    const filterBadge = this.#container.querySelector<HTMLElement>('#filter-badge')!
+    filterBadge.hidden = activeFilterCount === 0
+    filterBadge.textContent = String(activeFilterCount)
 
     const selectAll = this.#container.querySelector<HTMLInputElement>('#select-all')!
     selectAll.checked = rows.length > 0 && rows.every((tx) => this.#selection.has(tx.id))
 
     const tbody = this.#container.querySelector<HTMLElement>('#transactions-body')!
     const cardsContainer = this.#container.querySelector<HTMLElement>('#transactions-cards')!
-    this.#container.querySelector<HTMLTableElement>('.transactions__table')!.classList.toggle('is-grouped', this.#groupBy === 'category')
+    this.#container.querySelector<HTMLTableElement>('.transactions__table')!.dataset.groupBy = this.#groupBy
 
     if (rows.length === 0) {
       tbody.innerHTML = `<tr><td colspan="7" class="transactions__empty">No transactions match these filters.</td></tr>`
       cardsContainer.innerHTML = `<p class="transactions__empty">No transactions match these filters.</p>`
-    } else if (this.#groupBy === 'category') {
+    } else if (this.#groupBy !== 'none') {
       const groups = this.buildGroups(rows, categoryById)
-      tbody.innerHTML = groups.map((g) => this.renderGroupRows(g)).join('')
-      cardsContainer.innerHTML = groups.map((g) => this.renderGroupCards(g)).join('')
+      tbody.innerHTML = groups.map((g) => this.renderGroupRows(g, categoryById)).join('')
+      cardsContainer.innerHTML = groups.map((g) => this.renderGroupCards(g, categoryById)).join('')
     } else {
       tbody.innerHTML = rows.map((tx) => this.renderRow(tx, categoryById)).join('')
       cardsContainer.innerHTML = rows.map((tx) => this.renderCard(tx, categoryById)).join('')
@@ -693,37 +745,84 @@ export class TransactionsView {
     `
   }
 
-  private buildGroups(rows: Transaction[], categoryById: Map<string, Category>): CategoryGroup[] {
+  private buildGroups(rows: Transaction[], categoryById: Map<string, Category>): TxGroup[] {
+    if (this.#groupBy === 'person') {
+      const byPerson = new Map<Person, Transaction[]>()
+      for (const tx of rows) {
+        const arr = byPerson.get(tx.person) ?? []
+        arr.push(tx)
+        byPerson.set(tx.person, arr)
+      }
+      const groups: TxGroup[] = PEOPLE.filter((p) => byPerson.has(p)).map((p) => {
+        const txs = byPerson.get(p)!
+        return {
+          key: p,
+          label: p,
+          icon: p.charAt(0),
+          color: `var(--person-${p.toLowerCase()})`,
+          rows: txs,
+          total: txs.reduce((sum, tx) => sum + tx.amount, 0),
+        }
+      })
+      return groups.sort((a, b) => b.total - a.total)
+    }
+
+    if (this.#groupBy === 'month') {
+      const byMonth = new Map<string, Transaction[]>()
+      for (const tx of rows) {
+        const key = tx.date.slice(0, 7)
+        const arr = byMonth.get(key) ?? []
+        arr.push(tx)
+        byMonth.set(key, arr)
+      }
+      const groups: TxGroup[] = Array.from(byMonth, ([key, txs]) => ({
+        key,
+        label: formatMonthLabel(key),
+        icon: '📅',
+        color: null,
+        rows: txs,
+        total: txs.reduce((sum, tx) => sum + tx.amount, 0),
+      }))
+      return groups.sort((a, b) => (a.key < b.key ? 1 : -1))
+    }
+
     const byCategory = new Map<string, Transaction[]>()
     for (const tx of rows) {
       const arr = byCategory.get(tx.categoryId) ?? []
       arr.push(tx)
       byCategory.set(tx.categoryId, arr)
     }
-    const groups: CategoryGroup[] = []
+    const groups: TxGroup[] = []
     for (const [categoryId, txs] of byCategory) {
       const category = categoryById.get(categoryId)
       if (!category) continue
-      groups.push({ category, rows: txs, total: txs.reduce((sum, tx) => sum + tx.amount, 0) })
+      groups.push({
+        key: category.id,
+        label: category.name,
+        icon: category.icon,
+        color: category.colorCode,
+        rows: txs,
+        total: txs.reduce((sum, tx) => sum + tx.amount, 0),
+      })
     }
     return groups.sort((a, b) => b.total - a.total)
   }
 
-  private renderGroupHeader(g: CategoryGroup): string {
-    const collapsed = this.#collapsedGroups.has(g.category.id)
+  private renderGroupHeader(g: TxGroup): string {
+    const collapsed = this.#collapsedGroups.has(g.key)
     return `
-      <button type="button" class="group-header" data-group-toggle="${g.category.id}" aria-expanded="${!collapsed}">
+      <button type="button" class="group-header" data-group-toggle="${g.key}" aria-expanded="${!collapsed}">
         <span class="group-header__chevron" aria-hidden="true">${collapsed ? '›' : '⌄'}</span>
-        <span class="group-header__name">${g.category.icon} ${g.category.name}</span>
+        ${g.color ? `<span class="group-header__dot" style="background: ${g.color}" aria-hidden="true"></span>` : ''}
+        <span class="group-header__name">${g.icon} ${g.label}</span>
         <span class="group-header__count">${g.rows.length} ${g.rows.length === 1 ? 'item' : 'items'}</span>
         <span class="group-header__total">${formatCurrency(g.total)}</span>
       </button>
     `
   }
 
-  private renderGroupRows(g: CategoryGroup): string {
-    const categoryById = new Map([[g.category.id, g.category]])
-    const collapsed = this.#collapsedGroups.has(g.category.id)
+  private renderGroupRows(g: TxGroup, categoryById: Map<string, Category>): string {
+    const collapsed = this.#collapsedGroups.has(g.key)
     return `
       <tr class="group-header-row">
         <td colspan="7">${this.renderGroupHeader(g)}</td>
@@ -732,9 +831,8 @@ export class TransactionsView {
     `
   }
 
-  private renderGroupCards(g: CategoryGroup): string {
-    const categoryById = new Map([[g.category.id, g.category]])
-    const collapsed = this.#collapsedGroups.has(g.category.id)
+  private renderGroupCards(g: TxGroup, categoryById: Map<string, Category>): string {
+    const collapsed = this.#collapsedGroups.has(g.key)
     return `
       <div class="tx-group">
         ${this.renderGroupHeader(g)}

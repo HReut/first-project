@@ -1727,6 +1727,57 @@ p {
   width: 100%;
 }
 
+#sort-direction-btn {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.filter-badge[hidden] {
+  display: none;
+}
+
+.filter-bar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filter-bar__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.filter-bar__clear {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.filter-bar__clear:hover {
+  text-decoration: underline;
+}
+
 /* No unconditional `display` here on purpose — visibility is driven purely
    by the `hidden` attribute (JS toggles `el.hidden`), so the UA [hidden]
    rule is enough and can't be shadowed by equal-specificity author CSS. */
@@ -2046,9 +2097,21 @@ p {
   margin: 4px 0 0;
 }
 
-.transactions__table.is-grouped th:nth-child(4),
-.transactions__table.is-grouped td:nth-child(4) {
+.transactions__table[data-group-by='category'] th:nth-child(4),
+.transactions__table[data-group-by='category'] td:nth-child(4) {
   display: none;
+}
+
+.transactions__table[data-group-by='person'] th:nth-child(5),
+.transactions__table[data-group-by='person'] td:nth-child(5) {
+  display: none;
+}
+
+.group-header__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
 /* ---------- Transactions cards (mobile, <1024px) ---------- */
