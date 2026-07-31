@@ -2107,6 +2107,48 @@ p {
   display: none;
 }
 
+/* ---------- Column visibility (toolbar "Columns" popover) ---------- */
+
+.transactions__table[data-hide-columns~='date'] th:nth-child(2),
+.transactions__table[data-hide-columns~='date'] td:nth-child(2) {
+  display: none;
+}
+
+.transactions__table[data-hide-columns~='merchant'] th:nth-child(3),
+.transactions__table[data-hide-columns~='merchant'] td:nth-child(3) {
+  display: none;
+}
+
+.transactions__table[data-hide-columns~='category'] th:nth-child(4),
+.transactions__table[data-hide-columns~='category'] td:nth-child(4) {
+  display: none;
+}
+
+.transactions__table[data-hide-columns~='person'] th:nth-child(5),
+.transactions__table[data-hide-columns~='person'] td:nth-child(5) {
+  display: none;
+}
+
+.transactions__table[data-hide-columns~='amount'] th:nth-child(6),
+.transactions__table[data-hide-columns~='amount'] td:nth-child(6) {
+  display: none;
+}
+
+.column-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.column-toggle input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+}
+
 .group-header__dot {
   width: 8px;
   height: 8px;

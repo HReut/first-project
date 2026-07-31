@@ -16,6 +16,13 @@ type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'amount'
 type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'all' | 'custom'
 type GroupBy = 'none' | 'category' | 'person' | 'month'
 const PEOPLE: Person[] = ['Reut', 'Keren']
+const TOGGLEABLE_COLUMNS: { key: SortColumn; label: string }[] = [
+  { key: 'date', label: 'Date' },
+  { key: 'merchant', label: 'Merchant' },
+  { key: 'category', label: 'Category' },
+  { key: 'person', label: 'Person' },
+  { key: 'amount', label: 'Amount' },
+]
 
 interface TxGroup {
   key: string
@@ -71,6 +78,7 @@ export class TransactionsView {
   #selection = new Set<string>()
   #groupBy: GroupBy = 'none'
   #collapsedGroups = new Set<string>()
+  #hiddenColumns = new Set<SortColumn>()
 
   constructor(container: HTMLElement, store: Store<AppState>) {
     this.#container = container
@@ -221,7 +229,9 @@ export class TransactionsView {
               <button type="button" class="btn btn--sm" id="filters-toggle-btn" aria-label="Filter by person or category">
                 ${filterIconMarkup()}<span>Filter</span><span class="filter-badge" id="filter-badge" hidden>0</span>
               </button>
-              <button type="button" class="icon-btn" id="columns-toggle-btn" disabled title="Coming soon" aria-label="Choose columns">${columnsIconMarkup()}</button>
+              <button type="button" class="btn btn--sm" id="columns-toggle-btn" aria-label="Choose visible columns">
+                ${columnsIconMarkup()}<span>Columns</span><span class="filter-badge" id="columns-badge" hidden>0</span>
+              </button>
 
               <div class="filter-bar" id="filter-bar">
                 <div class="filter-bar__header">
@@ -253,8 +263,23 @@ export class TransactionsView {
                   </label>
                 </div>
               </div>
+
+              <div class="filter-bar" id="columns-bar">
+                <div class="filter-bar__header">
+                  <span class="filter-bar__title">Show columns</span>
+                  <button type="button" class="filter-bar__clear" id="reset-columns-btn">Reset</button>
+                </div>
+                ${TOGGLEABLE_COLUMNS.map(
+                  (col) => `
+                  <label class="column-toggle">
+                    <input type="checkbox" data-column="${col.key}" checked>
+                    <span>${col.label}</span>
+                  </label>
+                `,
+                ).join('')}
+              </div>
             </div>
-            <div class="sheet-backdrop" id="filters-backdrop" hidden></div>
+            <div class="sheet-backdrop" id="toolbar-backdrop" hidden></div>
 
             <div class="bulk-bar" id="bulk-bar" hidden></div>
 
@@ -359,27 +384,56 @@ export class TransactionsView {
 
     this.#container.querySelector<HTMLButtonElement>('#add-expense-btn')!.addEventListener('click', () => this.openExpenseModal())
 
-    this.wireFilterSheet()
+    this.wireToolbarPopovers()
+    this.wireColumnToggles()
   }
 
-  private wireFilterSheet(): void {
-    const filterBar = this.#container.querySelector<HTMLElement>('#filter-bar')!
-    const backdrop = this.#container.querySelector<HTMLElement>('#filters-backdrop')!
-    const toggleBtn = this.#container.querySelector<HTMLButtonElement>('#filters-toggle-btn')!
+  /** Filter and Columns are mutually-exclusive popovers anchored to the
+   * toolbar, sharing one backdrop — opening one closes the other. */
+  private wireToolbarPopovers(): void {
+    const backdrop = this.#container.querySelector<HTMLElement>('#toolbar-backdrop')!
+    const popovers = [
+      { btn: this.#container.querySelector<HTMLButtonElement>('#filters-toggle-btn')!, panel: this.#container.querySelector<HTMLElement>('#filter-bar')! },
+      { btn: this.#container.querySelector<HTMLButtonElement>('#columns-toggle-btn')!, panel: this.#container.querySelector<HTMLElement>('#columns-bar')! },
+    ]
 
-    const close = () => {
-      filterBar.classList.remove('is-open')
+    const closeAll = () => {
+      popovers.forEach(({ panel }) => panel.classList.remove('is-open'))
       backdrop.hidden = true
     }
-    const open = () => {
-      filterBar.classList.add('is-open')
-      backdrop.hidden = false
-    }
 
-    toggleBtn.addEventListener('click', () => (filterBar.classList.contains('is-open') ? close() : open()))
-    backdrop.addEventListener('click', close)
+    popovers.forEach(({ btn, panel }) => {
+      btn.addEventListener('click', () => {
+        const wasOpen = panel.classList.contains('is-open')
+        closeAll()
+        if (!wasOpen) {
+          panel.classList.add('is-open')
+          backdrop.hidden = false
+        }
+      })
+    })
+
+    backdrop.addEventListener('click', closeAll)
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && filterBar.classList.contains('is-open')) close()
+      if (event.key === 'Escape') closeAll()
+    })
+  }
+
+  private wireColumnToggles(): void {
+    const checkboxes = Array.from(this.#container.querySelectorAll<HTMLInputElement>('#columns-bar [data-column]'))
+    checkboxes.forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        const column = checkbox.dataset.column as SortColumn
+        if (checkbox.checked) this.#hiddenColumns.delete(column)
+        else this.#hiddenColumns.add(column)
+        this.renderTable(this.#store.getState())
+      })
+    })
+
+    this.#container.querySelector<HTMLButtonElement>('#reset-columns-btn')!.addEventListener('click', () => {
+      this.#hiddenColumns.clear()
+      checkboxes.forEach((checkbox) => (checkbox.checked = true))
+      this.renderTable(this.#store.getState())
     })
   }
 
@@ -708,12 +762,18 @@ export class TransactionsView {
     filterBadge.hidden = activeFilterCount === 0
     filterBadge.textContent = String(activeFilterCount)
 
+    const columnsBadge = this.#container.querySelector<HTMLElement>('#columns-badge')!
+    columnsBadge.hidden = this.#hiddenColumns.size === 0
+    columnsBadge.textContent = String(this.#hiddenColumns.size)
+
     const selectAll = this.#container.querySelector<HTMLInputElement>('#select-all')!
     selectAll.checked = rows.length > 0 && rows.every((tx) => this.#selection.has(tx.id))
 
     const tbody = this.#container.querySelector<HTMLElement>('#transactions-body')!
     const cardsContainer = this.#container.querySelector<HTMLElement>('#transactions-cards')!
-    this.#container.querySelector<HTMLTableElement>('.transactions__table')!.dataset.groupBy = this.#groupBy
+    const table = this.#container.querySelector<HTMLTableElement>('.transactions__table')!
+    table.dataset.groupBy = this.#groupBy
+    table.dataset.hideColumns = Array.from(this.#hiddenColumns).join(' ')
 
     if (rows.length === 0) {
       tbody.innerHTML = `<tr><td colspan="7" class="transactions__empty">No transactions match these filters.</td></tr>`
