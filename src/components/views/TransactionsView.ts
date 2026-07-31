@@ -1,10 +1,16 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category, NewTransaction, Person, Transaction } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
-import { formatCurrency, formatDateShort } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, formatSignedCurrency } from '../../utils/format.ts'
+import { topBudgetedCategories } from '../../utils/insights.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge, renderStatusBadge } from '../shared/transactionCells.ts'
+import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { Modal } from '../shared/Modal.ts'
+import { PLACEHOLDER_TOTAL_AVAILABLE } from '../../data/placeholderFigures.ts'
+import { columnsIconMarkup, downloadIconMarkup, filterIconMarkup, plusIconMarkup } from '../icons/NavIcons.ts'
+
+const BUDGET_CARD_LIMIT = 3
 
 type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'amount'
 type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'all' | 'custom'
@@ -69,11 +75,70 @@ export class TransactionsView {
     this.renderShell()
     this.wireToolbar()
     this.wireTable()
+    this.wireExport()
+    window.addEventListener('opa:new-transaction', () => this.openExpenseModal())
     store.subscribe((state) => {
       this.updateCategoryOptions(state.categories)
+      this.renderBudgetCards(state)
       this.renderTable(state)
     })
+    this.renderBudgetCards(store.getState())
     this.renderTable(store.getState())
+  }
+
+  private renderBudgetCards(state: AppState): void {
+    const cardsEl = this.#container.querySelector<HTMLElement>('#tx-budget-cards')!
+    const budgeted = topBudgetedCategories(state.transactions, state.categories).slice(0, BUDGET_CARD_LIMIT)
+
+    if (budgeted.length === 0) {
+      cardsEl.innerHTML = `<p class="tx-budget-cards__empty">No category budgets set yet — set some in Budgets.</p>`
+      return
+    }
+
+    cardsEl.innerHTML = budgeted
+      .map(
+        ({ category, spent }) => `
+      <div class="tx-budget-card">
+        <div class="tx-budget-card__top">
+          <span class="tx-budget-card__icon" style="background: color-mix(in srgb, ${category.colorCode} 16%, var(--surface))">${category.icon}</span>
+          <span class="tx-budget-card__tag">This month</span>
+        </div>
+        <p class="tx-budget-card__name">${category.name} Budget</p>
+        <p class="tx-budget-card__amount">${formatCurrency(spent)} <span>of ${formatCurrency(category.monthlyBudgetLimit ?? 0)}</span></p>
+        ${renderProgressBar(spent, category.monthlyBudgetLimit)}
+      </div>
+    `,
+      )
+      .join('')
+  }
+
+  private wireExport(): void {
+    this.#container.querySelector<HTMLButtonElement>('#export-csv-btn')!.addEventListener('click', () => this.exportVisibleRowsAsCsv())
+  }
+
+  private exportVisibleRowsAsCsv(): void {
+    const state = this.#store.getState()
+    const categoryById = new Map(state.categories.map((category) => [category.id, category]))
+    const rows = this.visibleRows(state)
+
+    const header = ['Date', 'Merchant', 'Category', 'Person', 'Status', 'Amount']
+    const lines = rows.map((tx) => [
+      tx.date,
+      tx.merchant,
+      categoryById.get(tx.categoryId)?.name ?? 'Uncategorized',
+      tx.person,
+      tx.status === 'needs_review' ? 'Pending' : 'Approved',
+      tx.amount.toFixed(2),
+    ])
+    const csv = [header, ...lines].map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(',')).join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `opa-transactions-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   private renderShell(): void {
@@ -82,9 +147,26 @@ export class TransactionsView {
     this.#container.innerHTML = `
       <section class="band band--hero">
         <div class="band__inner">
-          <p class="eyebrow">Household finance</p>
-          <h1>Transactions.</h1>
-          <p class="hero__subtitle">Every expense, filterable, sortable, editable in place.</p>
+          <p class="breadcrumb">Finance <span aria-hidden="true">/</span> Transactions</p>
+          <div class="tx-page-header">
+            <div>
+              <h1>Transactions.</h1>
+              <p class="hero__subtitle">Every expense, filterable, sortable, editable in place.</p>
+            </div>
+            <div class="tx-page-header__actions">
+              <div class="tx-page-header__stat">
+                <span class="tx-page-header__stat-label">Total available</span>
+                <span class="tx-page-header__stat-value">${formatCurrency(PLACEHOLDER_TOTAL_AVAILABLE)}</span>
+              </div>
+              <button type="button" class="btn btn--primary" id="add-expense-btn">${plusIconMarkup()}<span>Add Transaction</span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="band__inner">
+          <div class="tx-budget-cards" id="tx-budget-cards" aria-label="Budgets at a glance"></div>
         </div>
       </section>
 
@@ -92,40 +174,17 @@ export class TransactionsView {
         <div class="band__inner">
           <div class="transactions">
             <div class="transactions__toolbar">
-              <button type="button" class="btn filters-toggle-btn" id="filters-toggle-btn">Filters</button>
-              <button type="button" class="btn btn--primary" id="add-expense-btn">+ Add Expense</button>
-            </div>
-
-            <div class="filter-bar" id="filter-bar">
-              <div class="filter-group filter-group--search">
-                <span class="filter-group__label">Search</span>
-                <input type="search" class="filter-input" id="search-input" placeholder="Merchant…" value="${filters.search}">
-              </div>
-
-              <label class="filter-group">
-                <span class="filter-group__label">Group by</span>
-                <select class="filter-select" id="group-select">
+              <label class="toolbar-control">
+                <span class="toolbar-control__label">Group by</span>
+                <select class="toolbar-control__input" id="group-select">
                   <option value="none">None</option>
                   <option value="category">Category</option>
                 </select>
               </label>
 
-              <div class="filter-group filter-group--person" role="group" aria-label="Filter by person">
-                <button type="button" class="segmented-btn" data-person="all">All</button>
-                ${PEOPLE.map((p) => `<button type="button" class="segmented-btn" data-person="${p}">${p}</button>`).join('')}
-              </div>
-
-              <label class="filter-group">
-                <span class="filter-group__label">Category</span>
-                <select class="filter-select" id="category-select">
-                  <option value="all">All categories</option>
-                  ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
-                </select>
-              </label>
-
-              <label class="filter-group">
-                <span class="filter-group__label">Period</span>
-                <select class="filter-select" id="period-select">
+              <label class="toolbar-control">
+                <span class="toolbar-control__label">Period</span>
+                <select class="toolbar-control__input" id="period-select">
                   <option value="this-month">This month</option>
                   <option value="last-month">Last month</option>
                   <option value="last-3">Last 3 months</option>
@@ -135,15 +194,40 @@ export class TransactionsView {
                 </select>
               </label>
 
-              <div class="filter-group filter-group--custom-range" id="custom-range" hidden>
+              <label class="toolbar-control toolbar-control--search">
+                <input type="search" class="toolbar-control__input" id="search-input" placeholder="Filter descriptions…" value="${filters.search}">
+              </label>
+
+              <div class="transactions__toolbar-spacer"></div>
+
+              <button type="button" class="btn btn--sm" id="export-csv-btn">${downloadIconMarkup()}<span>Export</span></button>
+              <button type="button" class="icon-btn" id="filters-toggle-btn" aria-label="More filters">${filterIconMarkup()}</button>
+              <button type="button" class="icon-btn" id="columns-toggle-btn" disabled title="Coming soon" aria-label="Choose columns">${columnsIconMarkup()}</button>
+
+              <div class="filter-bar" id="filter-bar">
+                <div class="filter-group filter-group--person" role="group" aria-label="Filter by person">
+                  <button type="button" class="segmented-btn" data-person="all">All</button>
+                  ${PEOPLE.map((p) => `<button type="button" class="segmented-btn" data-person="${p}">${p}</button>`).join('')}
+                </div>
+
                 <label class="filter-group">
-                  <span class="filter-group__label">From</span>
-                  <input type="date" class="filter-input" id="range-start">
+                  <span class="filter-group__label">Category</span>
+                  <select class="filter-select" id="category-select">
+                    <option value="all">All categories</option>
+                    ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
+                  </select>
                 </label>
-                <label class="filter-group">
-                  <span class="filter-group__label">To</span>
-                  <input type="date" class="filter-input" id="range-end">
-                </label>
+
+                <div class="filter-group filter-group--custom-range" id="custom-range" hidden>
+                  <label class="filter-group">
+                    <span class="filter-group__label">From</span>
+                    <input type="date" class="filter-input" id="range-start">
+                  </label>
+                  <label class="filter-group">
+                    <span class="filter-group__label">To</span>
+                    <input type="date" class="filter-input" id="range-end">
+                  </label>
+                </div>
               </div>
             </div>
             <div class="sheet-backdrop" id="filters-backdrop" hidden></div>
@@ -172,6 +256,8 @@ export class TransactionsView {
               </table>
             </div>
             <div class="tx-cards" id="transactions-cards"></div>
+
+            <div class="tx-footer-summary" id="tx-footer-summary"></div>
           </div>
         </div>
       </section>
@@ -590,6 +676,21 @@ export class TransactionsView {
     }
 
     this.renderBulkBar(state.categories)
+    this.renderFooterSummary(rows)
+  }
+
+  private renderFooterSummary(rows: Transaction[]): void {
+    const footerEl = this.#container.querySelector<HTMLElement>('#tx-footer-summary')!
+    const reutTotal = rows.filter((tx) => tx.person === 'Reut').reduce((sum, tx) => sum + tx.amount, 0)
+    const kerenTotal = rows.filter((tx) => tx.person === 'Keren').reduce((sum, tx) => sum + tx.amount, 0)
+    const netFlow = -(reutTotal + kerenTotal)
+
+    footerEl.innerHTML = `
+      <span><strong>Selected:</strong> ${this.#selection.size}</span>
+      <span><strong>Reut:</strong> ${formatSignedCurrency(-reutTotal)}</span>
+      <span><strong>Keren:</strong> ${formatSignedCurrency(-kerenTotal)}</span>
+      <span class="tx-footer-summary__net"><strong>Net period flow:</strong> ${formatSignedCurrency(netFlow)}</span>
+    `
   }
 
   private buildGroups(rows: Transaction[], categoryById: Map<string, Category>): CategoryGroup[] {

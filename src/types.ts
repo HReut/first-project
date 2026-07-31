@@ -48,7 +48,7 @@ export interface Filters {
   search: string
 }
 
-export type View = 'overview' | 'transactions' | 'insights' | 'settings'
+export type View = 'overview' | 'transactions' | 'budgets' | 'savings' | 'analytics' | 'accounts' | 'security' | 'settings' | 'help'
 
 export type LoadStatus = 'loading' | 'ready' | 'error'
 

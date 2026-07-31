@@ -1,37 +1,23 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category } from '../../types.ts'
-import { computeCategoryBreakdown, computeSplitBalance } from '../../utils/insights.ts'
+import { computeCategoryBreakdown, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
-import { budgetPercent } from '../../utils/budget.ts'
 import { updateTransaction } from '../../data/transactionsRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
+import {
+  PLACEHOLDER_EMERGENCY_FUND,
+  PLACEHOLDER_HEALTH_SCORE,
+  PLACEHOLDER_MONTHLY_FLOW,
+  PLACEHOLDER_NET_WORTH,
+  PLACEHOLDER_NET_WORTH_DELTA_PERCENT,
+  PLACEHOLDER_SHARED_ACCOUNT,
+} from '../../data/placeholderFigures.ts'
 
 const RECENT_ACTIVITY_LIMIT = 5
 const REVIEW_CENTER_LIMIT = 6
 const BUDGET_PROGRESS_LIMIT = 3
 const DONUT_SLICE_LIMIT = 3
-
-// Placeholder figures for the "Overall Current Status" banner and the
-// Shared Account / Emergency Fund split — this app has no account-balance or
-// income tracking yet, so these can't be computed from real data. They're
-// here purely to match the redesign's look; swap for real numbers once that
-// data model exists.
-const PLACEHOLDER_NET_WORTH = 842150
-const PLACEHOLDER_NET_WORTH_DELTA_PERCENT = 2.4
-const PLACEHOLDER_MONTHLY_FLOW = 4200
-const PLACEHOLDER_HEALTH_SCORE = 88
-const PLACEHOLDER_SHARED_ACCOUNT = 35000
-const PLACEHOLDER_EMERGENCY_FUND = 7850
-
-function topBudgetedCategories(state: AppState): { category: Category; spent: number }[] {
-  const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' })
-  const spentByCategory = new Map(breakdown.map((entry) => [entry.categoryId, entry.amount]))
-  return state.categories
-    .filter((category) => category.monthlyBudgetLimit !== null && category.monthlyBudgetLimit > 0)
-    .map((category) => ({ category, spent: spentByCategory.get(category.id) ?? 0 }))
-    .sort((a, b) => budgetPercent(b.spent, b.category.monthlyBudgetLimit) - budgetPercent(a.spent, a.category.monthlyBudgetLimit))
-}
 
 interface Improvement {
   category: Category
@@ -316,12 +302,12 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   }
 
   function renderBudgetSummary(state: AppState): void {
-    const budgeted = topBudgetedCategories(state)
+    const budgeted = topBudgetedCategories(state.transactions, state.categories)
 
     if (budgeted.length === 0) {
       budgetEl.innerHTML = `
         <h2 class="budget-summary__title">Budget progress</h2>
-        <p class="budget-summary__empty">No category budgets set yet — set some in Insights &amp; Budgets.</p>
+        <p class="budget-summary__empty">No category budgets set yet — set some in Budgets.</p>
       `
       return
     }
@@ -330,7 +316,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     budgetEl.innerHTML = `
       <div class="budget-summary__header">
         <h2 class="budget-summary__title">Budget progress</h2>
-        <a class="budget-summary__link" href="#insights">View all ${budgeted.length}</a>
+        <a class="budget-summary__link" href="#budgets">View all ${budgeted.length}</a>
       </div>
       <div class="budget-progress-grid">
         ${visible

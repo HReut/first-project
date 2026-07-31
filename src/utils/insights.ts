@@ -1,4 +1,5 @@
-import type { Filters, Person, Transaction } from '../types.ts'
+import type { Category, Filters, Person, Transaction } from '../types.ts'
+import { budgetPercent } from './budget.ts'
 
 export interface MonthlyInsights {
   currentMonthTotal: number
@@ -100,6 +101,18 @@ export function computeMonthlyInsights(
     topCategoryAmount: top?.amount ?? 0,
     transactionCount: currentTx.length,
   }
+}
+
+/** Budgeted categories (limit set) with this month's spend, sorted by how
+ * close each is to blowing its limit — the "which budgets need attention"
+ * ordering shared by the Overview and Transactions pages. */
+export function topBudgetedCategories(transactions: Transaction[], categories: Category[]): { category: Category; spent: number }[] {
+  const breakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' })
+  const spentByCategory = new Map(breakdown.map((entry) => [entry.categoryId, entry.amount]))
+  return categories
+    .filter((category) => category.monthlyBudgetLimit !== null && category.monthlyBudgetLimit > 0)
+    .map((category) => ({ category, spent: spentByCategory.get(category.id) ?? 0 }))
+    .sort((a, b) => budgetPercent(b.spent, b.category.monthlyBudgetLimit) - budgetPercent(a.spent, a.category.monthlyBudgetLimit))
 }
 
 /**
