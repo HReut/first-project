@@ -14,9 +14,12 @@ export function catLogoMarkup(options: { fill?: string; eyeFill?: string } = {})
         d="M5.5 2 L12 6.5 L18.5 2 L20 9 C20 16 16.5 20 12 22 C7.5 20 4 16 4 9 Z"
         fill="${fill}"
       />
-      <circle cx="9.3" cy="13" r="1.15" fill="${eyeFill}" />
-      <circle cx="14.7" cy="13" r="1.15" fill="${eyeFill}" />
-      <polygon points="11.2,15.6 12.8,15.6 12,16.7" fill="${eyeFill}" />
+      <ellipse cx="9.3" cy="12" rx="1.3" ry="0.85" fill="${eyeFill}" transform="rotate(-12 9.3 12)" />
+      <ellipse cx="14.7" cy="12" rx="1.3" ry="0.85" fill="${eyeFill}" transform="rotate(12 14.7 12)" />
+      <path
+        d="M7.8 15.2 C9 13.6 10.6 13.8 12 15.4 C13.4 13.8 15 13.6 16.2 15.2 C15 16.8 13.2 16.6 12 15.4 C10.8 16.6 9 16.8 7.8 15.2 Z"
+        fill="${eyeFill}"
+      />
     </svg>
   `.trim()
 }
