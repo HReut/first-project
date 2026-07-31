@@ -88,9 +88,11 @@ export function createMockTransactions(categories: Category[], referenceDate = n
         const date = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), day)
         const emailChance = merchant.emailLikely ? 0.85 : 0.15
         const isEmailAuto = rand() < emailChance
-        // A slice of auto-imported invoices still await 1-click approval —
-        // seeds the Review Center widget with something to show.
-        const status = isEmailAuto && rand() < 0.4 ? 'needs_review' : 'approved'
+        // A slice of auto-imported invoices still await review — seeds the
+        // Review Center widget with something to show. Reviewed ones are
+        // mostly on_budget with a rare exceeded, matching real usage where
+        // most categories stay under their monthly limit most days.
+        const status = isEmailAuto && rand() < 0.4 ? 'pending' : rand() < 0.12 ? 'exceeded' : 'on_budget'
 
         counter++
         transactions.push({

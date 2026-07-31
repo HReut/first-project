@@ -1,5 +1,5 @@
-import type { Category, Filters, Person, Transaction } from '../types.ts'
-import { budgetPercent } from './budget.ts'
+import type { Category, Filters, Person, Transaction, TransactionStatus } from '../types.ts'
+import { budgetPercent, budgetStatus } from './budget.ts'
 
 export interface MonthlyInsights {
   currentMonthTotal: number
@@ -113,6 +113,17 @@ export function topBudgetedCategories(transactions: Transaction[], categories: C
     .filter((category) => category.monthlyBudgetLimit !== null && category.monthlyBudgetLimit > 0)
     .map((category) => ({ category, spent: spentByCategory.get(category.id) ?? 0 }))
     .sort((a, b) => budgetPercent(b.spent, b.category.monthlyBudgetLimit) - budgetPercent(a.spent, a.category.monthlyBudgetLimit))
+}
+
+/** The status a pending transaction snapshots to when reviewed — its
+ * category's current budget standing. Shared by TransactionsView's "Mark
+ * reviewed" actions (row, bulk, and new-manual-transaction default) and
+ * Overview's Review center quick-approve. */
+export function computeReviewedStatus(transactions: Transaction[], categories: Category[], categoryId: string): TransactionStatus {
+  const category = categories.find((c) => c.id === categoryId)
+  const breakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' })
+  const spent = breakdown.find((entry) => entry.categoryId === categoryId)?.amount ?? 0
+  return budgetStatus(spent, category?.monthlyBudgetLimit ?? null) === 'critical' ? 'exceeded' : 'on_budget'
 }
 
 /**

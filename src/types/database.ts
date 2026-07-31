@@ -3,8 +3,8 @@
 // camelCase domain types in src/types.ts.
 
 export type PersonRow = 'Reut' | 'Keren'
-export type TransactionStatusRow = 'approved' | 'needs_review'
-export type TransactionSourceRow = 'manual' | 'email_auto'
+export type TransactionStatusRow = 'pending' | 'on_budget' | 'exceeded'
+export type TransactionSourceRow = 'manual' | 'email_auto' | 'import'
 
 export interface CategoryRow {
   id: string
@@ -35,4 +35,12 @@ export interface EmailSyncRuleRow {
   default_person: PersonRow
   is_active: boolean
   created_at: string
+}
+
+export interface MappingRuleRow {
+  id: string
+  merchant_key: string
+  category_id: string | null
+  person: PersonRow | null
+  updated_at: string
 }

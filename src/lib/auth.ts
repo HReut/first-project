@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient.ts'
+import type { Person } from '../types.ts'
 
 /** The only two Google accounts allowed into this household app — matches
  * the fixed Person = 'Reut' | 'Keren' union in src/types.ts. Also enforced
@@ -9,6 +10,14 @@ export const ALLOWED_EMAILS = ['reut.hefetz@gmail.com', 'kerenfr12@gmail.com'] a
 
 export function isEmailAllowed(email: string | null | undefined): boolean {
   return !!email && (ALLOWED_EMAILS as readonly string[]).includes(email)
+}
+
+/** Maps the signed-in Google account to its household Person — used as the
+ * "paid by" fallback for imported rows that don't specify one. Defaults to
+ * 'Reut' for any email outside the two-account whitelist (shouldn't happen,
+ * since AuthGate already blocks those before the app mounts). */
+export function personFromEmail(email: string | null | undefined): Person {
+  return email === 'kerenfr12@gmail.com' ? 'Keren' : 'Reut'
 }
 
 export async function signInWithGoogle(): Promise<void> {

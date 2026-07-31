@@ -49,6 +49,22 @@ export async function createTransaction(input: NewTransaction): Promise<Transact
   return created
 }
 
+/** Bulk insert used by the CSV import pipeline (and, later, any email-import
+ * job) — same NewTransaction shape as createTransaction, just many at once. */
+export async function createTransactions(inputs: NewTransaction[]): Promise<Transaction[]> {
+  if (inputs.length === 0) return []
+
+  if (supabase) {
+    const { data, error } = await supabase.from('transactions').insert(inputs.map(toRow)).select()
+    if (error) throw error
+    return (data as TransactionRow[]).map(fromRow)
+  }
+  const transactions = loadLocalTransactions(loadLocalCategories())
+  const created: Transaction[] = inputs.map((input) => ({ ...input, id: crypto.randomUUID() }))
+  saveLocalTransactions([...created, ...transactions])
+  return created
+}
+
 export async function updateTransaction(id: string, patch: Partial<NewTransaction>): Promise<Transaction> {
   if (supabase) {
     const { data, error } = await supabase.from('transactions').update(toRow(patch)).eq('id', id).select().single()

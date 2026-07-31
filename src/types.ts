@@ -1,6 +1,9 @@
 export type Person = 'Reut' | 'Keren'
-export type TransactionStatus = 'approved' | 'needs_review'
-export type TransactionSource = 'manual' | 'email_auto'
+/** 'pending' = imported/unreviewed. Reviewing a pending transaction snapshots
+ * its category's current budget standing into 'on_budget' or 'exceeded' —
+ * see markReviewed() in TransactionsView.ts. */
+export type TransactionStatus = 'pending' | 'on_budget' | 'exceeded'
+export type TransactionSource = 'manual' | 'email_auto' | 'import'
 
 export interface Category {
   id: string
@@ -36,6 +39,19 @@ export interface EmailSyncRule {
 
 export type NewEmailSyncRule = Omit<EmailSyncRule, 'id'>
 
+/** The "learning memory" — a remembered category/person choice for a given
+ * merchant, consulted during CSV import and offered for saving whenever an
+ * inline table edit changes a transaction's category or person. */
+export interface MappingRule {
+  id: string
+  merchantKey: string // normalized (trimmed, lowercased) merchant text used to match
+  categoryId: string | null
+  person: Person | null
+  updatedAt: string
+}
+
+export type NewMappingRule = Omit<MappingRule, 'id' | 'updatedAt'>
+
 export type PeriodFilter =
   | { kind: 'month'; month: string } // YYYY-MM
   | { kind: 'range'; start: string; end: string } // ISO dates, inclusive
@@ -59,5 +75,6 @@ export interface AppState {
   categories: Category[]
   transactions: Transaction[]
   emailRules: EmailSyncRule[]
+  mappingRules: MappingRule[]
   filters: Filters
 }

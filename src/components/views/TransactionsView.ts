@@ -1,14 +1,17 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Category, NewTransaction, Person, Transaction } from '../../types.ts'
+import type { AppState, Category, NewTransaction, Person, Transaction, TransactionStatus } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel, formatSignedCurrency } from '../../utils/format.ts'
-import { topBudgetedCategories } from '../../utils/insights.ts'
+import { computeReviewedStatus, topBudgetedCategories } from '../../utils/insights.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
-import { renderCategoryBadge, renderMerchantCell, renderPersonBadge, renderStatusBadge } from '../shared/transactionCells.ts'
+import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
+import { renderCategoryBadge, renderMerchantCell, renderPersonBadge, renderStatusBadge, STATUS_LABEL } from '../shared/transactionCells.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { Modal } from '../shared/Modal.ts'
+import { showToast } from '../shared/Toast.ts'
 import { PLACEHOLDER_TOTAL_AVAILABLE } from '../../data/placeholderFigures.ts'
 import { columnsIconMarkup, downloadIconMarkup, filterIconMarkup, plusIconMarkup } from '../icons/NavIcons.ts'
+import { openImportFlow } from './TransactionsImport.ts'
 
 const BUDGET_CARD_LIMIT = 3
 
@@ -16,6 +19,7 @@ type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'amount'
 type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'all' | 'custom'
 type GroupBy = 'none' | 'category' | 'person' | 'month'
 const PEOPLE: Person[] = ['Reut', 'Keren']
+const STATUS_VALUES: TransactionStatus[] = ['pending', 'on_budget', 'exceeded']
 const TOGGLEABLE_COLUMNS: { key: SortColumn; label: string }[] = [
   { key: 'date', label: 'Date' },
   { key: 'merchant', label: 'Merchant' },
@@ -73,6 +77,7 @@ function sortTransactions(rows: Transaction[], sort: { column: SortColumn; direc
 export class TransactionsView {
   #container: HTMLElement
   #store: Store<AppState>
+  #currentPerson: Person
   #preset: PeriodPreset = 'this-month'
   #sort: { column: SortColumn; direction: 'asc' | 'desc' } = { column: 'date', direction: 'desc' }
   #selection = new Set<string>()
@@ -80,13 +85,15 @@ export class TransactionsView {
   #collapsedGroups = new Set<string>()
   #hiddenColumns = new Set<SortColumn>()
 
-  constructor(container: HTMLElement, store: Store<AppState>) {
+  constructor(container: HTMLElement, store: Store<AppState>, currentPerson: Person) {
     this.#container = container
     this.#store = store
+    this.#currentPerson = currentPerson
     this.renderShell()
     this.wireToolbar()
     this.wireTable()
     this.wireExport()
+    this.wireImport()
     window.addEventListener('opa:new-transaction', () => this.openExpenseModal())
     store.subscribe((state) => {
       this.updateCategoryOptions(state.categories)
@@ -95,6 +102,12 @@ export class TransactionsView {
     })
     this.renderBudgetCards(store.getState())
     this.renderTable(store.getState())
+  }
+
+  private wireImport(): void {
+    window.addEventListener('opa:import-transactions', () => {
+      openImportFlow(this.#store, this.#currentPerson)
+    })
   }
 
   private renderBudgetCards(state: AppState): void {
@@ -138,7 +151,7 @@ export class TransactionsView {
       tx.merchant,
       categoryById.get(tx.categoryId)?.name ?? 'Uncategorized',
       tx.person,
-      tx.status === 'needs_review' ? 'Pending' : 'Approved',
+      STATUS_LABEL[tx.status],
       tx.amount.toFixed(2),
     ])
     const csv = [header, ...lines].map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -487,7 +500,7 @@ export class TransactionsView {
 
     this.#container.querySelector<HTMLElement>('#bulk-bar')!.addEventListener('click', (event) => {
       const target = event.target as HTMLElement
-      if (target.closest('[data-bulk-approve]')) this.bulkApprove()
+      if (target.closest('[data-bulk-mark-reviewed]')) this.bulkMarkReviewed()
       else if (target.closest('[data-bulk-delete]')) this.bulkDelete()
     })
 
@@ -524,9 +537,9 @@ export class TransactionsView {
         return
       }
 
-      const approveBtn = target.closest<HTMLButtonElement>('[data-approve-id]')
-      if (approveBtn) {
-        this.approveOne(approveBtn.dataset.approveId!)
+      const reviewBtn = target.closest<HTMLButtonElement>('[data-mark-reviewed-id]')
+      if (reviewBtn) {
+        this.markReviewed(reviewBtn.dataset.markReviewedId!)
         return
       }
 
@@ -534,14 +547,18 @@ export class TransactionsView {
       if (cell) {
         if (cell.classList.contains('is-editing')) return
         const id = cell.dataset.id!
-        const field = cell.dataset.field as 'merchant' | 'amount' | 'category' | 'person'
+        const field = cell.dataset.field as 'merchant' | 'amount' | 'category' | 'person' | 'status'
         const tx = this.#store.getState().transactions.find((t) => t.id === id)
         if (!tx) return
 
         if (field === 'person') {
-          this.commitEdit(id, { person: tx.person === 'Reut' ? 'Keren' : 'Reut' })
+          const nextPerson = tx.person === 'Reut' ? 'Keren' : 'Reut'
+          this.commitEdit(id, { person: nextPerson })
+          this.promptSaveMappingRule(tx, 'person', nextPerson)
         } else if (field === 'category') {
           this.editCategoryCell(cell, tx)
+        } else if (field === 'status') {
+          this.editStatusCell(cell, tx)
         } else {
           this.editTextCell(cell, tx, field)
         }
@@ -609,6 +626,7 @@ export class TransactionsView {
     select.addEventListener('change', () => {
       settled = true
       this.commitEdit(tx.id, { categoryId: select.value })
+      this.promptSaveMappingRule(tx, 'category', select.value)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -621,6 +639,51 @@ export class TransactionsView {
     })
   }
 
+  private editStatusCell(cell: HTMLElement, tx: Transaction): void {
+    cell.classList.add('is-editing')
+    cell.innerHTML = `
+      <select class="cell-input">
+        ${STATUS_VALUES.map((s) => `<option value="${s}" ${s === tx.status ? 'selected' : ''}>${STATUS_LABEL[s]}</option>`).join('')}
+      </select>
+    `
+    const select = cell.querySelector<HTMLSelectElement>('.cell-input')!
+    select.focus()
+
+    let settled = false
+    select.addEventListener('change', () => {
+      settled = true
+      this.commitEdit(tx.id, { status: select.value as TransactionStatus })
+    })
+    select.addEventListener('blur', () => {
+      if (!settled) this.renderTable(this.#store.getState())
+    })
+    select.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        settled = true
+        this.renderTable(this.#store.getState())
+      }
+    })
+  }
+
+  /** Offers to remember an inline Category/Person edit as a mapping rule for
+   * this merchant, so future CSV imports auto-fill it. Self-dismissing toast
+   * — no blocking modal, since this is a nice-to-have not a required step. */
+  private promptSaveMappingRule(tx: Transaction, field: 'category' | 'person', value: string): void {
+    const merchantKey = normalizeMerchantKey(tx.merchant)
+    showToast(`Remember this ${field} for "${tx.merchant}" in future imports?`, [
+      {
+        label: 'Save rule',
+        primary: true,
+        onClick: () => {
+          upsertMappingRule(merchantKey, field === 'category' ? { categoryId: value } : { person: value as Person }).catch(() =>
+            showToast('Could not save that rule.'),
+          )
+        },
+      },
+      { label: 'Dismiss', onClick: () => {} },
+    ])
+  }
+
   private commitEdit(id: string, patch: Partial<NewTransaction>): void {
     updateTransaction(id, patch).then((updated) => {
       const { transactions } = this.#store.getState()
@@ -628,16 +691,25 @@ export class TransactionsView {
     })
   }
 
-  private approveOne(id: string): void {
-    this.commitEdit(id, { status: 'approved' })
+  private markReviewed(id: string): void {
+    const state = this.#store.getState()
+    const tx = state.transactions.find((t) => t.id === id)
+    if (!tx) return
+    this.commitEdit(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId) })
   }
 
-  private bulkApprove(): void {
+  private bulkMarkReviewed(): void {
     const ids = [...this.#selection]
-    Promise.all(ids.map((id) => updateTransaction(id, { status: 'approved' }))).then((updated) => {
-      const byId = new Map(updated.map((tx) => [tx.id, tx]))
+    const state = this.#store.getState()
+    const byId = new Map(state.transactions.map((tx) => [tx.id, tx]))
+    Promise.all(
+      ids.map((id) =>
+        updateTransaction(id, { status: computeReviewedStatus(state.transactions, state.categories, byId.get(id)?.categoryId ?? '') }),
+      ),
+    ).then((updated) => {
+      const updatedById = new Map(updated.map((tx) => [tx.id, tx]))
       const { transactions } = this.#store.getState()
-      this.#store.setState({ transactions: transactions.map((tx) => byId.get(tx.id) ?? tx) })
+      this.#store.setState({ transactions: transactions.map((tx) => updatedById.get(tx.id) ?? tx) })
     })
   }
 
@@ -706,13 +778,17 @@ export class TransactionsView {
       event.preventDefault()
       const form = event.currentTarget as HTMLFormElement
       const data = new FormData(form)
+      const categoryId = String(data.get('categoryId'))
+      const state = this.#store.getState()
+      // A manually-typed transaction is considered reviewed the instant it's
+      // entered — 'pending' is reserved for imported rows awaiting a look.
       const input: NewTransaction = {
         date: String(data.get('date')),
         merchant: String(data.get('merchant')).trim(),
         amount: Number(data.get('amount')),
-        categoryId: String(data.get('categoryId')),
+        categoryId,
         person: data.get('person') as Person,
-        status: existing?.status ?? 'approved',
+        status: existing?.status ?? computeReviewedStatus(state.transactions, state.categories, categoryId),
         source: existing?.source ?? 'manual',
       }
       if (isEdit) {
@@ -906,11 +982,14 @@ export class TransactionsView {
       <tr data-id="${tx.id}">
         <td class="select-cell"><input type="checkbox" class="row-select" data-id="${tx.id}" ${this.#selection.has(tx.id) ? 'checked' : ''}></td>
         <td>${formatDateShort(tx.date)}</td>
-        <td class="editable-cell" data-field="merchant" data-id="${tx.id}">${renderMerchantCell(tx)} ${renderStatusBadge(tx.status)}</td>
+        <td class="editable-cell" data-field="merchant" data-id="${tx.id}">
+          ${renderMerchantCell(tx)}
+          <span class="editable-cell editable-cell--status" data-field="status" data-id="${tx.id}">${renderStatusBadge(tx.status)}</span>
+        </td>
         <td class="editable-cell" data-field="category" data-id="${tx.id}">${renderCategoryBadge(categoryById.get(tx.categoryId))}</td>
         <td class="editable-cell" data-field="person" data-id="${tx.id}">${renderPersonBadge(tx.person)}</td>
         <td class="is-numeric editable-cell" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.amount)}</td>
-        <td>${tx.status === 'needs_review' ? `<button type="button" class="btn btn--approve btn--sm" data-approve-id="${tx.id}">Approve</button>` : ''}</td>
+        <td>${tx.status === 'pending' ? `<button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">Mark reviewed</button>` : ''}</td>
       </tr>
     `
   }
@@ -931,8 +1010,8 @@ export class TransactionsView {
             <span class="tx-card__date">${formatDateShort(tx.date)}</span>
           </div>
           ${
-            tx.status === 'needs_review'
-              ? `<div class="tx-card__footer"><button type="button" class="btn btn--approve btn--sm" data-approve-id="${tx.id}">Approve</button></div>`
+            tx.status === 'pending'
+              ? `<div class="tx-card__footer"><button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">Mark reviewed</button></div>`
               : ''
           }
         </div>
@@ -950,7 +1029,7 @@ export class TransactionsView {
     bar.hidden = false
     bar.innerHTML = `
       <span class="bulk-bar__count">${this.#selection.size} selected</span>
-      <button type="button" class="btn btn--sm" data-bulk-approve>Approve</button>
+      <button type="button" class="btn btn--sm" data-bulk-mark-reviewed>Mark reviewed</button>
       <select class="filter-select filter-select--sm" data-bulk-recategorize>
         <option value="">Set category…</option>
         ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
@@ -960,6 +1039,6 @@ export class TransactionsView {
   }
 }
 
-export function mountTransactionsView(root: HTMLElement, store: Store<AppState>): void {
-  new TransactionsView(root, store)
+export function mountTransactionsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
+  new TransactionsView(root, store, currentPerson)
 }

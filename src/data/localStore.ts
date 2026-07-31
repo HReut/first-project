@@ -1,4 +1,4 @@
-import type { Category, EmailSyncRule, Transaction } from '../types.ts'
+import type { Category, EmailSyncRule, MappingRule, Transaction } from '../types.ts'
 import { SEED_CATEGORIES } from './mockCategories.ts'
 import { createMockTransactions } from './mockTransactions.ts'
 
@@ -10,6 +10,7 @@ const KEYS = {
   categories: 'opa-tulik:categories',
   transactions: 'opa-tulik:transactions',
   emailRules: 'opa-tulik:email-rules',
+  mappingRules: 'opa-tulik:mapping-rules',
 } as const
 
 function read<T>(key: string): T | null {
@@ -58,4 +59,15 @@ export function loadLocalEmailRules(): EmailSyncRule[] {
 
 export function saveLocalEmailRules(rules: EmailSyncRule[]): void {
   write(KEYS.emailRules, rules)
+}
+
+export function loadLocalMappingRules(): MappingRule[] {
+  const existing = read<MappingRule[]>(KEYS.mappingRules)
+  if (existing) return existing
+  write(KEYS.mappingRules, [])
+  return []
+}
+
+export function saveLocalMappingRules(rules: MappingRule[]): void {
+  write(KEYS.mappingRules, rules)
 }

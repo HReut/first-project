@@ -1,6 +1,6 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category } from '../../types.ts'
-import { computeCategoryBreakdown, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
+import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { updateTransaction } from '../../data/transactionsRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
@@ -154,14 +154,17 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   })
 
   reviewEl.addEventListener('click', (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-approve-id]')
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mark-reviewed-id]')
     if (!button) return
-    const id = button.dataset.approveId!
+    const id = button.dataset.markReviewedId!
+    const state = store.getState()
+    const tx = state.transactions.find((t) => t.id === id)
+    if (!tx) return
     button.disabled = true
-    updateTransaction(id, { status: 'approved' })
+    updateTransaction(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId) })
       .then((updated) => {
         const { transactions } = store.getState()
-        store.setState({ transactions: transactions.map((tx) => (tx.id === id ? updated : tx)) })
+        store.setState({ transactions: transactions.map((t) => (t.id === id ? updated : t)) })
       })
       .catch(() => {
         button.disabled = false
@@ -265,14 +268,12 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
 
   function renderReviewCenter(state: AppState): void {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
-    const pending = state.transactions
-      .filter((tx) => tx.status === 'needs_review')
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
+    const pending = state.transactions.filter((tx) => tx.status === 'pending').sort((a, b) => (a.date < b.date ? 1 : -1))
 
     if (pending.length === 0) {
       reviewEl.innerHTML = `
         <h2 class="review-center__title">Review center</h2>
-        <p class="review-center__empty">Nothing waiting on you — all auto-imported invoices are approved.</p>
+        <p class="review-center__empty">Nothing waiting on you — all imported transactions have been reviewed.</p>
       `
       return
     }
@@ -292,7 +293,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
             ${renderMerchantCell(tx)}
             ${renderCategoryBadge(categoryById.get(tx.categoryId))}
             <span class="review-row__amount">${formatCurrency(tx.amount)}</span>
-            <button type="button" class="btn btn--approve" data-approve-id="${tx.id}">Approve</button>
+            <button type="button" class="btn btn--approve" data-mark-reviewed-id="${tx.id}">Mark reviewed</button>
           </div>
         `,
           )

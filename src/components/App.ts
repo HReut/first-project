@@ -3,7 +3,8 @@ import type { AppState, View } from '../types.ts'
 import { listCategories } from '../data/categoriesRepo.ts'
 import { listTransactions } from '../data/transactionsRepo.ts'
 import { listEmailRules } from '../data/emailRulesRepo.ts'
-import { signOut } from '../lib/auth.ts'
+import { listMappingRules } from '../data/mappingRulesRepo.ts'
+import { personFromEmail, signOut } from '../lib/auth.ts'
 import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
 import { mountAuthGate } from './AuthGate.ts'
 import { catLogoMarkup } from './icons/CatLogo.ts'
@@ -80,6 +81,8 @@ function avatarInitial(userEmail: string | null): string {
 }
 
 export function mountApp(root: HTMLElement, userEmail: string | null = null): void {
+  const currentPerson = personFromEmail(userEmail)
+
   const store = new Store<AppState>({
     view: viewFromHash(),
     status: 'loading',
@@ -87,6 +90,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     categories: [],
     transactions: [],
     emailRules: [],
+    mappingRules: [],
     filters: {
       categoryId: 'all',
       person: 'all',
@@ -96,9 +100,9 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   })
 
   function loadHouseholdData(): Promise<void> {
-    return Promise.all([listCategories(), listTransactions(), listEmailRules()])
-      .then(([categories, transactions, emailRules]) => {
-        store.setState({ categories, transactions, emailRules, status: 'ready' })
+    return Promise.all([listCategories(), listTransactions(), listEmailRules(), listMappingRules()])
+      .then(([categories, transactions, emailRules, mappingRules]) => {
+        store.setState({ categories, transactions, emailRules, mappingRules, status: 'ready' })
       })
       .catch((err: unknown) => {
         store.setState({ status: 'error', error: err instanceof Error ? err.message : 'Failed to load your household data.' })
@@ -120,7 +124,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         </div>
         <div class="sidebar__actions">
           <button type="button" class="btn btn--primary btn--block" id="new-transaction-btn">${plusIconMarkup()}<span>New Transaction</span></button>
-          <button type="button" class="btn btn--block" id="import-btn" disabled title="Coming soon">${uploadIconMarkup()}<span>Import CSV/PDF</span></button>
+          <button type="button" class="btn btn--block" id="import-btn" title="CSV supported now — XLSX/PDF coming soon">${uploadIconMarkup()}<span>Import CSV/PDF</span></button>
         </div>
         <nav class="sidebar__nav" aria-label="Primary">
           ${PRIMARY_VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}
@@ -264,6 +268,11 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     window.dispatchEvent(new CustomEvent('opa:new-transaction'))
   })
 
+  root.querySelector<HTMLButtonElement>('#import-btn')!.addEventListener('click', () => {
+    navigate('transactions')
+    window.dispatchEvent(new CustomEvent('opa:import-transactions'))
+  })
+
   const globalSearch = root.querySelector<HTMLInputElement>('#global-search')!
   globalSearch.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return
@@ -290,7 +299,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     if (state.status === 'ready' && !mounted) {
       mounted = true
       mountOverviewView(viewEls.overview, store)
-      mountTransactionsView(viewEls.transactions, store)
+      mountTransactionsView(viewEls.transactions, store, currentPerson)
       mountBudgetsView(viewEls.budgets, store)
       mountAnalyticsView(viewEls.analytics, store)
       mountSettingsView(viewEls.settings, store)
