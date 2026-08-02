@@ -134,10 +134,6 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           ${MANAGEMENT_VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}
         </nav>
         <div class="sidebar__footer">
-          <button type="button" class="theme-toggle js-theme-toggle" aria-label="Switch color theme">
-            <span class="theme-toggle__icon" aria-hidden="true">${themeToggleIcon()}</span>
-            <span>Theme</span>
-          </button>
           ${
             userEmail
               ? `<span class="sidebar__email">${userEmail}</span>
@@ -244,14 +240,14 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
   })
 
-  const themeToggleButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.js-theme-toggle'))
-  themeToggleButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      toggleTheme()
-      const icon = themeToggleIcon()
-      themeToggleButtons.forEach((b) => {
-        b.querySelector<HTMLElement>('.theme-toggle__icon')!.innerHTML = icon
-      })
+  // Delegated (not per-button) so it also covers the Settings page's theme
+  // toggle, which mounts into the DOM well after this listener is attached.
+  root.addEventListener('click', (event) => {
+    if (!(event.target as HTMLElement).closest('.js-theme-toggle')) return
+    toggleTheme()
+    const icon = themeToggleIcon()
+    root.querySelectorAll<HTMLElement>('.theme-toggle__icon').forEach((el) => {
+      el.innerHTML = icon
     })
   })
 

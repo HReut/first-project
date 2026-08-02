@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.ts'
 import type { Account, AppState, Category, NewTransaction, Person, Transaction, TransactionStatus } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
-import { formatCurrency, formatDateShort, formatMonthLabel, formatSignedCurrency } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, formatMonthLabel } from '../../utils/format.ts'
 import { computeReviewedStatus, topBudgetedCategories } from '../../utils/insights.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
@@ -12,13 +12,14 @@ import {
   renderMerchantCell,
   renderPersonBadge,
   renderStatusBadge,
+  renderWaitingBadge,
   STATUS_LABEL,
 } from '../shared/transactionCells.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
 import { PLACEHOLDER_TOTAL_AVAILABLE } from '../../data/placeholderFigures.ts'
-import { columnsIconMarkup, downloadIconMarkup, filterIconMarkup, plusIconMarkup } from '../icons/NavIcons.ts'
+import { columnsIconMarkup, downloadIconMarkup, filterIconMarkup } from '../icons/NavIcons.ts'
 import { openImportFlow } from './TransactionsImport.ts'
 
 const BUDGET_CARD_LIMIT = 3
@@ -185,7 +186,7 @@ export class TransactionsView {
     const { filters, categories } = this.#store.getState()
 
     this.#container.innerHTML = `
-      <section class="band band--hero">
+      <section class="band band--hero band--hero--tight">
         <div class="band__inner">
           <p class="breadcrumb">Finance <span aria-hidden="true">/</span> Transactions</p>
           <div class="tx-page-header">
@@ -198,19 +199,18 @@ export class TransactionsView {
                 <span class="tx-page-header__stat-label">Total available</span>
                 <span class="tx-page-header__stat-value">${formatCurrency(PLACEHOLDER_TOTAL_AVAILABLE)}</span>
               </div>
-              <button type="button" class="btn btn--primary" id="add-expense-btn">${plusIconMarkup()}<span>Add Transaction</span></button>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="band">
+      <section class="band band--tight">
         <div class="band__inner">
           <div class="tx-budget-cards" id="tx-budget-cards" aria-label="Budgets at a glance"></div>
         </div>
       </section>
 
-      <section class="band">
+      <section class="band band--tight">
         <div class="band__inner">
           <div class="transactions">
             <div class="transactions__toolbar">
@@ -313,7 +313,6 @@ export class TransactionsView {
             <div class="bulk-bar" id="bulk-bar" hidden></div>
 
             <div class="transactions__header">
-              <h2>Transactions</h2>
               <span class="transactions__count" id="transactions-count"></span>
             </div>
 
@@ -411,8 +410,6 @@ export class TransactionsView {
     }
     startInput.addEventListener('change', applyCustomRange)
     endInput.addEventListener('change', applyCustomRange)
-
-    this.#container.querySelector<HTMLButtonElement>('#add-expense-btn')!.addEventListener('click', () => this.openExpenseModal())
 
     this.wireToolbarPopovers()
     this.wireColumnToggles()
@@ -648,6 +645,8 @@ export class TransactionsView {
       settled = true
       this.commitEdit(tx.id, { categoryId: select.value })
       this.promptSaveMappingRule(tx, 'category', select.value)
+      const categoryName = categories.find((c) => c.id === select.value)?.name ?? 'Uncategorized'
+      showToast(`Category updated to ${categoryName}`, [], 2000)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -676,6 +675,7 @@ export class TransactionsView {
       const account = select.value as Account
       const forcedPerson = PERSON_FOR_ACCOUNT[account]
       this.commitEdit(tx.id, forcedPerson ? { account, person: forcedPerson } : { account })
+      showToast(`Account updated to ${ACCOUNT_LABEL[account]}`, [], 2000)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -701,7 +701,9 @@ export class TransactionsView {
     let settled = false
     select.addEventListener('change', () => {
       settled = true
-      this.commitEdit(tx.id, { status: select.value as TransactionStatus })
+      const status = select.value as TransactionStatus
+      this.commitEdit(tx.id, { status })
+      showToast(`Status updated to ${STATUS_LABEL[status]}`, [], 2000)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -745,6 +747,7 @@ export class TransactionsView {
     const tx = state.transactions.find((t) => t.id === id)
     if (!tx) return
     this.commitEdit(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId) })
+    showToast('Transaction approved', [], 2000)
   }
 
   private bulkMarkReviewed(): void {
@@ -759,6 +762,7 @@ export class TransactionsView {
       const updatedById = new Map(updated.map((tx) => [tx.id, tx]))
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => updatedById.get(tx.id) ?? tx) })
+      showToast(`${ids.length} transaction${ids.length === 1 ? '' : 's'} approved`, [], 2000)
     })
   }
 
@@ -936,17 +940,21 @@ export class TransactionsView {
     this.renderFooterSummary(rows)
   }
 
+  /** Default state totals every currently-filtered row; the moment anything
+   * is checked, it switches to totaling just the selection instead. */
   private renderFooterSummary(rows: Transaction[]): void {
     const footerEl = this.#container.querySelector<HTMLElement>('#tx-footer-summary')!
-    const reutTotal = rows.filter((tx) => tx.person === 'Reut').reduce((sum, tx) => sum + tx.amount, 0)
-    const kerenTotal = rows.filter((tx) => tx.person === 'Keren').reduce((sum, tx) => sum + tx.amount, 0)
-    const netFlow = -(reutTotal + kerenTotal)
+    const selectedRows = rows.filter((tx) => this.#selection.has(tx.id))
+    const activeRows = selectedRows.length > 0 ? selectedRows : rows
+    const total = activeRows.reduce((sum, tx) => sum + tx.amount, 0)
+    const countLabel =
+      selectedRows.length > 0
+        ? `${selectedRows.length} transaction${selectedRows.length === 1 ? '' : 's'} selected`
+        : `${rows.length} transaction${rows.length === 1 ? '' : 's'}`
 
     footerEl.innerHTML = `
-      <span><strong>Selected:</strong> ${this.#selection.size}</span>
-      <span><strong>Reut:</strong> ${formatSignedCurrency(-reutTotal)}</span>
-      <span><strong>Keren:</strong> ${formatSignedCurrency(-kerenTotal)}</span>
-      <span class="tx-footer-summary__net"><strong>Net period flow:</strong> ${formatSignedCurrency(netFlow)}</span>
+      <span>${countLabel}</span>
+      <span class="tx-footer-summary__net"><strong>Total:</strong> ${formatCurrency(total)}</span>
     `
   }
 
@@ -1054,6 +1062,7 @@ export class TransactionsView {
         <td class="editable-cell" data-field="merchant" data-id="${tx.id}">
           ${renderMerchantCell(tx)}
           <span class="editable-cell editable-cell--status" data-field="status" data-id="${tx.id}">${renderStatusBadge(tx.status)}</span>
+          ${renderWaitingBadge(tx)}
         </td>
         <td class="editable-cell" data-field="category" data-id="${tx.id}">${renderCategoryBadge(categoryById.get(tx.categoryId))}</td>
         <td class="editable-cell" data-field="person" data-id="${tx.id}">${renderPersonBadge(tx.person)}</td>
@@ -1078,6 +1087,7 @@ export class TransactionsView {
             ${renderPersonBadge(tx.person)}
             ${renderAccountBadge(tx.account)}
             ${renderStatusBadge(tx.status)}
+            ${renderWaitingBadge(tx)}
             <span class="tx-card__date">${formatDateShort(tx.date)}</span>
           </div>
           ${

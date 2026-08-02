@@ -125,8 +125,8 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     <section class="band">
       <div class="band__inner">
         <div class="overview-bottom-grid">
-          <div class="invoice-sync-card panel-card" id="invoice-sync"></div>
-          <div class="smart-insight-card panel-card" id="smart-insight"></div>
+          <div class="invoice-sync-card panel-card panel-card--muted" id="invoice-sync"></div>
+          <div class="smart-insight-card panel-card panel-card--muted" id="smart-insight"></div>
         </div>
       </div>
     </section>
@@ -278,10 +278,14 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const pending = state.transactions.filter((tx) => tx.status === 'pending').sort((a, b) => (a.date < b.date ? 1 : -1))
 
+    reviewEl.classList.toggle('review-center--compact', pending.length === 0)
+
     if (pending.length === 0) {
       reviewEl.innerHTML = `
-        <h2 class="review-center__title">Review center</h2>
-        <p class="review-center__empty">Nothing waiting on you — all imported transactions have been reviewed.</p>
+        <div class="review-center__empty-state">
+          <span class="review-center__empty-check" aria-hidden="true">✓</span>
+          <span>All caught up — nothing waiting on you.</span>
+        </div>
       `
       return
     }

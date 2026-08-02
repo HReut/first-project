@@ -229,14 +229,12 @@ p {
 }
 
 .sidebar--collapsed .sidebar__brand,
-.sidebar--collapsed .sidebar__link,
-.sidebar--collapsed .theme-toggle {
+.sidebar--collapsed .sidebar__link {
   justify-content: center;
 }
 
 .sidebar--collapsed .sidebar__wordmark,
 .sidebar--collapsed .sidebar__link span,
-.sidebar--collapsed .theme-toggle span,
 .sidebar--collapsed .sidebar__email,
 .sidebar--collapsed .sidebar__footer .btn {
   display: none;
@@ -405,10 +403,6 @@ p {
 .theme-toggle__icon svg {
   width: 16px;
   height: 16px;
-}
-
-.sidebar .theme-toggle {
-  align-self: flex-start;
 }
 
 /* ---------- Top bar (mobile header, <1024px — see the 1024px media query) ---------- */
@@ -742,6 +736,19 @@ p {
   padding-bottom: 40px;
 }
 
+/* Denser header for pages that want the content below sitting higher on
+ * screen (currently just Transactions) — scoped via a modifier rather than
+ * changing .band--hero globally. */
+.band--hero--tight .band__inner {
+  padding-top: 32px;
+  padding-bottom: 24px;
+}
+
+.band--tight .band__inner {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
 /* Opacity-only on purpose: a `transform` here (even settling on translateY(0)
    via `animation-fill-mode: both`) would make .band a containing block for
    any `position: fixed` descendant (e.g. the mobile filter sheet), pinning
@@ -1052,6 +1059,15 @@ p {
   border-radius: var(--radius-lg);
   padding: 28px 32px;
   box-shadow: var(--shadow-card);
+}
+
+/* Secondary/nice-to-have cards (Smart Insight, Invoice Sync) — flatter than
+ * the core-metric cards so the eye lands on Total Available/Monthly Expenses
+ * first. */
+.panel-card--muted {
+  background: var(--bg);
+  box-shadow: none;
+  border: 1px solid var(--border);
 }
 
 .card-header {
@@ -1426,10 +1442,32 @@ p {
   color: var(--status-warning);
 }
 
-.review-center__empty {
-  margin-top: 8px;
-  font-size: 14px;
+/* Shrunk, compact variant used only when there's nothing pending review —
+ * the full padding/row layout below is for when there's actual content. */
+.review-center--compact {
+  padding: 18px 32px;
+}
+
+.review-center__empty-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
   color: var(--text);
+}
+
+.review-center__empty-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--status-good);
+  background: color-mix(in srgb, var(--status-good) 14%, var(--surface));
 }
 
 .review-row {
@@ -1945,13 +1983,8 @@ p {
 .transactions__header {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-bottom: 12px;
-}
-
-.transactions__header h2 {
-  font-size: 20px;
-  letter-spacing: -0.2px;
 }
 
 .transactions__count {
@@ -2327,6 +2360,17 @@ p {
   background: color-mix(in srgb, var(--status-critical) 14%, var(--surface));
 }
 
+.waiting-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--text);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
 .account-badge {
   display: inline-flex;
   align-items: center;
@@ -2573,6 +2617,10 @@ p {
   font-size: 14px;
   color: var(--text);
   max-width: 60ch;
+}
+
+.settings-card .theme-toggle {
+  margin-top: 16px;
 }
 
 .settings-list {

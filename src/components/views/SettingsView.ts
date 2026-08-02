@@ -3,8 +3,18 @@ import type { AppState, Person } from '../../types.ts'
 import { createCategory, deleteCategory, updateCategory } from '../../data/categoriesRepo.ts'
 import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/emailRulesRepo.ts'
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
+import { effectiveTheme } from '../../lib/theme.ts'
+import { moonIconMarkup, sunIconMarkup } from '../icons/ThemeIcons.ts'
 
 const PEOPLE: Person[] = ['Reut', 'Keren']
+
+/** Icon shows the mode a click switches *to* (moon while light, sun while
+ * dark) — the actual toggle+icon-sync is wired centrally in App.ts via a
+ * delegated `.js-theme-toggle` click listener, so this button just needs to
+ * render with the right class and starting icon. */
+function themeToggleIcon(): string {
+  return effectiveTheme() === 'dark' ? sunIconMarkup() : moonIconMarkup()
+}
 
 export function mountSettingsView(root: HTMLElement, store: Store<AppState>): void {
   let accountSettings = loadEmailAccountSettings()
@@ -15,6 +25,19 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
         <p class="eyebrow">Household finance</p>
         <h1>Settings &amp; Automations.</h1>
         <p class="hero__subtitle">Manage categories and how invoices get auto-captured.</p>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="band__inner">
+        <section class="settings-card" aria-label="Appearance">
+          <h2 class="settings-card__title">Appearance</h2>
+          <p class="settings-card__desc">Switch between light and dark mode. This applies everywhere in the app, on this device.</p>
+          <button type="button" class="theme-toggle js-theme-toggle" aria-label="Switch color theme">
+            <span class="theme-toggle__icon" aria-hidden="true">${themeToggleIcon()}</span>
+            <span>Theme</span>
+          </button>
+        </section>
       </div>
     </section>
 

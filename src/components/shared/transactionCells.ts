@@ -68,3 +68,12 @@ export const STATUS_LABEL: Record<Transaction['status'], string> = {
 export function renderStatusBadge(status: Transaction['status']): string {
   return `<span class="status-badge status-badge--${status.replace('_', '-')}">${STATUS_LABEL[status]}</span>`
 }
+
+/** Whoever didn't log the transaction is the one expected to give it a look
+ * — a pending row always needs the *other* person's eyes on it. Empty string
+ * for anything already reviewed. */
+export function renderWaitingBadge(tx: Transaction): string {
+  if (tx.status !== 'pending') return ''
+  const reviewer: Person = tx.person === 'Reut' ? 'Keren' : 'Reut'
+  return `<span class="waiting-badge">Waiting for ${reviewer}</span>`
+}
