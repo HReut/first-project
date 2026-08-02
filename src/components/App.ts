@@ -40,7 +40,7 @@ interface NavEntry {
 }
 
 const PRIMARY_VIEWS: NavEntry[] = [
-  { id: 'overview', label: 'Dashboard', shortLabel: 'Dashboard', icon: homeIconMarkup },
+  { id: 'overview', label: 'Overview', shortLabel: 'Overview', icon: homeIconMarkup },
   { id: 'transactions', label: 'Transactions', shortLabel: 'Transactions', icon: listIconMarkup },
   { id: 'budgets', label: 'Budgets', shortLabel: 'Budgets', icon: targetIconMarkup },
   { id: 'savings', label: 'Savings', shortLabel: 'Savings', icon: coinsIconMarkup },

@@ -1250,6 +1250,10 @@ p {
   color: var(--text-h);
 }
 
+.total-available__done-btn {
+  margin-top: 12px;
+}
+
 .donut-chart {
   display: flex;
   align-items: center;

@@ -57,7 +57,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     <section class="band band--page-header">
       <div class="band__inner">
         <div class="page-header">
-          <h1 class="page-header__title">Executive Overview</h1>
+          <h1 class="page-header__title">Overview</h1>
           <div class="page-header__tools">
             <span class="badge-pill">🔒 Encrypted Environment</span>
             <div class="segmented" role="group" aria-label="Data context">
@@ -206,6 +206,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
       <div class="total-available__balance">
         <span class="total-available__balance-label">Current status</span>
         <p class="total-available__balance-value">${balance ? `${balance.owingPerson} owes ${balance.owedPerson} · ${formatCurrency(balance.amount)}` : 'Settled up this month'}</p>
+        <button type="button" class="btn btn--sm total-available__done-btn">Done</button>
       </div>
     `
   }
