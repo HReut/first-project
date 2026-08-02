@@ -2400,13 +2400,13 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 10px 4px 8px;
-  border-radius: 999px;
+  color: var(--text-h);
+  background: transparent;
 }
 
 .category-badge--unknown {
   color: var(--text);
-  background: var(--bg);
+  font-style: italic;
 }
 
 .category-dot {

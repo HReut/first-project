@@ -35,7 +35,7 @@ export function renderMerchantCell(tx: Transaction): string {
 export function renderCategoryBadge(category: Category | undefined): string {
   if (!category) return `<span class="category-badge category-badge--unknown">Uncategorized</span>`
   return `
-    <span class="category-badge" style="background: color-mix(in srgb, ${category.colorCode} 14%, var(--surface))">
+    <span class="category-badge">
       <span class="category-dot" style="background: ${category.colorCode}"></span>
       ${category.icon} ${category.name}
     </span>
