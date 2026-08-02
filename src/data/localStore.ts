@@ -40,7 +40,15 @@ export function saveLocalCategories(categories: Category[]): void {
 
 export function loadLocalTransactions(categories: Category[]): Transaction[] {
   const existing = read<Transaction[]>(KEYS.transactions)
-  if (existing) return existing
+  if (existing) {
+    // Backfill for local data saved before the `account` field existed.
+    if (existing.some((tx) => !tx.account)) {
+      const migrated = existing.map((tx) => ({ ...tx, account: tx.account ?? 'shared' }))
+      write(KEYS.transactions, migrated)
+      return migrated
+    }
+    return existing
+  }
   const seeded = createMockTransactions(categories)
   write(KEYS.transactions, seeded)
   return seeded

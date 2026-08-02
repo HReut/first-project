@@ -2133,8 +2133,13 @@ p {
   display: none;
 }
 
-.transactions__table[data-hide-columns~='amount'] th:nth-child(6),
-.transactions__table[data-hide-columns~='amount'] td:nth-child(6) {
+.transactions__table[data-hide-columns~='account'] th:nth-child(6),
+.transactions__table[data-hide-columns~='account'] td:nth-child(6) {
+  display: none;
+}
+
+.transactions__table[data-hide-columns~='amount'] th:nth-child(7),
+.transactions__table[data-hide-columns~='amount'] td:nth-child(7) {
   display: none;
 }
 
@@ -2320,6 +2325,31 @@ p {
 .status-badge--exceeded {
   color: var(--status-critical);
   background: color-mix(in srgb, var(--status-critical) 14%, var(--surface));
+}
+
+.account-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.account-badge--shared {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.account-badge--reut-personal {
+  color: var(--person-reut);
+  background: color-mix(in srgb, var(--person-reut) 14%, var(--surface));
+}
+
+.account-badge--keren-personal {
+  color: var(--person-keren);
+  background: color-mix(in srgb, var(--person-keren) 14%, var(--surface));
 }
 
 .category-badge {

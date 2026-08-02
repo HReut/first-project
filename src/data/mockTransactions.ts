@@ -1,4 +1,4 @@
-import type { Category, Person, Transaction } from '../types.ts'
+import type { Account, Category, Person, Transaction } from '../types.ts'
 
 interface MerchantSpec {
   name: string
@@ -61,6 +61,14 @@ function randomAmount(range: [number, number], rand: () => number): number {
   return Math.round(min + rand() * (max - min))
 }
 
+/** Mostly shared, with a slice of "paid personally" expenses on each side —
+ * enough of a mix to exercise the settlement calculation in mock/local mode. */
+function randomAccount(rand: () => number): Account {
+  const roll = rand()
+  if (roll < 0.6) return 'shared'
+  return roll < 0.8 ? 'reut_personal' : 'keren_personal'
+}
+
 const MONTHS_OF_HISTORY = 4
 const TRANSACTIONS_PER_PERSON_PER_MONTH = 14
 
@@ -93,6 +101,9 @@ export function createMockTransactions(categories: Category[], referenceDate = n
         // mostly on_budget with a rare exceeded, matching real usage where
         // most categories stay under their monthly limit most days.
         const status = isEmailAuto && rand() < 0.4 ? 'pending' : rand() < 0.12 ? 'exceeded' : 'on_budget'
+        const account = randomAccount(rand)
+        // Personal accounts pin who paid — a "keren_personal" row was paid by Keren, full stop.
+        const resolvedPerson: Person = account === 'shared' ? person : account === 'reut_personal' ? 'Reut' : 'Keren'
 
         counter++
         transactions.push({
@@ -100,7 +111,8 @@ export function createMockTransactions(categories: Category[], referenceDate = n
           date: isoDate(date),
           merchant: merchant.name,
           categoryId: categoryIdByName.get(categoryName)!,
-          person,
+          person: resolvedPerson,
+          account,
           amount: randomAmount(AMOUNT_RANGE[categoryName], rand),
           status,
           source: isEmailAuto ? 'email_auto' : 'manual',

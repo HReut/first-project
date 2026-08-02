@@ -149,7 +149,9 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
       skipped++
       continue
     }
-    inputs.push({ date, merchant, amount, categoryId, person: person || currentPerson, status: 'pending', source: 'import' })
+    // Imported rows have no way to know which pocket paid — default to shared,
+    // same as a manual entry the user hasn't touched the Account field on.
+    inputs.push({ date, merchant, amount, categoryId, person: person || currentPerson, account: 'shared', status: 'pending', source: 'import' })
   }
 
   if (inputs.length === 0) {

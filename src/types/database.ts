@@ -3,6 +3,7 @@
 // camelCase domain types in src/types.ts.
 
 export type PersonRow = 'Reut' | 'Keren'
+export type AccountRow = 'reut_personal' | 'keren_personal' | 'shared'
 export type TransactionStatusRow = 'pending' | 'on_budget' | 'exceeded'
 export type TransactionSourceRow = 'manual' | 'email_auto' | 'import'
 
@@ -22,6 +23,7 @@ export interface TransactionRow {
   amount: number
   category_id: string
   person: PersonRow
+  account: AccountRow
   status: TransactionStatusRow
   source: TransactionSourceRow
   created_at: string

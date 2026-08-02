@@ -1,4 +1,4 @@
-import type { Category, Person, Transaction } from '../../types.ts'
+import type { Account, Category, Person, Transaction } from '../../types.ts'
 
 /** Small read-only cell renderers shared by the Overview review/activity
  * lists and the Transactions table's non-editing display state. */
@@ -47,6 +47,16 @@ export function renderPersonBadge(person: Person): string {
     <span class="person-badge" data-person="${person}">${person.charAt(0)}</span>
     <span class="person-name">${person}</span>
   `
+}
+
+export const ACCOUNT_LABEL: Record<Account, string> = {
+  reut_personal: 'Reut (Personal)',
+  keren_personal: 'Keren (Personal)',
+  shared: 'Shared',
+}
+
+export function renderAccountBadge(account: Account): string {
+  return `<span class="account-badge account-badge--${account.replace('_', '-')}">${ACCOUNT_LABEL[account]}</span>`
 }
 
 export const STATUS_LABEL: Record<Transaction['status'], string> = {

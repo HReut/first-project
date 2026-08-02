@@ -127,9 +127,12 @@ export function computeReviewedStatus(transactions: Transaction[], categories: C
 }
 
 /**
- * Household expenses are assumed split 50/50 regardless of who paid — the
- * balance is half the gap between what each person actually spent this
- * calendar month. Returns null when the two are (near) even.
+ * Settlement is driven by `account`, not who's tagged as the spender:
+ * - 'shared' transactions come out of the joint pool directly — $0 effect
+ *   on who-owes-who.
+ * - 'reut_personal' transactions were a shared expense Reut fronted from her
+ *   own pocket, so Keren owes half of it back to Reut (and symmetrically for
+ *   'keren_personal'). Returns null when nothing is owed either way.
  *
  * `settledAfter`, if given, excludes transactions dated on/before that ISO
  * date — this is how "mark as settled" clears the balance without touching
@@ -138,10 +141,10 @@ export function computeReviewedStatus(transactions: Transaction[], categories: C
 export function computeSplitBalance(transactions: Transaction[], referenceDate = new Date(), settledAfter?: string | null): SplitBalance | null {
   const currentMonth = monthKey(referenceDate)
   const currentTx = transactions.filter((tx) => tx.date.startsWith(currentMonth) && (!settledAfter || tx.date > settledAfter))
-  const reutTotal = sum(currentTx.filter((tx) => tx.person === 'Reut'))
-  const kerenTotal = sum(currentTx.filter((tx) => tx.person === 'Keren'))
-  const diff = reutTotal - kerenTotal
-  const amount = Math.round(Math.abs(diff) / 2)
+  const owedToReut = sum(currentTx.filter((tx) => tx.account === 'reut_personal')) / 2
+  const owedToKeren = sum(currentTx.filter((tx) => tx.account === 'keren_personal')) / 2
+  const diff = owedToReut - owedToKeren
+  const amount = Math.round(Math.abs(diff))
   if (amount === 0) return null
   return diff > 0 ? { owingPerson: 'Keren', owedPerson: 'Reut', amount } : { owingPerson: 'Reut', owedPerson: 'Keren', amount }
 }

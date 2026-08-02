@@ -1,11 +1,19 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Category, NewTransaction, Person, Transaction, TransactionStatus } from '../../types.ts'
+import type { Account, AppState, Category, NewTransaction, Person, Transaction, TransactionStatus } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel, formatSignedCurrency } from '../../utils/format.ts'
 import { computeReviewedStatus, topBudgetedCategories } from '../../utils/insights.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
-import { renderCategoryBadge, renderMerchantCell, renderPersonBadge, renderStatusBadge, STATUS_LABEL } from '../shared/transactionCells.ts'
+import {
+  ACCOUNT_LABEL,
+  renderAccountBadge,
+  renderCategoryBadge,
+  renderMerchantCell,
+  renderPersonBadge,
+  renderStatusBadge,
+  STATUS_LABEL,
+} from '../shared/transactionCells.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
@@ -15,16 +23,21 @@ import { openImportFlow } from './TransactionsImport.ts'
 
 const BUDGET_CARD_LIMIT = 3
 
-type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'amount'
+type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'account' | 'amount'
 type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'all' | 'custom'
 type GroupBy = 'none' | 'category' | 'person' | 'month'
 const PEOPLE: Person[] = ['Reut', 'Keren']
 const STATUS_VALUES: TransactionStatus[] = ['pending', 'on_budget', 'exceeded']
+const ACCOUNT_VALUES: Account[] = ['shared', 'reut_personal', 'keren_personal']
+/** The person a personal account locks the transaction to — 'shared' has no
+ * forced person, since either person may have physically paid it. */
+const PERSON_FOR_ACCOUNT: Partial<Record<Account, Person>> = { reut_personal: 'Reut', keren_personal: 'Keren' }
 const TOGGLEABLE_COLUMNS: { key: SortColumn; label: string }[] = [
   { key: 'date', label: 'Date' },
   { key: 'merchant', label: 'Merchant' },
   { key: 'category', label: 'Category' },
   { key: 'person', label: 'Person' },
+  { key: 'account', label: 'Account' },
   { key: 'amount', label: 'Amount' },
 ]
 
@@ -68,6 +81,8 @@ function sortTransactions(rows: Transaction[], sort: { column: SortColumn; direc
       }
       case 'person':
         return a.person.localeCompare(b.person) * dir
+      case 'account':
+        return ACCOUNT_LABEL[a.account].localeCompare(ACCOUNT_LABEL[b.account]) * dir
       case 'amount':
         return (a.amount - b.amount) * dir
     }
@@ -145,12 +160,13 @@ export class TransactionsView {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const rows = this.visibleRows(state)
 
-    const header = ['Date', 'Merchant', 'Category', 'Person', 'Status', 'Amount']
+    const header = ['Date', 'Merchant', 'Category', 'Person', 'Account', 'Status', 'Amount']
     const lines = rows.map((tx) => [
       tx.date,
       tx.merchant,
       categoryById.get(tx.categoryId)?.name ?? 'Uncategorized',
       tx.person,
+      ACCOUNT_LABEL[tx.account],
       STATUS_LABEL[tx.status],
       tx.amount.toFixed(2),
     ])
@@ -310,6 +326,7 @@ export class TransactionsView {
                     <th data-sort="merchant">Merchant</th>
                     <th data-sort="category">Category</th>
                     <th data-sort="person">Person</th>
+                    <th data-sort="account">Account</th>
                     <th class="is-numeric" data-sort="amount">Amount</th>
                     <th></th>
                   </tr>
@@ -547,14 +564,18 @@ export class TransactionsView {
       if (cell) {
         if (cell.classList.contains('is-editing')) return
         const id = cell.dataset.id!
-        const field = cell.dataset.field as 'merchant' | 'amount' | 'category' | 'person' | 'status'
+        const field = cell.dataset.field as 'merchant' | 'amount' | 'category' | 'person' | 'account' | 'status'
         const tx = this.#store.getState().transactions.find((t) => t.id === id)
         if (!tx) return
 
         if (field === 'person') {
+          // A personal account pins the person — editing it directly would desync the two.
+          if (tx.account !== 'shared') return
           const nextPerson = tx.person === 'Reut' ? 'Keren' : 'Reut'
           this.commitEdit(id, { person: nextPerson })
           this.promptSaveMappingRule(tx, 'person', nextPerson)
+        } else if (field === 'account') {
+          this.editAccountCell(cell, tx)
         } else if (field === 'category') {
           this.editCategoryCell(cell, tx)
         } else if (field === 'status') {
@@ -627,6 +648,34 @@ export class TransactionsView {
       settled = true
       this.commitEdit(tx.id, { categoryId: select.value })
       this.promptSaveMappingRule(tx, 'category', select.value)
+    })
+    select.addEventListener('blur', () => {
+      if (!settled) this.renderTable(this.#store.getState())
+    })
+    select.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        settled = true
+        this.renderTable(this.#store.getState())
+      }
+    })
+  }
+
+  private editAccountCell(cell: HTMLElement, tx: Transaction): void {
+    cell.classList.add('is-editing')
+    cell.innerHTML = `
+      <select class="cell-input">
+        ${ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === tx.account ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')}
+      </select>
+    `
+    const select = cell.querySelector<HTMLSelectElement>('.cell-input')!
+    select.focus()
+
+    let settled = false
+    select.addEventListener('change', () => {
+      settled = true
+      const account = select.value as Account
+      const forcedPerson = PERSON_FOR_ACCOUNT[account]
+      this.commitEdit(tx.id, forcedPerson ? { account, person: forcedPerson } : { account })
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -759,6 +808,12 @@ export class TransactionsView {
             </select>
           </label>
           <label class="filter-group">
+            <span class="filter-group__label">Account</span>
+            <select class="filter-select" name="account" required>
+              ${ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === (existing?.account ?? 'shared') ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')}
+            </select>
+          </label>
+          <label class="filter-group">
             <span class="filter-group__label">Person</span>
             <select class="filter-select" name="person" required>
               ${PEOPLE.map((p) => `<option value="${p}" ${p === existing?.person ? 'selected' : ''}>${p}</option>`).join('')}
@@ -773,12 +828,25 @@ export class TransactionsView {
       { ariaLabel: isEdit ? 'Edit transaction' : 'Add transaction' },
     )
 
+    const accountSelect = modal.element.querySelector<HTMLSelectElement>('select[name="account"]')!
+    const personSelect = modal.element.querySelector<HTMLSelectElement>('select[name="person"]')!
+    // Personal accounts pin the person — keep the (disabled) Person select in
+    // sync so its submitted value always matches what the badge will show.
+    const syncPersonToAccount = () => {
+      const forcedPerson = PERSON_FOR_ACCOUNT[accountSelect.value as Account]
+      personSelect.disabled = !!forcedPerson
+      if (forcedPerson) personSelect.value = forcedPerson
+    }
+    syncPersonToAccount()
+    accountSelect.addEventListener('change', syncPersonToAccount)
+
     modal.element.querySelector<HTMLButtonElement>('#modal-cancel')!.addEventListener('click', () => modal.close())
     modal.element.querySelector<HTMLFormElement>('#add-expense-form')!.addEventListener('submit', (event) => {
       event.preventDefault()
       const form = event.currentTarget as HTMLFormElement
       const data = new FormData(form)
       const categoryId = String(data.get('categoryId'))
+      const account = data.get('account') as Account
       const state = this.#store.getState()
       // A manually-typed transaction is considered reviewed the instant it's
       // entered — 'pending' is reserved for imported rows awaiting a look.
@@ -787,7 +855,8 @@ export class TransactionsView {
         merchant: String(data.get('merchant')).trim(),
         amount: Number(data.get('amount')),
         categoryId,
-        person: data.get('person') as Person,
+        account,
+        person: PERSON_FOR_ACCOUNT[account] ?? (data.get('person') as Person),
         status: existing?.status ?? computeReviewedStatus(state.transactions, state.categories, categoryId),
         source: existing?.source ?? 'manual',
       }
@@ -852,7 +921,7 @@ export class TransactionsView {
     table.dataset.hideColumns = Array.from(this.#hiddenColumns).join(' ')
 
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="transactions__empty">No transactions match these filters.</td></tr>`
+      tbody.innerHTML = `<tr><td colspan="8" class="transactions__empty">No transactions match these filters.</td></tr>`
       cardsContainer.innerHTML = `<p class="transactions__empty">No transactions match these filters.</p>`
     } else if (this.#groupBy !== 'none') {
       const groups = this.buildGroups(rows, categoryById)
@@ -961,7 +1030,7 @@ export class TransactionsView {
     const collapsed = this.#collapsedGroups.has(g.key)
     return `
       <tr class="group-header-row">
-        <td colspan="7">${this.renderGroupHeader(g)}</td>
+        <td colspan="8">${this.renderGroupHeader(g)}</td>
       </tr>
       ${collapsed ? '' : g.rows.map((tx) => this.renderRow(tx, categoryById)).join('')}
     `
@@ -988,6 +1057,7 @@ export class TransactionsView {
         </td>
         <td class="editable-cell" data-field="category" data-id="${tx.id}">${renderCategoryBadge(categoryById.get(tx.categoryId))}</td>
         <td class="editable-cell" data-field="person" data-id="${tx.id}">${renderPersonBadge(tx.person)}</td>
+        <td class="editable-cell" data-field="account" data-id="${tx.id}">${renderAccountBadge(tx.account)}</td>
         <td class="is-numeric editable-cell" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.amount)}</td>
         <td>${tx.status === 'pending' ? `<button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">Mark reviewed</button>` : ''}</td>
       </tr>
@@ -1006,6 +1076,7 @@ export class TransactionsView {
           <div class="tx-card__meta">
             ${renderCategoryBadge(categoryById.get(tx.categoryId))}
             ${renderPersonBadge(tx.person)}
+            ${renderAccountBadge(tx.account)}
             ${renderStatusBadge(tx.status)}
             <span class="tx-card__date">${formatDateShort(tx.date)}</span>
           </div>

@@ -1,4 +1,8 @@
 export type Person = 'Reut' | 'Keren'
+/** Which "pocket" a transaction was paid from. Personal accounts are still
+ * household expenses paid individually — see computeSplitBalance() in
+ * insights.ts for how each value affects the Reut/Keren settlement math. */
+export type Account = 'reut_personal' | 'keren_personal' | 'shared'
 /** 'pending' = imported/unreviewed. Reviewing a pending transaction snapshots
  * its category's current budget standing into 'on_budget' or 'exceeded' —
  * see markReviewed() in TransactionsView.ts. */
@@ -22,6 +26,7 @@ export interface Transaction {
   amount: number
   categoryId: string
   person: Person
+  account: Account
   status: TransactionStatus
   source: TransactionSource
 }
