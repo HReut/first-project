@@ -3,6 +3,7 @@ import type { AppState, Category } from '../../types.ts'
 import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { updateTransaction } from '../../data/transactionsRepo.ts'
+import { loadBalanceSettledAt, saveBalanceSettledAt } from '../../data/balanceSettleSettings.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
 import {
@@ -153,6 +154,12 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     btn.addEventListener('click', () => contextButtons.forEach((b) => b.classList.toggle('is-active', b === btn)))
   })
 
+  totalAvailableEl.addEventListener('click', (event) => {
+    if (!(event.target as HTMLElement).closest('[data-mark-settled]')) return
+    saveBalanceSettledAt(new Date().toISOString().slice(0, 10))
+    renderTotalAvailable(store.getState())
+  })
+
   reviewEl.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mark-reviewed-id]')
     if (!button) return
@@ -182,7 +189,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   }
 
   function renderTotalAvailable(state: AppState): void {
-    const balance = computeSplitBalance(state.transactions)
+    const balance = computeSplitBalance(state.transactions, new Date(), loadBalanceSettledAt())
     const total = PLACEHOLDER_SHARED_ACCOUNT + PLACEHOLDER_EMERGENCY_FUND
 
     totalAvailableEl.innerHTML = `
@@ -206,7 +213,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
       <div class="total-available__balance">
         <span class="total-available__balance-label">Current status</span>
         <p class="total-available__balance-value">${balance ? `${balance.owingPerson} owes ${balance.owedPerson} · ${formatCurrency(balance.amount)}` : 'Settled up this month'}</p>
-        <button type="button" class="btn btn--sm total-available__done-btn">Done</button>
+        ${balance ? `<button type="button" class="btn btn--sm total-available__done-btn" data-mark-settled>Done</button>` : ''}
       </div>
     `
   }

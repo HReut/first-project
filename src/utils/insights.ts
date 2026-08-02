@@ -130,10 +130,14 @@ export function computeReviewedStatus(transactions: Transaction[], categories: C
  * Household expenses are assumed split 50/50 regardless of who paid — the
  * balance is half the gap between what each person actually spent this
  * calendar month. Returns null when the two are (near) even.
+ *
+ * `settledAfter`, if given, excludes transactions dated on/before that ISO
+ * date — this is how "mark as settled" clears the balance without touching
+ * the underlying transactions.
  */
-export function computeSplitBalance(transactions: Transaction[], referenceDate = new Date()): SplitBalance | null {
+export function computeSplitBalance(transactions: Transaction[], referenceDate = new Date(), settledAfter?: string | null): SplitBalance | null {
   const currentMonth = monthKey(referenceDate)
-  const currentTx = transactions.filter((tx) => tx.date.startsWith(currentMonth))
+  const currentTx = transactions.filter((tx) => tx.date.startsWith(currentMonth) && (!settledAfter || tx.date > settledAfter))
   const reutTotal = sum(currentTx.filter((tx) => tx.person === 'Reut'))
   const kerenTotal = sum(currentTx.filter((tx) => tx.person === 'Keren'))
   const diff = reutTotal - kerenTotal
