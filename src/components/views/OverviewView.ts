@@ -82,17 +82,17 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
           </div>
           <div class="status-banner__stats">
             <div class="status-banner__stat">
-              <span class="status-banner__stat-label">Total Net Worth</span>
+              <span class="status-banner__stat-label">Total Net Worth <span class="demo-tag">Demo data</span></span>
               <span class="status-banner__stat-value">${formatCurrency(PLACEHOLDER_NET_WORTH)}</span>
               <span class="status-banner__stat-sub is-good">↗ ${PLACEHOLDER_NET_WORTH_DELTA_PERCENT}%</span>
             </div>
             <div class="status-banner__stat">
-              <span class="status-banner__stat-label">Monthly Flow</span>
+              <span class="status-banner__stat-label">Monthly Flow <span class="demo-tag">Demo data</span></span>
               <span class="status-banner__stat-value">+${formatCurrency(PLACEHOLDER_MONTHLY_FLOW)}</span>
               <span class="chip chip--good">Surplus</span>
             </div>
             <div class="status-banner__stat status-banner__stat--score">
-              <span class="status-banner__stat-label">Health Score</span>
+              <span class="status-banner__stat-label">Health Score <span class="demo-tag">Demo data</span></span>
               <span class="status-banner__stat-value">${PLACEHOLDER_HEALTH_SCORE}<span class="status-banner__stat-value-sub">/100</span></span>
               <div class="mini-meter"><div class="mini-meter__fill" style="width: ${PLACEHOLDER_HEALTH_SCORE}%"></div></div>
             </div>
@@ -202,11 +202,11 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
       <p class="total-available__value">${formatCurrency(total)}</p>
       <div class="total-available__split">
         <div class="total-available__split-item">
-          <span class="total-available__split-label">Shared Account</span>
+          <span class="total-available__split-label">Shared Account <span class="demo-tag">Demo data</span></span>
           <span class="total-available__split-value">${formatCurrency(PLACEHOLDER_SHARED_ACCOUNT)}</span>
         </div>
         <div class="total-available__split-item">
-          <span class="total-available__split-label">Emergency Fund</span>
+          <span class="total-available__split-label">Emergency Fund <span class="demo-tag">Demo data</span></span>
           <span class="total-available__split-value">${formatCurrency(PLACEHOLDER_EMERGENCY_FUND)}</span>
         </div>
       </div>

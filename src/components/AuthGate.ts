@@ -11,15 +11,28 @@ function renderAuthScreen(root: HTMLElement, opts: { title: string; message: str
         <span class="auth-card__mark" aria-hidden="true">${catLogoMarkup()}</span>
         <h1 class="auth-card__title">${opts.title}</h1>
         <p class="auth-card__message">${opts.message}</p>
-        <button type="button" class="btn btn--primary auth-card__action" id="auth-action">${opts.actionLabel}</button>
+        <button type="button" class="btn btn--primary auth-card__action" id="auth-action">
+          <span class="auth-card__spinner" aria-hidden="true"></span>
+          <span class="auth-card__action-label">${opts.actionLabel}</span>
+        </button>
+        <p class="auth-card__error" id="auth-error" role="alert" hidden></p>
       </div>
     </div>
   `
   const btn = root.querySelector<HTMLButtonElement>('#auth-action')!
+  const label = root.querySelector<HTMLElement>('.auth-card__action-label')!
+  const errorEl = root.querySelector<HTMLElement>('#auth-error')!
   btn.addEventListener('click', () => {
     btn.disabled = true
+    btn.classList.add('is-loading')
+    label.textContent = 'Signing in…'
+    errorEl.hidden = true
     signInWithGoogle().catch(() => {
       btn.disabled = false
+      btn.classList.remove('is-loading')
+      label.textContent = opts.actionLabel
+      errorEl.textContent = "Couldn't sign in — please try again."
+      errorEl.hidden = false
     })
   })
   if (opts.danger) root.querySelector('.auth-card')?.classList.add('auth-card--danger')

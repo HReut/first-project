@@ -664,12 +664,14 @@ p {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  background: radial-gradient(circle at 50% -10%, var(--accent-bg), transparent 60%), var(--bg);
 }
 
 .auth-card {
   width: 100%;
   max-width: 360px;
   background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   padding: 40px 32px;
@@ -678,26 +680,40 @@ p {
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  animation: auth-card-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes auth-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .auth-card__mark {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
   background: var(--accent);
+  box-shadow: 0 8px 20px -6px var(--accent-border);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .auth-card__mark svg {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: block;
 }
 
 .auth-card--danger .auth-card__mark {
   background: var(--status-critical);
+  box-shadow: none;
 }
 
 .auth-card__title {
@@ -714,6 +730,35 @@ p {
 
 .auth-card__action {
   margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.auth-card__spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  display: none;
+  animation: auth-spin 0.7s linear infinite;
+}
+
+.auth-card__action.is-loading .auth-card__spinner {
+  display: inline-block;
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.auth-card__error {
+  font-size: 13px;
+  color: var(--status-critical);
 }
 
 /* ---------- Bands ---------- */
@@ -1052,6 +1097,23 @@ p {
   background: var(--accent-bg);
 }
 
+/* Flags stat figures that aren't backed by real account/income data yet
+ * (see src/data/placeholderFigures.ts) so they read as illustrative, not live. */
+.demo-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
 /* ---------- Shared card surface for the new Overview panels ---------- */
 
 .panel-card {
@@ -1059,6 +1121,12 @@ p {
   border-radius: var(--radius-lg);
   padding: 28px 32px;
   box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.panel-card:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
 }
 
 /* Secondary/nice-to-have cards (Smart Insight, Invoice Sync) — flatter than
