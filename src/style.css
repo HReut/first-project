@@ -1092,6 +1092,14 @@ p {
   background: color-mix(in srgb, var(--status-good) 14%, var(--surface));
 }
 
+.is-good {
+  color: var(--status-good);
+}
+
+.is-bad {
+  color: var(--status-critical);
+}
+
 .chip--accent {
   color: var(--accent);
   background: var(--accent-bg);
@@ -1185,19 +1193,78 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Settlement Balance + Monthly Expenses ---------- */
+/* ---------- Total Available hero card (funds + trend + settlement) ---------- */
 
-.overview-top-grid {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 20px;
+.hero-card__split {
+  display: flex;
   align-items: stretch;
+  gap: 32px;
 }
 
-@media (max-width: 860px) {
-  .overview-top-grid {
-    grid-template-columns: 1fr;
+.hero-card__left {
+  flex: 1.1;
+  min-width: 0;
+}
+
+.hero-card__right {
+  flex: 1;
+  min-width: 0;
+  padding-left: 32px;
+  border-left: 1px solid var(--border);
+}
+
+@media (max-width: 720px) {
+  .hero-card__split {
+    flex-direction: column;
+    gap: 20px;
   }
+
+  .hero-card__right {
+    padding-left: 0;
+    padding-top: 20px;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}
+
+.hero-card__trend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.hero-card__sparkline {
+  width: 56px;
+  height: 22px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.hero-card__trend-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hero-card__trend-caption {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.hero-card__right-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.hero-card__right-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text);
 }
 
 .settlement-card__debt {
@@ -1227,83 +1294,142 @@ p {
   color: var(--text);
 }
 
-.settlement-card [data-mark-settled] {
+.hero-card__right [data-mark-settled] {
   margin-top: 16px;
 }
 
-/* ---------- Monthly Expenses (compact progress list) ---------- */
+/* ---------- Monthly Expenses (interactive donut + legend) ---------- */
 
-.expense-list__total {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.6px;
-  color: var(--text-h);
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 18px;
+.expense-breakdown {
+  display: flex;
+  align-items: center;
+  gap: 40px;
 }
 
-.expense-list__total-label {
-  font-size: 13px;
-  font-weight: 500;
+@media (max-width: 720px) {
+  .expense-breakdown {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 24px;
+  }
+}
+
+.expense-breakdown__chart {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+  margin: 0 auto;
+}
+
+.donut-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.donut-svg__bg {
+  stroke: var(--bg);
+}
+
+.donut-svg__slice {
+  stroke-width: 6;
+  transition: stroke-width 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+}
+
+.donut-svg__slice.is-active {
+  stroke-width: 8;
+}
+
+.donut-svg__hole {
+  position: absolute;
+  inset: 26px;
+  border-radius: 50%;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.donut-chart__total {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.donut-chart__total-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
   color: var(--text);
 }
 
-.expense-list {
+.expense-breakdown__legend {
   list-style: none;
   margin: 0;
   padding: 0;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 2px;
 }
 
-.expense-list__row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+.expense-breakdown__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
-.expense-list__label {
+.expense-breakdown__row.is-active {
+  background: var(--bg);
+}
+
+.expense-breakdown__label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.expense-list__dot {
+.expense-breakdown__dot {
   width: 9px;
   height: 9px;
   border-radius: 999px;
   flex-shrink: 0;
 }
 
-.expense-list__amount {
+.expense-breakdown__amount {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
-.expense-list__pct {
+.expense-breakdown__pct {
+  font-size: 12px;
   font-weight: 500;
   color: var(--text);
-}
-
-.expense-list__track {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--bg);
-  overflow: hidden;
-}
-
-.expense-list__fill {
-  height: 100%;
-  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  width: 36px;
 }
 
 /* ---------- Insights row (merged Invoice Sync + Smart Insight) ---------- */

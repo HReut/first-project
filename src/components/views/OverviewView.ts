@@ -11,7 +11,8 @@ import { PLACEHOLDER_EMERGENCY_FUND, PLACEHOLDER_SHARED_ACCOUNT } from '../../da
 const RECENT_ACTIVITY_LIMIT = 5
 const REVIEW_CENTER_LIMIT = 6
 const BUDGET_PROGRESS_LIMIT = 3
-const EXPENSE_LIST_LIMIT = 3
+const EXPENSE_LIST_LIMIT = 6
+const TREND_MONTHS = 4
 
 interface Improvement {
   category: Category
@@ -46,6 +47,40 @@ function computeBiggestImprovement(state: AppState): Improvement | null {
   return best
 }
 
+interface SpendTrend {
+  series: number[] // oldest → newest, TREND_MONTHS entries
+  deltaPercent: number | null // current month vs. the average of the prior months; null with no prior history
+}
+
+/** Real month-over-month total spend, used as the trend widget next to Total
+ * Available — there's no account-balance history to chart, so this is the
+ * closest honest proxy for "how are things moving". */
+function computeSpendTrend(state: AppState): SpendTrend {
+  const series: number[] = []
+  for (let i = TREND_MONTHS - 1; i >= 0; i--) {
+    const date = new Date()
+    date.setMonth(date.getMonth() - i)
+    const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' }, date)
+    series.push(breakdown.reduce((sum, entry) => sum + entry.amount, 0))
+  }
+  const priorMonths = series.slice(0, -1)
+  const priorAvg = priorMonths.reduce((sum, v) => sum + v, 0) / (priorMonths.length || 1)
+  const current = series[series.length - 1]
+  const deltaPercent = priorAvg === 0 ? null : ((current - priorAvg) / priorAvg) * 100
+  return { series, deltaPercent }
+}
+
+function renderSparkline(values: number[]): string {
+  const max = Math.max(...values, 1)
+  const min = Math.min(...values, 0)
+  const range = max - min || 1
+  const width = 64
+  const height = 24
+  const step = width / (values.length - 1 || 1)
+  const points = values.map((v, i) => `${(i * step).toFixed(1)},${(height - ((v - min) / range) * height).toFixed(1)}`).join(' ')
+  return `<svg class="hero-card__sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>`
+}
+
 export function mountOverviewView(root: HTMLElement, store: Store<AppState>): void {
   root.innerHTML = `
     <section class="band band--page-header">
@@ -71,10 +106,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
 
     <section class="band">
       <div class="band__inner">
-        <div class="overview-top-grid">
-          <div class="settlement-card panel-card" id="settlement-balance"></div>
-          <div class="monthly-expenses-card panel-card" id="monthly-expenses"></div>
-        </div>
+        <div class="monthly-expenses-card panel-card" id="monthly-expenses"></div>
       </div>
     </section>
 
@@ -110,7 +142,6 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   const statusBannerEl = root.querySelector<HTMLElement>('#status-banner')!
   const reviewEl = root.querySelector<HTMLElement>('#review-center')!
   const budgetEl = root.querySelector<HTMLElement>('#budget-summary')!
-  const settlementEl = root.querySelector<HTMLElement>('#settlement-balance')!
   const monthlyExpensesEl = root.querySelector<HTMLElement>('#monthly-expenses')!
   const insightsBandEl = root.querySelector<HTMLElement>('#insights-band')!
   const insightsRowEl = root.querySelector<HTMLElement>('#insights-row')!
@@ -123,10 +154,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     btn.addEventListener('click', () => contextButtons.forEach((b) => b.classList.toggle('is-active', b === btn)))
   })
 
-  settlementEl.addEventListener('click', (event) => {
+  statusBannerEl.addEventListener('click', (event) => {
     if (!(event.target as HTMLElement).closest('[data-mark-settled]')) return
     saveBalanceSettledAt(new Date().toISOString().slice(0, 10))
-    renderSettlementBalance(store.getState())
+    renderStatusBanner(store.getState())
   })
 
   reviewEl.addEventListener('click', (event) => {
@@ -149,7 +180,6 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
 
   function render(state: AppState): void {
     renderStatusBanner(state)
-    renderSettlementBalance(state)
     renderMonthlyExpenses(state)
     renderReviewCenter(state)
     renderBudgetSummary(state)
@@ -157,8 +187,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     renderActivity(state)
   }
 
-  function renderStatusBanner(_state: AppState): void {
+  function renderStatusBanner(state: AppState): void {
     const total = PLACEHOLDER_SHARED_ACCOUNT + PLACEHOLDER_EMERGENCY_FUND
+    const trend = computeSpendTrend(state)
+    const balance = computeSplitBalance(state.transactions, new Date(), loadBalanceSettledAt())
 
     statusBannerEl.innerHTML = `
       <div class="card-header">
@@ -168,27 +200,36 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
         </div>
         <a class="card-link" href="#accounts">See Details →</a>
       </div>
-      <p class="total-available__value">${formatCurrency(total)}</p>
-    `
-  }
-
-  function renderSettlementBalance(state: AppState): void {
-    const balance = computeSplitBalance(state.transactions, new Date(), loadBalanceSettledAt())
-
-    settlementEl.innerHTML = `
-      <div class="card-header">
-        <h2 class="card-header__title">Settlement Balance</h2>
-        <a class="card-link" href="#accounts">View Breakdown →</a>
+      <div class="hero-card__split">
+        <div class="hero-card__left">
+          <p class="total-available__value">${formatCurrency(total)}</p>
+          ${
+            trend.deltaPercent === null
+              ? ''
+              : `<div class="hero-card__trend">
+                   ${renderSparkline(trend.series)}
+                   <span class="hero-card__trend-label ${trend.deltaPercent <= 0 ? 'is-good' : 'is-bad'}">
+                     ${trend.deltaPercent <= 0 ? '↓' : '↑'} ${Math.abs(Math.round(trend.deltaPercent * 10) / 10)}% <span class="hero-card__trend-caption">vs last 3-mo avg</span>
+                   </span>
+                 </div>`
+          }
+        </div>
+        <div class="hero-card__right">
+          <div class="hero-card__right-header">
+            <span class="hero-card__right-title">Settlement</span>
+            <a class="card-link" href="#accounts">View Breakdown →</a>
+          </div>
+          ${
+            balance
+              ? `<p class="settlement-card__debt">
+                   <span class="settlement-card__debt-names">${balance.owingPerson} owes ${balance.owedPerson}</span>
+                   <span class="settlement-card__debt-amount">${formatCurrency(balance.amount)}</span>
+                 </p>
+                 <button type="button" class="btn btn--primary btn--sm" data-mark-settled>Settle Up</button>`
+              : `<p class="settlement-card__settled"><span class="review-center__empty-check" aria-hidden="true">✓</span>Settled up this month</p>`
+          }
+        </div>
       </div>
-      ${
-        balance
-          ? `<p class="settlement-card__debt">
-               <span class="settlement-card__debt-names">${balance.owingPerson} owes ${balance.owedPerson}</span>
-               <span class="settlement-card__debt-amount">${formatCurrency(balance.amount)}</span>
-             </p>
-             <button type="button" class="btn btn--primary btn--sm" data-mark-settled>Settle Up</button>`
-          : `<p class="settlement-card__settled"><span class="review-center__empty-check" aria-hidden="true">✓</span>Settled up this month</p>`
-      }
     `
   }
 
@@ -200,7 +241,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     const header = `
       <div class="card-header">
         <h2 class="card-header__title">Monthly Expenses</h2>
-        <a class="card-link" href="#transactions">View All →</a>
+        <a class="card-link" href="#analytics">View All →</a>
       </div>
     `
 
@@ -212,32 +253,95 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     const top = breakdown.slice(0, EXPENSE_LIST_LIMIT)
     const otherAmount = breakdown.slice(EXPENSE_LIST_LIMIT).reduce((sum, entry) => sum + entry.amount, 0)
     const slices = top.map((entry) => ({
+      id: entry.categoryId,
       label: categoryById.get(entry.categoryId)?.name ?? 'Other',
       color: categoryById.get(entry.categoryId)?.colorCode ?? 'var(--text)',
       amount: entry.amount,
     }))
-    if (otherAmount > 0) slices.push({ label: 'Other', color: 'var(--text)', amount: otherAmount })
+    if (otherAmount > 0) slices.push({ id: 'other', label: 'Other', color: 'var(--text)', amount: otherAmount })
+
+    // Percentage-of-circumference donut: r is chosen so 2πr ≈ 100, so
+    // stroke-dasharray/offset can be plain percentages. The whole <svg> is
+    // rotated -90deg (in CSS) so offset 0 sits at 12 o'clock.
+    let cumulative = 0
+    const arcs = slices.map((slice) => {
+      const percent = (slice.amount / total) * 100
+      const arc = { ...slice, percent, offset: -cumulative }
+      cumulative += percent
+      return arc
+    })
 
     monthlyExpensesEl.innerHTML = `
       ${header}
-      <p class="expense-list__total">${formatCurrency(total)} <span class="expense-list__total-label">this month</span></p>
-      <ul class="expense-list">
-        ${slices
-          .map((slice) => {
-            const percent = Math.round((slice.amount / total) * 100)
-            return `
-            <li class="expense-list__item">
-              <div class="expense-list__row">
-                <span class="expense-list__label"><span class="expense-list__dot" style="background: ${slice.color}"></span>${slice.label}</span>
-                <span class="expense-list__amount">${formatCurrency(slice.amount)} <span class="expense-list__pct">${percent}%</span></span>
-              </div>
-              <div class="expense-list__track"><div class="expense-list__fill" style="width: ${percent}%; background: ${slice.color}"></div></div>
+      <div class="expense-breakdown">
+        <div class="expense-breakdown__chart">
+          <svg class="donut-svg" viewBox="0 0 42 42" role="img" aria-label="Expense breakdown by category">
+            <circle class="donut-svg__bg" cx="21" cy="21" r="15.9155" fill="transparent" stroke-width="6" />
+            ${arcs
+              .map(
+                (arc) => `
+              <circle
+                class="donut-svg__slice"
+                data-slice-id="${arc.id}"
+                cx="21" cy="21" r="15.9155"
+                fill="transparent"
+                stroke="${arc.color}"
+                stroke-width="6"
+                stroke-dasharray="${arc.percent} ${100 - arc.percent}"
+                stroke-dashoffset="${arc.offset}"
+              />
+            `,
+              )
+              .join('')}
+          </svg>
+          <div class="donut-svg__hole">
+            <span class="donut-chart__total">${formatCurrency(total)}</span>
+            <span class="donut-chart__total-label">This month</span>
+          </div>
+        </div>
+        <ul class="expense-breakdown__legend">
+          ${arcs
+            .map(
+              (arc) => `
+            <li class="expense-breakdown__row" data-slice-id="${arc.id}">
+              <span class="expense-breakdown__label"><span class="expense-breakdown__dot" style="background: ${arc.color}"></span>${arc.label}</span>
+              <span class="expense-breakdown__amount">${formatCurrency(arc.amount)}</span>
+              <span class="expense-breakdown__pct">${Math.round(arc.percent)}%</span>
             </li>
-          `
-          })
-          .join('')}
-      </ul>
+          `,
+            )
+            .join('')}
+        </ul>
+      </div>
     `
+
+    // Interactive legend: hovering a row highlights its donut slice, and vice versa.
+    const rows = Array.from(monthlyExpensesEl.querySelectorAll<HTMLElement>('.expense-breakdown__row'))
+    const slicesById = new Map(
+      Array.from(monthlyExpensesEl.querySelectorAll<SVGCircleElement>('.donut-svg__slice')).map((el) => [el.dataset.sliceId, el]),
+    )
+    rows.forEach((row) => {
+      const slice = slicesById.get(row.dataset.sliceId)
+      row.addEventListener('mouseenter', () => {
+        row.classList.add('is-active')
+        slice?.classList.add('is-active')
+      })
+      row.addEventListener('mouseleave', () => {
+        row.classList.remove('is-active')
+        slice?.classList.remove('is-active')
+      })
+    })
+    slicesById.forEach((slice, id) => {
+      const row = rows.find((r) => r.dataset.sliceId === id)
+      slice.addEventListener('mouseenter', () => {
+        slice.classList.add('is-active')
+        row?.classList.add('is-active')
+      })
+      slice.addEventListener('mouseleave', () => {
+        slice.classList.remove('is-active')
+        row?.classList.remove('is-active')
+      })
+    })
   }
 
   function renderReviewCenter(state: AppState): void {
