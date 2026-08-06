@@ -6,19 +6,12 @@ import { updateTransaction } from '../../data/transactionsRepo.ts'
 import { loadBalanceSettledAt, saveBalanceSettledAt } from '../../data/balanceSettleSettings.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
-import {
-  PLACEHOLDER_EMERGENCY_FUND,
-  PLACEHOLDER_HEALTH_SCORE,
-  PLACEHOLDER_MONTHLY_FLOW,
-  PLACEHOLDER_NET_WORTH,
-  PLACEHOLDER_NET_WORTH_DELTA_PERCENT,
-  PLACEHOLDER_SHARED_ACCOUNT,
-} from '../../data/placeholderFigures.ts'
+import { PLACEHOLDER_EMERGENCY_FUND, PLACEHOLDER_SHARED_ACCOUNT } from '../../data/placeholderFigures.ts'
 
 const RECENT_ACTIVITY_LIMIT = 5
 const REVIEW_CENTER_LIMIT = 6
 const BUDGET_PROGRESS_LIMIT = 3
-const DONUT_SLICE_LIMIT = 3
+const EXPENSE_LIST_LIMIT = 3
 
 interface Improvement {
   category: Category
@@ -72,39 +65,14 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
 
     <section class="band">
       <div class="band__inner">
-        <div class="status-banner panel-card">
-          <div class="status-banner__lead">
-            <span class="status-banner__icon" aria-hidden="true">🛡️</span>
-            <div>
-              <h2 class="status-banner__title">Overall Current Status</h2>
-              <p class="status-banner__meta"><span class="status-dot" aria-hidden="true"></span>On track · Updated just now</p>
-            </div>
-          </div>
-          <div class="status-banner__stats">
-            <div class="status-banner__stat">
-              <span class="status-banner__stat-label">Total Net Worth <span class="demo-tag">Demo data</span></span>
-              <span class="status-banner__stat-value">${formatCurrency(PLACEHOLDER_NET_WORTH)}</span>
-              <span class="status-banner__stat-sub is-good">↗ ${PLACEHOLDER_NET_WORTH_DELTA_PERCENT}%</span>
-            </div>
-            <div class="status-banner__stat">
-              <span class="status-banner__stat-label">Monthly Flow <span class="demo-tag">Demo data</span></span>
-              <span class="status-banner__stat-value">+${formatCurrency(PLACEHOLDER_MONTHLY_FLOW)}</span>
-              <span class="chip chip--good">Surplus</span>
-            </div>
-            <div class="status-banner__stat status-banner__stat--score">
-              <span class="status-banner__stat-label">Health Score <span class="demo-tag">Demo data</span></span>
-              <span class="status-banner__stat-value">${PLACEHOLDER_HEALTH_SCORE}<span class="status-banner__stat-value-sub">/100</span></span>
-              <div class="mini-meter"><div class="mini-meter__fill" style="width: ${PLACEHOLDER_HEALTH_SCORE}%"></div></div>
-            </div>
-          </div>
-        </div>
+        <div class="status-banner panel-card" id="status-banner"></div>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
         <div class="overview-top-grid">
-          <div class="total-available-card panel-card" id="total-available"></div>
+          <div class="settlement-card panel-card" id="settlement-balance"></div>
           <div class="monthly-expenses-card panel-card" id="monthly-expenses"></div>
         </div>
       </div>
@@ -122,29 +90,30 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
       </div>
     </section>
 
-    <section class="band">
+    <section class="band" id="insights-band" hidden>
       <div class="band__inner">
-        <div class="overview-bottom-grid">
-          <div class="invoice-sync-card panel-card panel-card--muted" id="invoice-sync"></div>
-          <div class="smart-insight-card panel-card panel-card--muted" id="smart-insight"></div>
-        </div>
+        <div class="insights-row panel-card panel-card--muted" id="insights-row"></div>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
-        <p class="eyebrow">Recent activity</p>
+        <div class="section-header">
+          <p class="eyebrow">Recent activity</p>
+          <a class="card-link" href="#transactions">View All →</a>
+        </div>
         <div class="activity-list" id="activity-list" aria-label="Recent transactions"></div>
       </div>
     </section>
   `
 
+  const statusBannerEl = root.querySelector<HTMLElement>('#status-banner')!
   const reviewEl = root.querySelector<HTMLElement>('#review-center')!
   const budgetEl = root.querySelector<HTMLElement>('#budget-summary')!
-  const totalAvailableEl = root.querySelector<HTMLElement>('#total-available')!
+  const settlementEl = root.querySelector<HTMLElement>('#settlement-balance')!
   const monthlyExpensesEl = root.querySelector<HTMLElement>('#monthly-expenses')!
-  const invoiceSyncEl = root.querySelector<HTMLElement>('#invoice-sync')!
-  const smartInsightEl = root.querySelector<HTMLElement>('#smart-insight')!
+  const insightsBandEl = root.querySelector<HTMLElement>('#insights-band')!
+  const insightsRowEl = root.querySelector<HTMLElement>('#insights-row')!
   const activityEl = root.querySelector<HTMLElement>('#activity-list')!
 
   // Shared/Private is a purely visual toggle for now — it doesn't filter
@@ -154,10 +123,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     btn.addEventListener('click', () => contextButtons.forEach((b) => b.classList.toggle('is-active', b === btn)))
   })
 
-  totalAvailableEl.addEventListener('click', (event) => {
+  settlementEl.addEventListener('click', (event) => {
     if (!(event.target as HTMLElement).closest('[data-mark-settled]')) return
     saveBalanceSettledAt(new Date().toISOString().slice(0, 10))
-    renderTotalAvailable(store.getState())
+    renderSettlementBalance(store.getState())
   })
 
   reviewEl.addEventListener('click', (event) => {
@@ -179,42 +148,47 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   })
 
   function render(state: AppState): void {
-    renderTotalAvailable(state)
+    renderStatusBanner(state)
+    renderSettlementBalance(state)
     renderMonthlyExpenses(state)
     renderReviewCenter(state)
     renderBudgetSummary(state)
-    renderInvoiceSync(state)
-    renderSmartInsight(state)
+    renderInsightsRow(state)
     renderActivity(state)
   }
 
-  function renderTotalAvailable(state: AppState): void {
-    const balance = computeSplitBalance(state.transactions, new Date(), loadBalanceSettledAt())
+  function renderStatusBanner(_state: AppState): void {
     const total = PLACEHOLDER_SHARED_ACCOUNT + PLACEHOLDER_EMERGENCY_FUND
 
-    totalAvailableEl.innerHTML = `
+    statusBannerEl.innerHTML = `
       <div class="card-header">
         <div>
           <h2 class="card-header__title">Total Available</h2>
-          <p class="card-header__meta">Shared context active</p>
+          <p class="card-header__meta"><span class="status-dot" aria-hidden="true"></span>On track · Updated just now</p>
         </div>
+        <a class="card-link" href="#accounts">See Details →</a>
       </div>
       <p class="total-available__value">${formatCurrency(total)}</p>
-      <div class="total-available__split">
-        <div class="total-available__split-item">
-          <span class="total-available__split-label">Shared Account <span class="demo-tag">Demo data</span></span>
-          <span class="total-available__split-value">${formatCurrency(PLACEHOLDER_SHARED_ACCOUNT)}</span>
-        </div>
-        <div class="total-available__split-item">
-          <span class="total-available__split-label">Emergency Fund <span class="demo-tag">Demo data</span></span>
-          <span class="total-available__split-value">${formatCurrency(PLACEHOLDER_EMERGENCY_FUND)}</span>
-        </div>
+    `
+  }
+
+  function renderSettlementBalance(state: AppState): void {
+    const balance = computeSplitBalance(state.transactions, new Date(), loadBalanceSettledAt())
+
+    settlementEl.innerHTML = `
+      <div class="card-header">
+        <h2 class="card-header__title">Settlement Balance</h2>
+        <a class="card-link" href="#accounts">View Breakdown →</a>
       </div>
-      <div class="total-available__balance">
-        <span class="total-available__balance-label">Current status</span>
-        <p class="total-available__balance-value">${balance ? `${balance.owingPerson} owes ${balance.owedPerson} · ${formatCurrency(balance.amount)}` : 'Settled up this month'}</p>
-        ${balance ? `<button type="button" class="btn btn--sm total-available__done-btn" data-mark-settled>Done</button>` : ''}
-      </div>
+      ${
+        balance
+          ? `<p class="settlement-card__debt">
+               <span class="settlement-card__debt-names">${balance.owingPerson} owes ${balance.owedPerson}</span>
+               <span class="settlement-card__debt-amount">${formatCurrency(balance.amount)}</span>
+             </p>
+             <button type="button" class="btn btn--primary btn--sm" data-mark-settled>Settle Up</button>`
+          : `<p class="settlement-card__settled"><span class="review-center__empty-check" aria-hidden="true">✓</span>Settled up this month</p>`
+      }
     `
   }
 
@@ -223,16 +197,20 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const total = breakdown.reduce((sum, entry) => sum + entry.amount, 0)
 
-    if (total === 0) {
-      monthlyExpensesEl.innerHTML = `
+    const header = `
+      <div class="card-header">
         <h2 class="card-header__title">Monthly Expenses</h2>
-        <p class="chart-empty">No spending recorded yet this month.</p>
-      `
+        <a class="card-link" href="#transactions">View All →</a>
+      </div>
+    `
+
+    if (total === 0) {
+      monthlyExpensesEl.innerHTML = `${header}<p class="chart-empty">No spending recorded yet this month.</p>`
       return
     }
 
-    const top = breakdown.slice(0, DONUT_SLICE_LIMIT)
-    const otherAmount = breakdown.slice(DONUT_SLICE_LIMIT).reduce((sum, entry) => sum + entry.amount, 0)
+    const top = breakdown.slice(0, EXPENSE_LIST_LIMIT)
+    const otherAmount = breakdown.slice(EXPENSE_LIST_LIMIT).reduce((sum, entry) => sum + entry.amount, 0)
     const slices = top.map((entry) => ({
       label: categoryById.get(entry.categoryId)?.name ?? 'Other',
       color: categoryById.get(entry.categoryId)?.colorCode ?? 'var(--text)',
@@ -240,37 +218,25 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     }))
     if (otherAmount > 0) slices.push({ label: 'Other', color: 'var(--text)', amount: otherAmount })
 
-    let cursor = 0
-    const stops = slices
-      .map((slice) => {
-        const start = cursor
-        cursor += (slice.amount / total) * 100
-        return `${slice.color} ${start}% ${cursor}%`
-      })
-      .join(', ')
-
     monthlyExpensesEl.innerHTML = `
-      <h2 class="card-header__title">Monthly Expenses</h2>
-      <div class="donut-chart">
-        <div class="donut-chart__ring" style="background: conic-gradient(${stops})">
-          <div class="donut-chart__hole">
-            <span class="donut-chart__total">${formatCurrency(total)}</span>
-            <span class="donut-chart__total-label">Total</span>
-          </div>
-        </div>
-        <ul class="donut-legend">
-          ${slices
-            .map(
-              (slice) => `
-            <li class="donut-legend__item">
-              <span class="donut-legend__dot" style="background: ${slice.color}"></span>
-              ${slice.label} (${Math.round((slice.amount / total) * 100)}%)
+      ${header}
+      <p class="expense-list__total">${formatCurrency(total)} <span class="expense-list__total-label">this month</span></p>
+      <ul class="expense-list">
+        ${slices
+          .map((slice) => {
+            const percent = Math.round((slice.amount / total) * 100)
+            return `
+            <li class="expense-list__item">
+              <div class="expense-list__row">
+                <span class="expense-list__label"><span class="expense-list__dot" style="background: ${slice.color}"></span>${slice.label}</span>
+                <span class="expense-list__amount">${formatCurrency(slice.amount)} <span class="expense-list__pct">${percent}%</span></span>
+              </div>
+              <div class="expense-list__track"><div class="expense-list__fill" style="width: ${percent}%; background: ${slice.color}"></div></div>
             </li>
-          `,
-            )
-            .join('')}
-        </ul>
-      </div>
+          `
+          })
+          .join('')}
+      </ul>
     `
   }
 
@@ -282,6 +248,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
 
     if (pending.length === 0) {
       reviewEl.innerHTML = `
+        <div class="review-center__header">
+          <h2 class="review-center__title">Review center</h2>
+          <a class="card-link" href="#transactions">View All →</a>
+        </div>
         <div class="review-center__empty-state">
           <span class="review-center__empty-check" aria-hidden="true">✓</span>
           <span>All caught up — nothing waiting on you.</span>
@@ -294,7 +264,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     reviewEl.innerHTML = `
       <div class="review-center__header">
         <h2 class="review-center__title">Review center</h2>
-        <span class="review-center__count">${pending.length} awaiting approval</span>
+        <div class="review-center__header-right">
+          <span class="review-center__count">${pending.length} awaiting approval</span>
+          <a class="card-link" href="#transactions">View All →</a>
+        </div>
       </div>
       <div class="review-center__rows">
         ${visible
@@ -319,7 +292,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
 
     if (budgeted.length === 0) {
       budgetEl.innerHTML = `
-        <h2 class="budget-summary__title">Budget progress</h2>
+        <div class="budget-summary__header">
+          <h2 class="budget-summary__title">Budget progress</h2>
+          <a class="card-link" href="#budgets">View All →</a>
+        </div>
         <p class="budget-summary__empty">No category budgets set yet — set some in Budgets.</p>
       `
       return
@@ -329,7 +305,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     budgetEl.innerHTML = `
       <div class="budget-summary__header">
         <h2 class="budget-summary__title">Budget progress</h2>
-        <a class="budget-summary__link" href="#budgets">View all ${budgeted.length}</a>
+        <a class="card-link" href="#budgets">View All ${budgeted.length} →</a>
       </div>
       <div class="budget-progress-grid">
         ${visible
@@ -349,57 +325,34 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     `
   }
 
-  function renderInvoiceSync(state: AppState): void {
+  /** Invoice Sync and Smart Insight collapse into a single row and vanish
+   * entirely (not just show an empty state) when neither has anything to say —
+   * two near-empty cards read as more clutter than help. */
+  function renderInsightsRow(state: AppState): void {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
-    const autoTx = [...state.transactions]
-      .filter((tx) => tx.source === 'email_auto')
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
-      .slice(0, 3)
-
-    invoiceSyncEl.innerHTML = `
-      <div class="card-header">
-        <div>
-          <h2 class="card-header__title">Invoice sync</h2>
-          <p class="card-header__meta">Auto-captured from connected inboxes</p>
-        </div>
-        <span class="chip chip--accent">Active</span>
-      </div>
-      ${
-        autoTx.length === 0
-          ? `<p class="chart-empty">No auto-captured invoices yet.</p>`
-          : `<div class="invoice-sync__list">
-              ${autoTx
-                .map(
-                  (tx) => `
-                <div class="invoice-sync__row">
-                  <span class="invoice-sync__icon" aria-hidden="true">${categoryById.get(tx.categoryId)?.icon ?? '🧾'}</span>
-                  <div class="invoice-sync__info">
-                    <span class="invoice-sync__merchant">${tx.merchant}</span>
-                    <span class="invoice-sync__date">${formatDateShort(tx.date)}</span>
-                  </div>
-                  <span class="invoice-sync__amount">${formatCurrency(tx.amount)}</span>
-                </div>
-              `,
-                )
-                .join('')}
-            </div>`
-      }
-    `
-  }
-
-  function renderSmartInsight(state: AppState): void {
+    const latestAutoTx = [...state.transactions].filter((tx) => tx.source === 'email_auto').sort((a, b) => (a.date < b.date ? 1 : -1))[0]
     const insight = computeBiggestImprovement(state)
-    smartInsightEl.innerHTML = `
-      <div class="card-header">
-        <span class="smart-insight__icon" aria-hidden="true">💡</span>
-        <h2 class="card-header__title">Smart insight</h2>
-      </div>
-      ${
-        insight
-          ? `<p class="smart-insight__text">Your spending on ${insight.category.name.toLowerCase()} is <strong class="is-good">${Math.round(Math.abs(insight.deltaPercent))}% lower</strong> than last month. You're on track to save an extra ${formatCurrency(insight.savedAmount)}.</p>`
-          : `<p class="smart-insight__text">Keep logging expenses — once there's enough history, personalized spending trends will show up here.</p>`
-      }
-    `
+
+    const rows: string[] = []
+    if (latestAutoTx) {
+      rows.push(`
+        <div class="insights-row__item">
+          <span class="insights-row__icon" aria-hidden="true">${categoryById.get(latestAutoTx.categoryId)?.icon ?? '🧾'}</span>
+          <span class="insights-row__text"><strong>${latestAutoTx.merchant}</strong> auto-captured from your inbox · ${formatCurrency(latestAutoTx.amount)} · ${formatDateShort(latestAutoTx.date)}</span>
+        </div>
+      `)
+    }
+    if (insight) {
+      rows.push(`
+        <div class="insights-row__item">
+          <span class="insights-row__icon" aria-hidden="true">💡</span>
+          <span class="insights-row__text">Spending on ${insight.category.name.toLowerCase()} is <strong class="is-good">${Math.round(Math.abs(insight.deltaPercent))}% lower</strong> than last month — you're on track to save an extra ${formatCurrency(insight.savedAmount)}.</span>
+        </div>
+      `)
+    }
+
+    insightsBandEl.hidden = rows.length === 0
+    insightsRowEl.innerHTML = rows.join('')
   }
 
   function renderActivity(state: AppState): void {

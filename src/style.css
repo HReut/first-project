@@ -1097,23 +1097,6 @@ p {
   background: var(--accent-bg);
 }
 
-/* Flags stat figures that aren't backed by real account/income data yet
- * (see src/data/placeholderFigures.ts) so they read as illustrative, not live. */
-.demo-tag {
-  display: inline-block;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 1px 6px;
-  vertical-align: middle;
-  margin-left: 2px;
-}
-
 /* ---------- Shared card surface for the new Overview panels ---------- */
 
 .panel-card {
@@ -1160,47 +1143,29 @@ p {
   margin-top: 2px;
 }
 
-/* ---------- Overall Current Status banner ---------- */
+/* ---------- Card top-right nav link ("See More" pattern) ---------- */
 
-.status-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.status-banner__lead {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.status-banner__icon {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  border-radius: 12px;
-  background: var(--accent-bg);
-}
-
-.status-banner__title {
-  font-size: 17px;
-  letter-spacing: -0.2px;
-}
-
-.status-banner__meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.card-link {
   font-size: 13px;
-  color: var(--text);
-  margin-top: 2px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
+
+.card-link:hover {
+  text-decoration: underline;
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ---------- Total Available banner ---------- */
 
 .status-dot {
   width: 7px;
@@ -1208,78 +1173,8 @@ p {
   border-radius: 999px;
   background: var(--status-good);
   flex-shrink: 0;
-}
-
-.status-banner__stats {
-  display: flex;
-  gap: 36px;
-  flex-wrap: wrap;
-}
-
-.status-banner__stat {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 110px;
-}
-
-.status-banner__stat-label {
-  font-size: 12px;
-  color: var(--text);
-}
-
-.status-banner__stat-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-h);
-  letter-spacing: -0.4px;
-  font-variant-numeric: tabular-nums;
-}
-
-.status-banner__stat-value-sub {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.status-banner__stat-sub {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.status-banner__stat-sub.is-good {
-  color: var(--status-good);
-}
-
-.mini-meter {
-  width: 100px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--bg);
-  overflow: hidden;
-}
-
-.mini-meter__fill {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--status-good);
-}
-
-/* ---------- Total Available + Monthly Expenses ---------- */
-
-.overview-top-grid,
-.overview-bottom-grid {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 20px;
-  align-items: stretch;
-}
-
-@media (max-width: 860px) {
-  .overview-top-grid,
-  .overview-bottom-grid {
-    grid-template-columns: 1fr;
-  }
+  display: inline-block;
+  margin-right: 6px;
 }
 
 .total-available__value {
@@ -1290,143 +1185,150 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
-.total-available__split {
-  display: flex;
-  gap: 32px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+/* ---------- Settlement Balance + Monthly Expenses ---------- */
+
+.overview-top-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 20px;
+  align-items: stretch;
 }
 
-.total-available__split-item {
+@media (max-width: 860px) {
+  .overview-top-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settlement-card__debt {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.total-available__split-label {
-  font-size: 12px;
+.settlement-card__debt-names {
+  font-size: 14px;
   color: var(--text);
 }
 
-.total-available__split-value {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-h);
-  font-variant-numeric: tabular-nums;
-}
-
-.total-available__balance {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.total-available__balance-label {
-  font-size: 12px;
-  color: var(--text);
-}
-
-.total-available__balance-value {
-  margin-top: 4px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-h);
-}
-
-.total-available__done-btn {
-  margin-top: 12px;
-}
-
-.donut-chart {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.donut-chart__ring {
-  position: relative;
-  width: 128px;
-  height: 128px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.donut-chart__hole {
-  position: absolute;
-  inset: 18px;
-  border-radius: 50%;
-  background: var(--surface);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.donut-chart__total {
-  font-size: 15px;
+.settlement-card__debt-amount {
+  font-size: 28px;
   font-weight: 700;
+  letter-spacing: -0.6px;
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
 }
 
-.donut-chart__total-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
+.settlement-card__settled {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
   color: var(--text);
 }
 
-.donut-legend {
+.settlement-card [data-mark-settled] {
+  margin-top: 16px;
+}
+
+/* ---------- Monthly Expenses (compact progress list) ---------- */
+
+.expense-list__total {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 18px;
+}
+
+.expense-list__total-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.expense-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  flex: 1;
-  min-width: 120px;
+  gap: 14px;
 }
 
-.donut-legend__item {
+.expense-list__row {
   display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.expense-list__label {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
+  font-weight: 600;
   color: var(--text-h);
 }
 
-.donut-legend__dot {
+.expense-list__dot {
   width: 9px;
   height: 9px;
   border-radius: 999px;
   flex-shrink: 0;
 }
 
-/* ---------- Invoice Sync + Smart Insight ---------- */
-
-.invoice-sync__list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.expense-list__amount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.invoice-sync__row {
+.expense-list__pct {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.expense-list__track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.expense-list__fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* ---------- Insights row (merged Invoice Sync + Smart Insight) ---------- */
+/* Hidden entirely by the view when there's nothing to show — see
+ * renderInsightsRow() in OverviewView.ts. */
+
+.insights-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.insights-row__item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
+  padding: 8px 0;
+}
+
+.insights-row__item + .insights-row__item {
   border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 8px;
 }
 
-.invoice-sync__row:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-.invoice-sync__icon {
+.insights-row__icon {
   width: 34px;
   height: 34px;
   flex-shrink: 0;
@@ -1438,46 +1340,7 @@ p {
   background: var(--bg);
 }
 
-.invoice-sync__info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.invoice-sync__merchant {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-h);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.invoice-sync__date {
-  font-size: 12px;
-  color: var(--text);
-}
-
-.invoice-sync__amount {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-h);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.smart-insight-card .card-header {
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.smart-insight__icon {
-  font-size: 20px;
-}
-
-.smart-insight__text {
+.insights-row__text {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-h);
@@ -1496,12 +1359,19 @@ p {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 8px;
 }
 
 .review-center__title {
   font-size: 20px;
   letter-spacing: -0.2px;
+}
+
+.review-center__header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
 }
 
 .review-center__count {
@@ -1589,17 +1459,6 @@ p {
 .budget-summary__empty {
   font-size: 14px;
   color: var(--text);
-}
-
-.budget-summary__link {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.budget-summary__link:hover {
-  text-decoration: underline;
 }
 
 .budget-progress-grid {
