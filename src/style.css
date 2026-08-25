@@ -820,11 +820,13 @@ p {
   font-size: clamp(40px, 6vw, 64px);
   font-weight: 700;
   letter-spacing: -2px;
+  line-height: 1.05;
 }
 
 .hero__subtitle {
   margin-top: 16px;
   font-size: 20px;
+  line-height: 1.4;
   color: var(--text);
   max-width: 46ch;
 }
