@@ -39,17 +39,6 @@ export function renderMerchantCell(tx: Transaction): string {
             </span>`
           : ''
       }
-      ${
-        tx.source === 'ai_capture'
-          ? `<span class="email-badge" title="Filled in from a pasted invoice via AI — reviewed before saving">
-              <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true">
-                <path d="M10 3.5l1.2 3.3 3.3 1.2-3.3 1.2-1.2 3.3-1.2-3.3-3.3-1.2 3.3-1.2z" fill="currentColor" stroke="none"/>
-                <path d="M15.5 12.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" fill="currentColor" stroke="none"/>
-              </svg>
-              <span>AI</span>
-            </span>`
-          : ''
-      }
     </span>
   `
 }

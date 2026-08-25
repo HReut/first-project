@@ -21,7 +21,6 @@ import { showToast } from '../shared/Toast.ts'
 import { PLACEHOLDER_TOTAL_AVAILABLE } from '../../data/placeholderFigures.ts'
 import { columnsIconMarkup, downloadIconMarkup, filterIconMarkup } from '../icons/NavIcons.ts'
 import { openImportFlow } from './TransactionsImport.ts'
-import { parseInvoiceText } from '../../data/invoiceParseService.ts'
 
 const BUDGET_CARD_LIMIT = 3
 
@@ -112,7 +111,6 @@ export class TransactionsView {
     this.wireExport()
     this.wireImport()
     window.addEventListener('opa:new-transaction', () => this.openExpenseModal())
-    window.addEventListener('opa:paste-invoice', () => this.openPasteInvoiceModal())
     store.subscribe((state) => {
       this.updateCategoryOptions(state.categories)
       this.renderBudgetCards(state)
@@ -787,97 +785,42 @@ export class TransactionsView {
     })
   }
 
-  /** Opens the paste-text-box for AI invoice capture — a lightweight modal,
-   * separate from the transaction form, since it has one job: turn pasted
-   * text into a draft. The draft always lands in openExpenseModal() for
-   * review/edit, same as a manual entry — nothing is saved from here. */
-  private openPasteInvoiceModal(): void {
-    const modal = new Modal(
-      `
-        <h2 class="modal__title">Paste invoice</h2>
-        <p class="import-preview__hint">Paste the invoice or receipt email text below — AI fills in what it can, but you still review it before saving.</p>
-        <textarea class="filter-input" id="paste-invoice-text" rows="10" style="width: 100%; resize: vertical;" placeholder="Paste invoice/receipt text here…"></textarea>
-        <div class="modal__actions">
-          <button type="button" class="btn" id="paste-invoice-cancel">Cancel</button>
-          <button type="button" class="btn btn--primary" id="paste-invoice-parse">Parse with AI</button>
-        </div>
-      `,
-      { ariaLabel: 'Paste invoice' },
-    )
-
-    modal.element.querySelector<HTMLButtonElement>('#paste-invoice-cancel')!.addEventListener('click', () => modal.close())
-    modal.element.querySelector<HTMLButtonElement>('#paste-invoice-parse')!.addEventListener('click', () => {
-      void this.submitPasteInvoice(modal)
-    })
-  }
-
-  private async submitPasteInvoice(modal: Modal): Promise<void> {
-    const textarea = modal.element.querySelector<HTMLTextAreaElement>('#paste-invoice-text')!
-    const text = textarea.value.trim()
-    if (!text) return
-
-    const parseBtn = modal.element.querySelector<HTMLButtonElement>('#paste-invoice-parse')!
-    parseBtn.disabled = true
-    parseBtn.textContent = 'Parsing…'
-
-    try {
-      const { categories } = this.#store.getState()
-      const parsed = await parseInvoiceText(text, categories)
-      modal.close()
-      this.openExpenseModal(undefined, {
-        date: parsed.date ?? undefined,
-        merchant: parsed.merchant ?? undefined,
-        amount: parsed.amount ?? undefined,
-        categoryId: parsed.categoryId ?? undefined,
-        source: 'ai_capture',
-      })
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not parse that invoice.')
-      parseBtn.disabled = false
-      parseBtn.textContent = 'Parse with AI'
-    }
-  }
-
-  /** `draft` prefills a new (non-edit) form from an AI-parsed invoice —
-   * `existing` always wins when both could apply, but the two are never
-   * passed together in practice. */
-  private openExpenseModal(existing?: Transaction, draft?: Partial<NewTransaction>): void {
+  private openExpenseModal(existing?: Transaction): void {
     const { categories } = this.#store.getState()
     const isEdit = !!existing
     const today = isoDate(new Date())
-    const seed = existing ?? draft
     const modal = new Modal(
       `
         <h2 class="modal__title">${isEdit ? 'Edit transaction' : 'Add transaction'}</h2>
         <form class="modal__form" id="add-expense-form">
           <label class="filter-group">
             <span class="filter-group__label">Date</span>
-            <input type="date" class="filter-input" name="date" value="${seed?.date ?? today}" required>
+            <input type="date" class="filter-input" name="date" value="${existing?.date ?? today}" required>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Merchant</span>
-            <input type="text" class="filter-input" name="merchant" placeholder="e.g. Shufersal" value="${seed?.merchant ?? ''}" required>
+            <input type="text" class="filter-input" name="merchant" placeholder="e.g. Shufersal" value="${existing?.merchant ?? ''}" required>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Amount</span>
-            <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${seed?.amount ?? ''}" required>
+            <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing?.amount ?? ''}" required>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Category</span>
             <select class="filter-select" name="categoryId" required>
-              ${categories.map((c) => `<option value="${c.id}" ${c.id === seed?.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
+              ${categories.map((c) => `<option value="${c.id}" ${c.id === existing?.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
             </select>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Account</span>
             <select class="filter-select" name="account" required>
-              ${ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === (seed?.account ?? 'shared') ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')}
+              ${ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === (existing?.account ?? 'shared') ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')}
             </select>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">Person</span>
             <select class="filter-select" name="person" required>
-              ${PEOPLE.map((p) => `<option value="${p}" ${p === seed?.person ? 'selected' : ''}>${p}</option>`).join('')}
+              ${PEOPLE.map((p) => `<option value="${p}" ${p === existing?.person ? 'selected' : ''}>${p}</option>`).join('')}
             </select>
           </label>
           <div class="modal__actions">
@@ -919,7 +862,7 @@ export class TransactionsView {
         account,
         person: PERSON_FOR_ACCOUNT[account] ?? (data.get('person') as Person),
         status: existing?.status ?? computeReviewedStatus(state.transactions, state.categories, categoryId),
-        source: existing?.source ?? draft?.source ?? 'manual',
+        source: existing?.source ?? 'manual',
       }
       if (isEdit) {
         this.commitEdit(existing.id, input)

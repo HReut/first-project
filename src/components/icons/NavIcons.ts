@@ -165,15 +165,6 @@ export function uploadIconMarkup(): string {
   `.trim()
 }
 
-export function sparkleIconMarkup(): string {
-  return `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" fill="currentColor" />
-      <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" fill="currentColor" />
-    </svg>
-  `.trim()
-}
-
 export function downloadIconMarkup(): string {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
