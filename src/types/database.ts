@@ -5,7 +5,7 @@
 export type PersonRow = 'Reut' | 'Keren'
 export type AccountRow = 'reut_personal' | 'keren_personal' | 'shared'
 export type TransactionStatusRow = 'pending' | 'on_budget' | 'exceeded'
-export type TransactionSourceRow = 'manual' | 'email_auto' | 'import' | 'recurring'
+export type TransactionSourceRow = 'manual' | 'email_auto' | 'import' | 'recurring' | 'ai_capture'
 
 export interface CategoryRow {
   id: string

@@ -7,7 +7,7 @@ export type Account = 'reut_personal' | 'keren_personal' | 'shared'
  * its category's current budget standing into 'on_budget' or 'exceeded' —
  * see markReviewed() in TransactionsView.ts. */
 export type TransactionStatus = 'pending' | 'on_budget' | 'exceeded'
-export type TransactionSource = 'manual' | 'email_auto' | 'import' | 'recurring'
+export type TransactionSource = 'manual' | 'email_auto' | 'import' | 'recurring' | 'ai_capture'
 
 export interface Category {
   id: string

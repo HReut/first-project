@@ -22,6 +22,7 @@ import {
   refreshIconMarkup,
   searchIconMarkup,
   shieldCheckIconMarkup,
+  sparkleIconMarkup,
   targetIconMarkup,
   uploadIconMarkup,
   walletIconMarkup,
@@ -151,6 +152,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         <div class="sidebar__actions">
           <button type="button" class="btn btn--primary btn--block" id="new-transaction-btn">${plusIconMarkup()}<span>New Transaction</span></button>
           <button type="button" class="btn btn--block" id="import-btn" title="CSV and Excel (.xlsx) supported — PDF is not">${uploadIconMarkup()}<span>Import CSV/XLSX</span></button>
+          <button type="button" class="btn btn--block" id="paste-invoice-btn" title="Paste invoice/receipt text and let AI fill in the details">${sparkleIconMarkup()}<span>Paste invoice (AI)</span></button>
         </div>
         <nav class="sidebar__nav" aria-label="Primary">
           ${PRIMARY_VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}
@@ -293,6 +295,11 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   root.querySelector<HTMLButtonElement>('#import-btn')!.addEventListener('click', () => {
     navigate('transactions')
     window.dispatchEvent(new CustomEvent('opa:import-transactions'))
+  })
+
+  root.querySelector<HTMLButtonElement>('#paste-invoice-btn')!.addEventListener('click', () => {
+    navigate('transactions')
+    window.dispatchEvent(new CustomEvent('opa:paste-invoice'))
   })
 
   const globalSearch = root.querySelector<HTMLInputElement>('#global-search')!
