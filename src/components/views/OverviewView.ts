@@ -1,12 +1,11 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category } from '../../types.ts'
-import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
+import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { updateTransaction } from '../../data/transactionsRepo.ts'
 import { loadBalanceSettledAt, saveBalanceSettledAt } from '../../data/balanceSettleSettings.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
-import { PLACEHOLDER_EMERGENCY_FUND, PLACEHOLDER_SHARED_ACCOUNT } from '../../data/placeholderFigures.ts'
 
 const RECENT_ACTIVITY_LIMIT = 5
 const REVIEW_CENTER_LIMIT = 6
@@ -188,7 +187,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   }
 
   function renderStatusBanner(state: AppState): void {
-    const total = PLACEHOLDER_SHARED_ACCOUNT + PLACEHOLDER_EMERGENCY_FUND
+    const total = computeTotalAvailable(state.transactions, state.accountBalance)
     const trend = computeSpendTrend(state)
     const balance = computeSplitBalance(state.transactions, new Date(), loadBalanceSettledAt())
 
@@ -196,22 +195,32 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
       <div class="card-header">
         <div>
           <h2 class="card-header__title">Total Available</h2>
-          <p class="card-header__meta"><span class="status-dot" aria-hidden="true"></span>On track · Updated just now</p>
+          <p class="card-header__meta">
+            ${
+              total === null
+                ? 'Not tracked yet'
+                : `<span class="status-dot" aria-hidden="true"></span>As of ${formatDateShort(state.accountBalance!.setAt)}`
+            }
+          </p>
         </div>
-        <a class="card-link" href="#accounts">See Details →</a>
+        <a class="card-link" href="#settings">${total === null ? 'Set balance →' : 'Update balance →'}</a>
       </div>
       <div class="hero-card__split">
         <div class="hero-card__left">
-          <p class="total-available__value">${formatCurrency(total)}</p>
           ${
-            trend.deltaPercent === null
-              ? ''
-              : `<div class="hero-card__trend">
-                   ${renderSparkline(trend.series)}
-                   <span class="hero-card__trend-label ${trend.deltaPercent <= 0 ? 'is-good' : 'is-bad'}">
-                     ${trend.deltaPercent <= 0 ? '↓' : '↑'} ${Math.abs(Math.round(trend.deltaPercent * 10) / 10)}% <span class="hero-card__trend-caption">vs last 3-mo avg</span>
-                   </span>
-                 </div>`
+            total === null
+              ? `<p class="total-available__empty">Enter your shared account's balance in Settings to track this.</p>`
+              : `<p class="total-available__value">${formatCurrency(total)}</p>
+                 ${
+                   trend.deltaPercent === null
+                     ? ''
+                     : `<div class="hero-card__trend">
+                          ${renderSparkline(trend.series)}
+                          <span class="hero-card__trend-label ${trend.deltaPercent <= 0 ? 'is-good' : 'is-bad'}">
+                            ${trend.deltaPercent <= 0 ? '↓' : '↑'} ${Math.abs(Math.round(trend.deltaPercent * 10) / 10)}% <span class="hero-card__trend-caption">vs last 3-mo avg</span>
+                          </span>
+                        </div>`
+                 }`
           }
         </div>
         <div class="hero-card__right">

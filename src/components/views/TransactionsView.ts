@@ -2,7 +2,7 @@ import type { Store } from '../../state/store.ts'
 import type { Account, AppState, Category, NewTransaction, Person, Transaction, TransactionStatus } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel } from '../../utils/format.ts'
-import { computeReviewedStatus, topBudgetedCategories } from '../../utils/insights.ts'
+import { computeReviewedStatus, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
 import {
@@ -18,7 +18,6 @@ import {
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
-import { PLACEHOLDER_TOTAL_AVAILABLE } from '../../data/placeholderFigures.ts'
 import { columnsIconMarkup, downloadIconMarkup, filterIconMarkup } from '../icons/NavIcons.ts'
 import { openImportFlow } from './TransactionsImport.ts'
 
@@ -113,9 +112,11 @@ export class TransactionsView {
     window.addEventListener('opa:new-transaction', () => this.openExpenseModal())
     store.subscribe((state) => {
       this.updateCategoryOptions(state.categories)
+      this.renderTotalAvailable(state)
       this.renderBudgetCards(state)
       this.renderTable(state)
     })
+    this.renderTotalAvailable(store.getState())
     this.renderBudgetCards(store.getState())
     this.renderTable(store.getState())
   }
@@ -124,6 +125,11 @@ export class TransactionsView {
     window.addEventListener('opa:import-transactions', () => {
       openImportFlow(this.#store, this.#currentPerson)
     })
+  }
+
+  private renderTotalAvailable(state: AppState): void {
+    const total = computeTotalAvailable(state.transactions, state.accountBalance)
+    this.#container.querySelector<HTMLElement>('#tx-total-available')!.textContent = total === null ? 'Not set' : formatCurrency(total)
   }
 
   private renderBudgetCards(state: AppState): void {
@@ -197,7 +203,7 @@ export class TransactionsView {
             <div class="tx-page-header__actions">
               <div class="tx-page-header__stat">
                 <span class="tx-page-header__stat-label">Total available</span>
-                <span class="tx-page-header__stat-value">${formatCurrency(PLACEHOLDER_TOTAL_AVAILABLE)}</span>
+                <span class="tx-page-header__stat-value" id="tx-total-available"></span>
               </div>
             </div>
           </div>

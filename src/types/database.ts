@@ -47,6 +47,13 @@ export interface MappingRuleRow {
   updated_at: string
 }
 
+export interface AccountBalanceRow {
+  id: string
+  starting_balance: number
+  set_at: string
+  updated_at: string
+}
+
 export interface RecurringRuleRow {
   id: string
   merchant: string

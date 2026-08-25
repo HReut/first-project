@@ -85,6 +85,16 @@ export interface RecurringRule {
 
 export type NewRecurringRule = Omit<RecurringRule, 'id' | 'lastGeneratedMonth' | 'occurrencesGenerated'>
 
+/** The shared account's real balance, entered once by a household member
+ * and recalibrated whenever they want (e.g. after checking the real bank
+ * balance). "Total Available" on Overview is startingBalance minus
+ * 'shared'-account spending logged since setAt — see
+ * computeTotalAvailable() in src/utils/insights.ts. */
+export interface AccountBalance {
+  startingBalance: number
+  setAt: string // ISO yyyy-mm-dd
+}
+
 export type PeriodFilter =
   | { kind: 'month'; month: string } // YYYY-MM
   | { kind: 'range'; start: string; end: string } // ISO dates, inclusive
@@ -110,5 +120,6 @@ export interface AppState {
   emailRules: EmailSyncRule[]
   mappingRules: MappingRule[]
   recurringRules: RecurringRule[]
+  accountBalance: AccountBalance | null
   filters: Filters
 }

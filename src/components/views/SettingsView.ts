@@ -4,7 +4,9 @@ import { createCategory, deleteCategory, updateCategory } from '../../data/categ
 import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/emailRulesRepo.ts'
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
 import { createRecurringRule, deleteRecurringRule, updateRecurringRule } from '../../data/recurringRulesRepo.ts'
+import { setAccountBalance } from '../../data/accountBalanceRepo.ts'
 import { ACCOUNT_LABEL } from '../shared/transactionCells.ts'
+import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { effectiveTheme } from '../../lib/theme.ts'
 import { moonIconMarkup, sunIconMarkup } from '../icons/ThemeIcons.ts'
 
@@ -43,6 +45,24 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
             <span class="theme-toggle__icon" aria-hidden="true">${themeToggleIcon()}</span>
             <span>Theme</span>
           </button>
+        </section>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="band__inner">
+        <section class="settings-card" aria-label="Shared account balance">
+          <h2 class="settings-card__title">Shared account balance</h2>
+          <p class="settings-card__desc">
+            "Total Available" (Overview and Transactions) is this balance minus 'Shared' account spending
+            logged since the date below. Update it any time you check the real bank balance — each save
+            resets the starting point to today.
+          </p>
+          <div class="settings-list__row" id="account-balance-row">
+            <input type="number" class="budget-input" id="account-balance-input" placeholder="Current balance" min="0" step="1">
+            <button type="button" class="btn btn--primary btn--sm" id="account-balance-save">Save balance</button>
+            <span class="settings-list__usage" id="account-balance-status"></span>
+          </div>
         </section>
       </div>
     </section>
@@ -102,6 +122,28 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
   const emailAccountsEl = root.querySelector<HTMLElement>('#email-accounts')!
   const ruleBuilderEl = root.querySelector<HTMLElement>('#rule-builder')!
   const recurringManagerEl = root.querySelector<HTMLElement>('#recurring-manager')!
+
+  // ---------- Shared account balance ----------
+
+  const accountBalanceInput = root.querySelector<HTMLInputElement>('#account-balance-input')!
+  const accountBalanceStatusEl = root.querySelector<HTMLElement>('#account-balance-status')!
+
+  function renderAccountBalance(state: AppState): void {
+    const balance = state.accountBalance
+    if (document.activeElement !== accountBalanceInput) {
+      accountBalanceInput.value = balance ? String(balance.startingBalance) : ''
+    }
+    accountBalanceStatusEl.textContent = balance ? `As of ${formatDateShort(balance.setAt)} — currently ${formatCurrency(balance.startingBalance)}` : 'Not set yet'
+  }
+
+  root.querySelector<HTMLButtonElement>('#account-balance-save')!.addEventListener('click', () => {
+    const startingBalance = Number(accountBalanceInput.value)
+    if (!Number.isFinite(startingBalance) || startingBalance < 0) return
+    const today = new Date().toISOString().slice(0, 10)
+    setAccountBalance({ startingBalance, setAt: today }).then((accountBalance) => {
+      store.setState({ accountBalance })
+    })
+  })
 
   // ---------- Category manager ----------
 
@@ -430,11 +472,13 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
   })
 
   store.subscribe((state) => {
+    renderAccountBalance(state)
     renderCategoryManager(state)
     renderRuleBuilder(state)
     renderRecurringManager(state)
   })
 
+  renderAccountBalance(store.getState())
   renderCategoryManager(store.getState())
   renderEmailAccounts()
   renderRuleBuilder(store.getState())

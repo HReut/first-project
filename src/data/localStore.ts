@@ -1,4 +1,4 @@
-import type { Category, EmailSyncRule, MappingRule, RecurringRule, Transaction } from '../types.ts'
+import type { AccountBalance, Category, EmailSyncRule, MappingRule, RecurringRule, Transaction } from '../types.ts'
 import { SEED_CATEGORIES } from './mockCategories.ts'
 import { createMockTransactions } from './mockTransactions.ts'
 
@@ -12,6 +12,7 @@ const KEYS = {
   emailRules: 'opa-tulik:email-rules',
   mappingRules: 'opa-tulik:mapping-rules',
   recurringRules: 'opa-tulik:recurring-rules',
+  accountBalance: 'opa-tulik:account-balance',
 } as const
 
 function read<T>(key: string): T | null {
@@ -90,4 +91,12 @@ export function loadLocalRecurringRules(): RecurringRule[] {
 
 export function saveLocalRecurringRules(rules: RecurringRule[]): void {
   write(KEYS.recurringRules, rules)
+}
+
+export function loadLocalAccountBalance(): AccountBalance | null {
+  return read<AccountBalance>(KEYS.accountBalance)
+}
+
+export function saveLocalAccountBalance(balance: AccountBalance): void {
+  write(KEYS.accountBalance, balance)
 }

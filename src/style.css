@@ -1195,6 +1195,12 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
+.total-available__empty {
+  font-size: 15px;
+  color: var(--text);
+  max-width: 32ch;
+}
+
 /* ---------- Total Available hero card (funds + trend + settlement) ---------- */
 
 .hero-card__split {

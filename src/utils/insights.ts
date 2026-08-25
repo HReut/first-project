@@ -1,4 +1,4 @@
-import type { Category, Filters, Person, Transaction, TransactionStatus } from '../types.ts'
+import type { AccountBalance, Category, Filters, Person, Transaction, TransactionStatus } from '../types.ts'
 import { budgetPercent, budgetStatus } from './budget.ts'
 import { matchesPeriod } from './filters.ts'
 
@@ -156,4 +156,18 @@ export function computeSplitBalance(transactions: Transaction[], referenceDate =
   const amount = Math.round(Math.abs(diff))
   if (amount === 0) return null
   return diff > 0 ? { owingPerson: 'Keren', owedPerson: 'Reut', amount } : { owingPerson: 'Reut', owedPerson: 'Keren', amount }
+}
+
+/**
+ * "Total Available" — the household enters the shared account's real
+ * balance once (AccountBalance.startingBalance, as of setAt), and this
+ * subtracts every 'shared'-account transaction logged since then. Personal
+ * account transactions don't touch it, same as computeSplitBalance's model:
+ * 'shared' spending comes out of this pool directly, personal spending
+ * doesn't. Null in, null out — nothing to show until a balance is set.
+ */
+export function computeTotalAvailable(transactions: Transaction[], balance: AccountBalance | null): number | null {
+  if (!balance) return null
+  const spentSinceSet = sum(transactions.filter((tx) => tx.account === 'shared' && tx.date >= balance.setAt))
+  return balance.startingBalance - spentSinceSet
 }
