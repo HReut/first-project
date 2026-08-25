@@ -1,3 +1,4 @@
+import { readSheet } from 'read-excel-file/browser'
 import type { Category, MappingRule, NewTransaction, Person, Transaction } from '../types.ts'
 import { normalizeMerchantKey } from './mappingRulesRepo.ts'
 import { createTransactions } from './transactionsRepo.ts'
@@ -89,6 +90,22 @@ export function parseCsv(text: string): string[][] {
   return rows.filter((cells) => !(cells.length === 1 && cells[0] === ''))
 }
 
+/** Reads the first sheet of an XLSX/XLS file into the same string[][] shape
+ * parseCsv() produces, so buildImportPreviewFromTable() can't tell the two
+ * apart. Cell values come back typed (numbers, dates, booleans) — stringify
+ * them here rather than downstream, since a Date is turned into an ISO
+ * yyyy-mm-dd string that parseDate() below already knows how to read. */
+export async function parseXlsx(file: File): Promise<string[][]> {
+  const rows = await readSheet(file)
+  return rows.map((row) =>
+    row.map((cell) => {
+      if (cell === null || cell === undefined) return ''
+      if (cell instanceof Date) return cell.toISOString().slice(0, 10)
+      return String(cell)
+    }),
+  )
+}
+
 function normalizeHeader(header: string): string {
   return header.trim().toLowerCase()
 }
@@ -131,15 +148,23 @@ function parseDate(raw: string | undefined): string | null {
 }
 
 /**
- * Parses a CSV file into reviewable rows: detects Hebrew/English headers,
- * then — for anything the file didn't specify — checks stored mapping
- * rules (keyed by normalized merchant text) before leaving a field genuinely
- * unmapped for the preview UI to flag. Doesn't touch Supabase/localStore;
- * nothing is written until commitImportedRows() is called on the rows the
- * user confirms in the preview grid.
+ * Parses a CSV file into reviewable rows — see buildImportPreviewFromTable()
+ * for the shared logic; this just adds the CSV-specific text -> table step.
  */
 export function buildImportPreview(csvText: string, categories: Category[], mappingRules: MappingRule[]): ParsedImportRow[] {
-  const table = parseCsv(csvText)
+  return buildImportPreviewFromTable(parseCsv(csvText), categories, mappingRules)
+}
+
+/**
+ * Turns an already-tabular file (CSV rows, or an XLSX sheet read into
+ * string[][]) into reviewable rows: detects Hebrew/English headers, then —
+ * for anything the file didn't specify — checks stored mapping rules (keyed
+ * by normalized merchant text) before leaving a field genuinely unmapped for
+ * the preview UI to flag. Doesn't touch Supabase/localStore; nothing is
+ * written until commitImportedRows() is called on the rows the user
+ * confirms in the preview grid.
+ */
+export function buildImportPreviewFromTable(table: string[][], categories: Category[], mappingRules: MappingRule[]): ParsedImportRow[] {
   if (table.length < 2) return []
 
   const [headerRow, ...dataRows] = table

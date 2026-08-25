@@ -1,12 +1,18 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Person } from '../../types.ts'
+import type { Account, AppState, NewRecurringRule, Person } from '../../types.ts'
 import { createCategory, deleteCategory, updateCategory } from '../../data/categoriesRepo.ts'
 import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/emailRulesRepo.ts'
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
+import { createRecurringRule, deleteRecurringRule, updateRecurringRule } from '../../data/recurringRulesRepo.ts'
+import { ACCOUNT_LABEL } from '../shared/transactionCells.ts'
 import { effectiveTheme } from '../../lib/theme.ts'
 import { moonIconMarkup, sunIconMarkup } from '../icons/ThemeIcons.ts'
 
 const PEOPLE: Person[] = ['Reut', 'Keren']
+const ACCOUNT_VALUES: Account[] = ['shared', 'reut_personal', 'keren_personal']
+/** A personal account locks the person, same rule as the transaction form. */
+const PERSON_FOR_ACCOUNT: Partial<Record<Account, Person>> = { reut_personal: 'Reut', keren_personal: 'Keren' }
+const CURRENT_MONTH = new Date().toISOString().slice(0, 7)
 
 /** Icon shows the mode a click switches *to* (moon while light, sun while
  * dark) — the actual toggle+icon-sync is wired centrally in App.ts via a
@@ -74,11 +80,25 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
         </section>
       </div>
     </section>
+
+    <section class="band">
+      <div class="band__inner">
+        <section class="settings-card" aria-label="Recurring expenses">
+          <h2 class="settings-card__title">Recurring expenses</h2>
+          <p class="settings-card__desc">
+            Bills that repeat every N months (rent, internet, building committee…). Each due
+            rule adds a Pending transaction for the current month automatically when the app loads.
+          </p>
+          <div class="settings-list settings-list--recurring" id="recurring-manager"></div>
+        </section>
+      </div>
+    </section>
   `
 
   const categoryManagerEl = root.querySelector<HTMLElement>('#category-manager')!
   const emailAccountsEl = root.querySelector<HTMLElement>('#email-accounts')!
   const ruleBuilderEl = root.querySelector<HTMLElement>('#rule-builder')!
+  const recurringManagerEl = root.querySelector<HTMLElement>('#recurring-manager')!
 
   // ---------- Category manager ----------
 
@@ -276,12 +296,128 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
     }
   })
 
+  // ---------- Recurring expenses ----------
+
+  function renderRecurringManager(state: AppState): void {
+    const categoryOptions = (selectedId: string) =>
+      state.categories.map((c) => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')
+    const accountOptions = (selected: Account) => ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === selected ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')
+
+    recurringManagerEl.innerHTML = `
+      ${state.recurringRules
+        .map(
+          (rule) => `
+        <div class="settings-list__row" data-id="${rule.id}">
+          <input type="text" class="name-input" value="${rule.merchant}" placeholder="Bill name" data-rule-field="merchant">
+          <input type="number" class="budget-input" value="${rule.amount}" min="0" step="1" title="Amount" data-rule-field="amount">
+          <select class="filter-select" data-rule-field="categoryId">${categoryOptions(rule.categoryId)}</select>
+          <select class="filter-select" data-rule-field="account">${accountOptions(rule.account)}</select>
+          <span class="settings-list__inline-field">
+            <span>Every</span>
+            <input type="number" class="icon-input" value="${rule.intervalMonths}" min="1" max="24" title="Every N months" data-rule-field="intervalMonths">
+            <span>mo · day</span>
+            <input type="number" class="icon-input" value="${rule.dayOfMonth}" min="1" max="28" title="Day of month" data-rule-field="dayOfMonth">
+          </span>
+          <span class="settings-list__usage">${rule.lastGeneratedMonth === CURRENT_MONTH ? 'Generated this month' : 'Not yet generated this month'}</span>
+          <label class="toggle">
+            <input type="checkbox" data-rule-field="isActive" ${rule.isActive ? 'checked' : ''}>
+            <span class="toggle__track"><span class="toggle__thumb"></span></span>
+            <span class="toggle__label">Active</span>
+          </label>
+          <button type="button" class="btn btn--sm btn--danger" data-delete-recurring="${rule.id}">Delete</button>
+        </div>
+      `,
+        )
+        .join('')}
+      <div class="settings-list__row settings-list__row--add">
+        <input type="text" class="name-input" id="new-recurring-merchant" placeholder="Bill name (e.g. Rent)">
+        <input type="number" class="budget-input" id="new-recurring-amount" placeholder="Amount" min="0" step="1">
+        <select class="filter-select" id="new-recurring-category">${categoryOptions('')}</select>
+        <select class="filter-select" id="new-recurring-account">${accountOptions('shared')}</select>
+        <span class="settings-list__inline-field">
+          <span>Every</span>
+          <input type="number" class="icon-input" id="new-recurring-interval" value="1" min="1" max="24" title="Every N months">
+          <span>mo · day</span>
+          <input type="number" class="icon-input" id="new-recurring-day" value="1" min="1" max="28" title="Day of month">
+        </span>
+        <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ Add</button>
+      </div>
+    `
+  }
+
+  recurringManagerEl.addEventListener('change', (event) => {
+    const input = (event.target as HTMLElement).closest<HTMLElement>('[data-rule-field]') as HTMLInputElement | HTMLSelectElement | null
+    if (!input) return
+    const row = input.closest<HTMLElement>('.settings-list__row')!
+    const id = row.dataset.id
+    if (!id) return
+    const field = input.dataset.ruleField as keyof NewRecurringRule
+    const rule = store.getState().recurringRules.find((r) => r.id === id)
+    if (!rule) return
+
+    let patch: Partial<NewRecurringRule>
+    if (field === 'isActive') patch = { isActive: (input as HTMLInputElement).checked }
+    else if (field === 'amount' || field === 'intervalMonths' || field === 'dayOfMonth') patch = { [field]: Number(input.value) }
+    else if (field === 'account') {
+      const account = input.value as Account
+      patch = { account, person: PERSON_FOR_ACCOUNT[account] ?? rule.person }
+    } else patch = { [field]: input.value }
+
+    updateRecurringRule(id, patch).then((updated) => {
+      const { recurringRules } = store.getState()
+      store.setState({ recurringRules: recurringRules.map((r) => (r.id === updated.id ? updated : r)) })
+    })
+  })
+
+  recurringManagerEl.addEventListener('click', (event) => {
+    const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-recurring]')
+    if (deleteBtn) {
+      const id = deleteBtn.dataset.deleteRecurring!
+      deleteRecurringRule(id).then(() => {
+        const { recurringRules } = store.getState()
+        store.setState({ recurringRules: recurringRules.filter((r) => r.id !== id) })
+      })
+      return
+    }
+
+    if ((event.target as HTMLElement).id === 'add-recurring-btn') {
+      const merchantInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-merchant')!
+      const amountInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-amount')!
+      const categorySelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-category')!
+      const accountSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-account')!
+      const intervalInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-interval')!
+      const dayInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-day')!
+
+      const merchant = merchantInput.value.trim()
+      const amount = Number(amountInput.value)
+      if (!merchant || !Number.isFinite(amount) || amount <= 0 || !categorySelect.value) return
+      const account = accountSelect.value as Account
+
+      createRecurringRule({
+        merchant,
+        amount,
+        categoryId: categorySelect.value,
+        account,
+        person: PERSON_FOR_ACCOUNT[account] ?? 'Reut',
+        intervalMonths: Math.max(1, Number(intervalInput.value) || 1),
+        anchorMonth: CURRENT_MONTH,
+        dayOfMonth: Math.min(28, Math.max(1, Number(dayInput.value) || 1)),
+        isActive: true,
+      }).then((created) => {
+        const { recurringRules } = store.getState()
+        store.setState({ recurringRules: [...recurringRules, created] })
+      })
+    }
+  })
+
   store.subscribe((state) => {
     renderCategoryManager(state)
     renderRuleBuilder(state)
+    renderRecurringManager(state)
   })
 
   renderCategoryManager(store.getState())
   renderEmailAccounts()
   renderRuleBuilder(store.getState())
+  renderRecurringManager(store.getState())
 }

@@ -1,9 +1,11 @@
 import { Store } from '../state/store.ts'
 import type { AppState, View } from '../types.ts'
 import { listCategories } from '../data/categoriesRepo.ts'
-import { listTransactions } from '../data/transactionsRepo.ts'
+import { createTransactions, listTransactions } from '../data/transactionsRepo.ts'
 import { listEmailRules } from '../data/emailRulesRepo.ts'
 import { listMappingRules } from '../data/mappingRulesRepo.ts'
+import { listRecurringRules, updateRecurringRule } from '../data/recurringRulesRepo.ts'
+import { findRulesDueForGeneration, transactionForDueRule } from '../utils/recurring.ts'
 import { personFromEmail, signOut } from '../lib/auth.ts'
 import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
 import { mountAuthGate } from './AuthGate.ts'
@@ -91,6 +93,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     transactions: [],
     emailRules: [],
     mappingRules: [],
+    recurringRules: [],
     filters: {
       categoryId: 'all',
       person: 'all',
@@ -100,13 +103,36 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   })
 
   function loadHouseholdData(): Promise<void> {
-    return Promise.all([listCategories(), listTransactions(), listEmailRules(), listMappingRules()])
-      .then(([categories, transactions, emailRules, mappingRules]) => {
-        store.setState({ categories, transactions, emailRules, mappingRules, status: 'ready' })
+    return Promise.all([listCategories(), listTransactions(), listEmailRules(), listMappingRules(), listRecurringRules()])
+      .then(([categories, transactions, emailRules, mappingRules, recurringRules]) => {
+        store.setState({ categories, transactions, emailRules, mappingRules, recurringRules, status: 'ready' })
+        return generateDueRecurringTransactions()
       })
       .catch((err: unknown) => {
         store.setState({ status: 'error', error: err instanceof Error ? err.message : 'Failed to load your household data.' })
       })
+  }
+
+  /** Auto-creates this month's transaction for every active recurring rule
+   * that's due and hasn't already generated one this month — runs once per
+   * app load, right after household data is ready. New rows land 'pending'
+   * so they go through the normal review flow, same as an import. */
+  function generateDueRecurringTransactions(): Promise<void> {
+    const monthKey = new Date().toISOString().slice(0, 7)
+    const due = findRulesDueForGeneration(store.getState().recurringRules, monthKey)
+    if (due.length === 0) return Promise.resolve()
+
+    return Promise.all([
+      createTransactions(due.map((rule) => transactionForDueRule(rule, monthKey))),
+      Promise.all(due.map((rule) => updateRecurringRule(rule.id, { lastGeneratedMonth: monthKey }))),
+    ]).then(([created, updatedRules]) => {
+      const updatedById = new Map(updatedRules.map((rule) => [rule.id, rule]))
+      const state = store.getState()
+      store.setState({
+        transactions: [...created, ...state.transactions],
+        recurringRules: state.recurringRules.map((rule) => updatedById.get(rule.id) ?? rule),
+      })
+    })
   }
 
   root.innerHTML = `
@@ -124,7 +150,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         </div>
         <div class="sidebar__actions">
           <button type="button" class="btn btn--primary btn--block" id="new-transaction-btn">${plusIconMarkup()}<span>New Transaction</span></button>
-          <button type="button" class="btn btn--block" id="import-btn" title="CSV supported now — XLSX/PDF coming soon">${uploadIconMarkup()}<span>Import CSV/PDF</span></button>
+          <button type="button" class="btn btn--block" id="import-btn" title="CSV and Excel (.xlsx) supported — PDF is not">${uploadIconMarkup()}<span>Import CSV/XLSX</span></button>
         </div>
         <nav class="sidebar__nav" aria-label="Primary">
           ${PRIMARY_VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}

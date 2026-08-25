@@ -6,6 +6,29 @@ export function matchesPeriod(date: string, period: Filters['period']): boolean 
   return date >= period.start && date <= period.end
 }
 
+export type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'all'
+
+function monthKeyOffset(monthsAgo: number, from: Date): string {
+  return new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1).toISOString().slice(0, 7)
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+/** Shared preset -> Filters['period'] conversion for any view that offers a
+ * simple period dropdown (Budgets, Analytics) without the Transactions
+ * page's extra "custom range" option. */
+export function periodPresetToFilter(preset: PeriodPreset, from = new Date()): Filters['period'] {
+  if (preset === 'this-month') return { kind: 'month', month: monthKeyOffset(0, from) }
+  if (preset === 'last-month') return { kind: 'month', month: monthKeyOffset(1, from) }
+  if (preset === 'all') return { kind: 'all' }
+
+  const start = new Date(from)
+  start.setMonth(start.getMonth() - (preset === 'last-3' ? 3 : 6))
+  return { kind: 'range', start: isoDate(start), end: isoDate(from) }
+}
+
 export function filterTransactions(transactions: Transaction[], filters: Filters): Transaction[] {
   const search = filters.search.trim().toLowerCase()
   return transactions.filter((tx) => {

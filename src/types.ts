@@ -7,7 +7,7 @@ export type Account = 'reut_personal' | 'keren_personal' | 'shared'
  * its category's current budget standing into 'on_budget' or 'exceeded' —
  * see markReviewed() in TransactionsView.ts. */
 export type TransactionStatus = 'pending' | 'on_budget' | 'exceeded'
-export type TransactionSource = 'manual' | 'email_auto' | 'import'
+export type TransactionSource = 'manual' | 'email_auto' | 'import' | 'recurring'
 
 export interface Category {
   id: string
@@ -57,6 +57,28 @@ export interface MappingRule {
 
 export type NewMappingRule = Omit<MappingRule, 'id' | 'updatedAt'>
 
+/** A bill that repeats every N months (rent, internet, building committee…).
+ * `anchorMonth` (YYYY-MM) is the first month it's due; due months are
+ * anchorMonth, anchorMonth+intervalMonths, +2*intervalMonths, etc. —
+ * see isRuleDueForMonth() in src/utils/recurring.ts. `lastGeneratedMonth`
+ * tracks the last month a transaction was auto-created for this rule, so
+ * the same month is never generated twice. */
+export interface RecurringRule {
+  id: string
+  merchant: string
+  amount: number
+  categoryId: string
+  account: Account
+  person: Person
+  intervalMonths: number // 1 = every month, 2 = every other month, etc.
+  anchorMonth: string // YYYY-MM
+  dayOfMonth: number // 1-28, day of month the generated transaction is dated
+  isActive: boolean
+  lastGeneratedMonth: string | null // YYYY-MM
+}
+
+export type NewRecurringRule = Omit<RecurringRule, 'id' | 'lastGeneratedMonth'>
+
 export type PeriodFilter =
   | { kind: 'month'; month: string } // YYYY-MM
   | { kind: 'range'; start: string; end: string } // ISO dates, inclusive
@@ -81,5 +103,6 @@ export interface AppState {
   transactions: Transaction[]
   emailRules: EmailSyncRule[]
   mappingRules: MappingRule[]
+  recurringRules: RecurringRule[]
   filters: Filters
 }

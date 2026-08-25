@@ -5,7 +5,7 @@
 export type PersonRow = 'Reut' | 'Keren'
 export type AccountRow = 'reut_personal' | 'keren_personal' | 'shared'
 export type TransactionStatusRow = 'pending' | 'on_budget' | 'exceeded'
-export type TransactionSourceRow = 'manual' | 'email_auto' | 'import'
+export type TransactionSourceRow = 'manual' | 'email_auto' | 'import' | 'recurring'
 
 export interface CategoryRow {
   id: string
@@ -45,4 +45,19 @@ export interface MappingRuleRow {
   category_id: string | null
   person: PersonRow | null
   updated_at: string
+}
+
+export interface RecurringRuleRow {
+  id: string
+  merchant: string
+  amount: number
+  category_id: string
+  account: AccountRow
+  person: PersonRow
+  interval_months: number
+  anchor_month: string
+  day_of_month: number
+  is_active: boolean
+  last_generated_month: string | null
+  created_at: string
 }

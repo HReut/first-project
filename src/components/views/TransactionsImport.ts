@@ -1,6 +1,6 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category, NewTransaction, Person } from '../../types.ts'
-import { buildImportPreview, commitImportedRows, type ParsedImportRow } from '../../data/importService.ts'
+import { buildImportPreview, buildImportPreviewFromTable, commitImportedRows, parseXlsx, type ParsedImportRow } from '../../data/importService.ts'
 import { listMappingRules } from '../../data/mappingRulesRepo.ts'
 import { createCategory } from '../../data/categoriesRepo.ts'
 import { Modal } from '../shared/Modal.ts'
@@ -15,7 +15,7 @@ function getFileInput(onFile: (file: File) => void): HTMLInputElement {
   if (!fileInput) {
     fileInput = document.createElement('input')
     fileInput.type = 'file'
-    fileInput.accept = '.csv'
+    fileInput.accept = '.csv,.xlsx,.xls'
     fileInput.hidden = true
     document.body.appendChild(fileInput)
   }
@@ -27,9 +27,9 @@ function getFileInput(onFile: (file: File) => void): HTMLInputElement {
   return fileInput
 }
 
-/** Entry point wired to the sidebar's "Import CSV/PDF" button (via the
- * opa:import-transactions event). Only .csv is supported this round — see
- * the plan doc for why XLSX/PDF are a separate follow-up. */
+/** Entry point wired to the sidebar's "Import CSV/XLSX" button (via the
+ * opa:import-transactions event). PDF isn't supported — table extraction
+ * from arbitrary PDF statements is too unreliable to trust silently. */
 export function openImportFlow(store: Store<AppState>, currentPerson: Person): void {
   const input = getFileInput((file) => {
     handleFile(file, store, currentPerson).catch(() => showToast('Could not read that file.'))
@@ -38,15 +38,17 @@ export function openImportFlow(store: Store<AppState>, currentPerson: Person): v
 }
 
 async function handleFile(file: File, store: Store<AppState>, currentPerson: Person): Promise<void> {
-  if (!file.name.toLowerCase().endsWith('.csv')) {
-    showToast('XLSX and PDF import are coming soon — export as CSV for now.')
+  const name = file.name.toLowerCase()
+  const isCsv = name.endsWith('.csv')
+  const isXlsx = name.endsWith('.xlsx') || name.endsWith('.xls')
+  if (!isCsv && !isXlsx) {
+    showToast('PDF import is not supported — export as CSV or Excel instead.')
     return
   }
 
-  const text = await file.text()
   const state = store.getState()
   const mappingRules = await listMappingRules()
-  const rows = buildImportPreview(text, state.categories, mappingRules)
+  const rows = isCsv ? buildImportPreview(await file.text(), state.categories, mappingRules) : buildImportPreviewFromTable(await parseXlsx(file), state.categories, mappingRules)
 
   if (rows.length === 0) {
     showToast('No data rows found in that file.')

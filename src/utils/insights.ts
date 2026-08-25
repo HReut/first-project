@@ -1,5 +1,6 @@
 import type { Category, Filters, Person, Transaction, TransactionStatus } from '../types.ts'
 import { budgetPercent, budgetStatus } from './budget.ts'
+import { matchesPeriod } from './filters.ts'
 
 export interface MonthlyInsights {
   currentMonthTotal: number
@@ -40,16 +41,19 @@ function scopeByPersonAndCategory(transactions: Transaction[], filters: Pick<Fil
 }
 
 /**
- * Per-category totals for the current calendar month, scoped by the
- * category/person filters, sorted highest spend first.
+ * Per-category totals scoped by the category/person filters, sorted highest
+ * spend first. Defaults to the current calendar month (referenceDate); pass
+ * `period` to scope to any Transactions-style period instead — used by the
+ * Budgets and Analytics pages' period selectors.
  */
 export function computeCategoryBreakdown(
   transactions: Transaction[],
   filters: Pick<Filters, 'categoryId' | 'person'>,
   referenceDate = new Date(),
+  period?: Filters['period'],
 ): CategoryBreakdownEntry[] {
-  const currentMonth = monthKey(referenceDate)
-  const currentTx = scopeByPersonAndCategory(transactions, filters).filter((tx) => tx.date.startsWith(currentMonth))
+  const scoped = scopeByPersonAndCategory(transactions, filters)
+  const currentTx = period ? scoped.filter((tx) => matchesPeriod(tx.date, period)) : scoped.filter((tx) => tx.date.startsWith(monthKey(referenceDate)))
 
   const byCategory = new Map<string, number>()
   for (const tx of currentTx) {
@@ -103,11 +107,16 @@ export function computeMonthlyInsights(
   }
 }
 
-/** Budgeted categories (limit set) with this month's spend, sorted by how
- * close each is to blowing its limit — the "which budgets need attention"
- * ordering shared by the Overview and Transactions pages. */
-export function topBudgetedCategories(transactions: Transaction[], categories: Category[]): { category: Category; spent: number }[] {
-  const breakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' })
+/** Budgeted categories (limit set) with their spend for the given period
+ * (defaults to this month), sorted by how close each is to blowing its
+ * limit — the "which budgets need attention" ordering shared by the
+ * Overview and Transactions pages, and the Budgets page's period selector. */
+export function topBudgetedCategories(
+  transactions: Transaction[],
+  categories: Category[],
+  period?: Filters['period'],
+): { category: Category; spent: number }[] {
+  const breakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' }, new Date(), period)
   const spentByCategory = new Map(breakdown.map((entry) => [entry.categoryId, entry.amount]))
   return categories
     .filter((category) => category.monthlyBudgetLimit !== null && category.monthlyBudgetLimit > 0)

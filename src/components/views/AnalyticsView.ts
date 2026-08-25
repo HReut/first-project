@@ -1,9 +1,18 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Category, Transaction } from '../../types.ts'
+import type { AppState, Category, Filters, Transaction } from '../../types.ts'
 import { computeCategoryBreakdown } from '../../utils/insights.ts'
 import { formatCurrency, formatMonthLabel } from '../../utils/format.ts'
+import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
 
 const MONTHLY_SERIES_LENGTH = 6
+
+const PERIOD_LABEL: Record<PeriodPreset, string> = {
+  'this-month': 'this month',
+  'last-month': 'last month',
+  'last-3': 'the last 3 months',
+  'last-6': 'the last 6 months',
+  all: 'all time',
+}
 
 function monthKeyAgo(monthsAgo: number, from = new Date()): string {
   return new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1).toISOString().slice(0, 7)
@@ -19,9 +28,9 @@ function computeMonthlySeries(transactions: Transaction[], months: number): { mo
   return series
 }
 
-function computePersonBreakdown(transactions: Transaction[], categories: Category[]): { category: Category; reut: number; keren: number }[] {
-  const reutBreakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'Reut' })
-  const kerenBreakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'Keren' })
+function computePersonBreakdown(transactions: Transaction[], categories: Category[], period: Filters['period']): { category: Category; reut: number; keren: number }[] {
+  const reutBreakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'Reut' }, new Date(), period)
+  const kerenBreakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'Keren' }, new Date(), period)
   const reutByCategory = new Map(reutBreakdown.map((entry) => [entry.categoryId, entry.amount]))
   const kerenByCategory = new Map(kerenBreakdown.map((entry) => [entry.categoryId, entry.amount]))
 
@@ -35,6 +44,8 @@ function computePersonBreakdown(transactions: Transaction[], categories: Categor
 }
 
 export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): void {
+  let period: PeriodPreset = 'this-month'
+
   root.innerHTML = `
     <section class="band band--hero">
       <div class="band__inner">
@@ -47,7 +58,19 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     <section class="band">
       <div class="band__inner">
         <div class="chart-card">
-          <h2 class="chart-card__title">Spending distribution — this month</h2>
+          <div class="chart-card__header">
+            <h2 class="chart-card__title" id="distribution-title">Spending distribution — this month</h2>
+            <label class="toolbar-control">
+              <span class="toolbar-control__label">Period</span>
+              <select class="toolbar-control__input" id="analytics-period-select">
+                <option value="this-month">This month</option>
+                <option value="last-month">Last month</option>
+                <option value="last-3">Last 3 months</option>
+                <option value="last-6">Last 6 months</option>
+                <option value="all">All time</option>
+              </select>
+            </label>
+          </div>
           <div class="hbar-chart" id="distribution-chart"></div>
         </div>
       </div>
@@ -66,7 +89,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
       <div class="band__inner">
         <div class="chart-card">
           <div class="chart-card__header">
-            <h2 class="chart-card__title">Reut vs. Keren — this month</h2>
+            <h2 class="chart-card__title" id="person-chart-title">Reut vs. Keren — this month</h2>
             <ul class="chart-legend">
               <li class="chart-legend__item"><span class="chart-legend__key" style="background: var(--person-reut)"></span>Reut</li>
               <li class="chart-legend__item"><span class="chart-legend__key" style="background: var(--person-keren)"></span>Keren</li>
@@ -79,16 +102,29 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
   `
 
   const distributionEl = root.querySelector<HTMLElement>('#distribution-chart')!
+  const distributionTitleEl = root.querySelector<HTMLElement>('#distribution-title')!
   const monthlyEl = root.querySelector<HTMLElement>('#monthly-chart')!
   const personEl = root.querySelector<HTMLElement>('#person-chart')!
+  const personTitleEl = root.querySelector<HTMLElement>('#person-chart-title')!
+
+  const periodSelect = root.querySelector<HTMLSelectElement>('#analytics-period-select')!
+  periodSelect.value = period
+  periodSelect.addEventListener('change', () => {
+    period = periodSelect.value as PeriodPreset
+    const state = store.getState()
+    renderDistribution(state)
+    renderPersonChart(state)
+  })
 
   function renderDistribution(state: AppState): void {
-    const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' })
+    const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' }, new Date(), periodPresetToFilter(period))
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const max = Math.max(1, ...breakdown.map((entry) => entry.amount))
 
+    distributionTitleEl.textContent = `Spending distribution — ${PERIOD_LABEL[period]}`
+
     if (breakdown.length === 0) {
-      distributionEl.innerHTML = `<p class="chart-empty">No spending recorded yet this month.</p>`
+      distributionEl.innerHTML = `<p class="chart-empty">No spending recorded for ${PERIOD_LABEL[period]}.</p>`
       return
     }
 
@@ -130,9 +166,10 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
   }
 
   function renderPersonChart(state: AppState): void {
-    const rows = computePersonBreakdown(state.transactions, state.categories)
+    const rows = computePersonBreakdown(state.transactions, state.categories, periodPresetToFilter(period))
+    personTitleEl.textContent = `Reut vs. Keren — ${PERIOD_LABEL[period]}`
     if (rows.length === 0) {
-      personEl.innerHTML = `<p class="chart-empty">No spending recorded yet this month.</p>`
+      personEl.innerHTML = `<p class="chart-empty">No spending recorded for ${PERIOD_LABEL[period]}.</p>`
       return
     }
     const max = Math.max(1, ...rows.flatMap((row) => [row.reut, row.keren]))
