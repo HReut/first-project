@@ -12,9 +12,17 @@ export function isRuleDueForMonth(rule: RecurringRule, monthKey: string): boolea
 }
 
 /** Active rules due for `monthKey` that haven't already generated a
- * transaction for it — i.e. what App.ts should generate on this load. */
+ * transaction for it — i.e. what App.ts should generate on this load. An
+ * installment plan (totalOccurrences set) stops matching once it's produced
+ * that many transactions — no separate "completed" flag needed. */
 export function findRulesDueForGeneration(rules: RecurringRule[], monthKey: string): RecurringRule[] {
-  return rules.filter((rule) => rule.isActive && rule.lastGeneratedMonth !== monthKey && isRuleDueForMonth(rule, monthKey))
+  return rules.filter(
+    (rule) =>
+      rule.isActive &&
+      rule.lastGeneratedMonth !== monthKey &&
+      (rule.totalOccurrences === null || rule.occurrencesGenerated < rule.totalOccurrences) &&
+      isRuleDueForMonth(rule, monthKey),
+  )
 }
 
 /** Builds the pending transaction a due rule generates for `monthKey`,

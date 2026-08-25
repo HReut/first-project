@@ -83,11 +83,14 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="Recurring expenses">
-          <h2 class="settings-card__title">Recurring expenses</h2>
+        <section class="settings-card" aria-label="Recurring & installment expenses">
+          <h2 class="settings-card__title">Recurring &amp; installment expenses</h2>
           <p class="settings-card__desc">
-            Bills that repeat every N months (rent, internet, building committee…). Each due
-            rule adds a Pending transaction for the current month automatically when the app loads.
+            Bills that repeat every N months (rent, internet, building committee…) — leave "Installments"
+            blank for these, they run forever until you switch them off. For a card purchase split into
+            fixed payments (e.g. a 12-payment furniture buy), set "Installments" to that count — it stops
+            generating on its own once all payments are made. Either way, each due rule adds a Pending
+            transaction automatically when the app loads.
           </p>
           <div class="settings-list settings-list--recurring" id="recurring-manager"></div>
         </section>
@@ -303,6 +306,11 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
       state.categories.map((c) => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')
     const accountOptions = (selected: Account) => ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === selected ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')
 
+    const statusText = (rule: (typeof state.recurringRules)[number]): string => {
+      if (rule.totalOccurrences !== null) return `${rule.occurrencesGenerated} of ${rule.totalOccurrences} paid`
+      return rule.lastGeneratedMonth === CURRENT_MONTH ? 'Generated this month' : 'Not yet generated this month'
+    }
+
     recurringManagerEl.innerHTML = `
       ${state.recurringRules
         .map(
@@ -318,7 +326,11 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
             <span>mo · day</span>
             <input type="number" class="icon-input" value="${rule.dayOfMonth}" min="1" max="28" title="Day of month" data-rule-field="dayOfMonth">
           </span>
-          <span class="settings-list__usage">${rule.lastGeneratedMonth === CURRENT_MONTH ? 'Generated this month' : 'Not yet generated this month'}</span>
+          <span class="settings-list__inline-field">
+            <span>Installments</span>
+            <input type="number" class="icon-input" value="${rule.totalOccurrences ?? ''}" min="1" max="60" placeholder="∞" title="Blank = ongoing bill; a number = installment plan that stops after that many payments" data-rule-field="totalOccurrences">
+          </span>
+          <span class="settings-list__usage">${statusText(rule)}</span>
           <label class="toggle">
             <input type="checkbox" data-rule-field="isActive" ${rule.isActive ? 'checked' : ''}>
             <span class="toggle__track"><span class="toggle__thumb"></span></span>
@@ -330,8 +342,8 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
         )
         .join('')}
       <div class="settings-list__row settings-list__row--add">
-        <input type="text" class="name-input" id="new-recurring-merchant" placeholder="Bill name (e.g. Rent)">
-        <input type="number" class="budget-input" id="new-recurring-amount" placeholder="Amount" min="0" step="1">
+        <input type="text" class="name-input" id="new-recurring-merchant" placeholder="Bill name (e.g. Rent, or Sofa)">
+        <input type="number" class="budget-input" id="new-recurring-amount" placeholder="Amount per payment" min="0" step="1">
         <select class="filter-select" id="new-recurring-category">${categoryOptions('')}</select>
         <select class="filter-select" id="new-recurring-account">${accountOptions('shared')}</select>
         <span class="settings-list__inline-field">
@@ -339,6 +351,10 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
           <input type="number" class="icon-input" id="new-recurring-interval" value="1" min="1" max="24" title="Every N months">
           <span>mo · day</span>
           <input type="number" class="icon-input" id="new-recurring-day" value="1" min="1" max="28" title="Day of month">
+        </span>
+        <span class="settings-list__inline-field">
+          <span>Installments</span>
+          <input type="number" class="icon-input" id="new-recurring-installments" min="1" max="60" placeholder="∞" title="Blank = ongoing bill; a number = installment plan that stops after that many payments">
         </span>
         <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ Add</button>
       </div>
@@ -357,6 +373,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
 
     let patch: Partial<NewRecurringRule>
     if (field === 'isActive') patch = { isActive: (input as HTMLInputElement).checked }
+    else if (field === 'totalOccurrences') patch = { totalOccurrences: input.value.trim() === '' ? null : Math.max(1, Number(input.value)) }
     else if (field === 'amount' || field === 'intervalMonths' || field === 'dayOfMonth') patch = { [field]: Number(input.value) }
     else if (field === 'account') {
       const account = input.value as Account
@@ -387,6 +404,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
       const accountSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-account')!
       const intervalInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-interval')!
       const dayInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-day')!
+      const installmentsInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-installments')!
 
       const merchant = merchantInput.value.trim()
       const amount = Number(amountInput.value)
@@ -402,6 +420,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
         intervalMonths: Math.max(1, Number(intervalInput.value) || 1),
         anchorMonth: CURRENT_MONTH,
         dayOfMonth: Math.min(28, Math.max(1, Number(dayInput.value) || 1)),
+        totalOccurrences: installmentsInput.value.trim() === '' ? null : Math.max(1, Number(installmentsInput.value)),
         isActive: true,
       }).then((created) => {
         const { recurringRules } = store.getState()

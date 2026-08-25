@@ -57,6 +57,8 @@ export interface RecurringRuleRow {
   interval_months: number
   anchor_month: string
   day_of_month: number
+  total_occurrences: number | null
+  occurrences_generated: number
   is_active: boolean
   last_generated_month: string | null
   created_at: string

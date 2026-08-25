@@ -14,12 +14,16 @@ function fromRow(row: RecurringRuleRow): RecurringRule {
     intervalMonths: row.interval_months,
     anchorMonth: row.anchor_month,
     dayOfMonth: row.day_of_month,
+    totalOccurrences: row.total_occurrences,
+    occurrencesGenerated: row.occurrences_generated,
     isActive: row.is_active,
     lastGeneratedMonth: row.last_generated_month,
   }
 }
 
-function toRow(input: Partial<NewRecurringRule & Pick<RecurringRule, 'lastGeneratedMonth'>>): Partial<Omit<RecurringRuleRow, 'id' | 'created_at'>> {
+type RecurringRulePatch = Partial<NewRecurringRule & Pick<RecurringRule, 'lastGeneratedMonth' | 'occurrencesGenerated'>>
+
+function toRow(input: RecurringRulePatch): Partial<Omit<RecurringRuleRow, 'id' | 'created_at'>> {
   const row: Partial<Omit<RecurringRuleRow, 'id' | 'created_at'>> = {}
   if (input.merchant !== undefined) row.merchant = input.merchant
   if (input.amount !== undefined) row.amount = input.amount
@@ -29,6 +33,8 @@ function toRow(input: Partial<NewRecurringRule & Pick<RecurringRule, 'lastGenera
   if (input.intervalMonths !== undefined) row.interval_months = input.intervalMonths
   if (input.anchorMonth !== undefined) row.anchor_month = input.anchorMonth
   if (input.dayOfMonth !== undefined) row.day_of_month = input.dayOfMonth
+  if (input.totalOccurrences !== undefined) row.total_occurrences = input.totalOccurrences
+  if (input.occurrencesGenerated !== undefined) row.occurrences_generated = input.occurrencesGenerated
   if (input.isActive !== undefined) row.is_active = input.isActive
   if (input.lastGeneratedMonth !== undefined) row.last_generated_month = input.lastGeneratedMonth
   return row
@@ -60,12 +66,12 @@ export async function createRecurringRule(input: NewRecurringRule): Promise<Recu
     return fromRow(data as RecurringRuleRow)
   }
   const rules = loadLocalRecurringRules()
-  const created: RecurringRule = { ...input, id: crypto.randomUUID(), lastGeneratedMonth: null }
+  const created: RecurringRule = { ...input, id: crypto.randomUUID(), lastGeneratedMonth: null, occurrencesGenerated: 0 }
   saveLocalRecurringRules([...rules, created])
   return created
 }
 
-export async function updateRecurringRule(id: string, patch: Partial<NewRecurringRule & Pick<RecurringRule, 'lastGeneratedMonth'>>): Promise<RecurringRule> {
+export async function updateRecurringRule(id: string, patch: RecurringRulePatch): Promise<RecurringRule> {
   if (supabase) {
     const { data, error } = await supabase.from('recurring_rules').update(toRow(patch)).eq('id', id).select().single()
     if (error) throw error

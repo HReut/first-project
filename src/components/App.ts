@@ -124,7 +124,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
 
     return Promise.all([
       createTransactions(due.map((rule) => transactionForDueRule(rule, monthKey))),
-      Promise.all(due.map((rule) => updateRecurringRule(rule.id, { lastGeneratedMonth: monthKey }))),
+      Promise.all(due.map((rule) => updateRecurringRule(rule.id, { lastGeneratedMonth: monthKey, occurrencesGenerated: rule.occurrencesGenerated + 1 }))),
     ]).then(([created, updatedRules]) => {
       const updatedById = new Map(updatedRules.map((rule) => [rule.id, rule]))
       const state = store.getState()
