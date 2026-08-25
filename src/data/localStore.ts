@@ -1,4 +1,4 @@
-import type { AccountBalance, Category, EmailSyncRule, MappingRule, RecurringRule, Transaction } from '../types.ts'
+import type { AccountBalance, BudgetLimitOverride, Category, EmailSyncRule, MappingRule, RecurringRule, Transaction } from '../types.ts'
 import { SEED_CATEGORIES } from './mockCategories.ts'
 import { createMockTransactions } from './mockTransactions.ts'
 
@@ -13,6 +13,7 @@ const KEYS = {
   mappingRules: 'opa-tulik:mapping-rules',
   recurringRules: 'opa-tulik:recurring-rules',
   accountBalance: 'opa-tulik:account-balance',
+  budgetLimitOverrides: 'opa-tulik:budget-limit-overrides',
 } as const
 
 function read<T>(key: string): T | null {
@@ -99,4 +100,15 @@ export function loadLocalAccountBalance(): AccountBalance | null {
 
 export function saveLocalAccountBalance(balance: AccountBalance): void {
   write(KEYS.accountBalance, balance)
+}
+
+export function loadLocalBudgetLimitOverrides(): BudgetLimitOverride[] {
+  const existing = read<BudgetLimitOverride[]>(KEYS.budgetLimitOverrides)
+  if (existing) return existing
+  write(KEYS.budgetLimitOverrides, [])
+  return []
+}
+
+export function saveLocalBudgetLimitOverrides(overrides: BudgetLimitOverride[]): void {
+  write(KEYS.budgetLimitOverrides, overrides)
 }

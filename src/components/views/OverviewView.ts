@@ -167,7 +167,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
     const tx = state.transactions.find((t) => t.id === id)
     if (!tx) return
     button.disabled = true
-    updateTransaction(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId) })
+    updateTransaction(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId, state.budgetLimitOverrides) })
       .then((updated) => {
         const { transactions } = store.getState()
         store.setState({ transactions: transactions.map((t) => (t.id === id ? updated : t)) })
@@ -401,7 +401,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   }
 
   function renderBudgetSummary(state: AppState): void {
-    const budgeted = topBudgetedCategories(state.transactions, state.categories)
+    const budgeted = topBudgetedCategories(state.transactions, state.categories, state.budgetLimitOverrides)
 
     if (budgeted.length === 0) {
       budgetEl.innerHTML = `
@@ -427,9 +427,9 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
           <div class="budget-progress-item">
             <div class="budget-progress-item__row">
               <span class="budget-progress-item__name">${row.category.icon} ${row.category.name}</span>
-              <span class="budget-progress-item__amounts">${formatCurrency(row.spent)} / ${formatCurrency(row.category.monthlyBudgetLimit ?? 0)}</span>
+              <span class="budget-progress-item__amounts">${formatCurrency(row.spent)} / ${formatCurrency(row.limit ?? 0)}</span>
             </div>
-            ${renderProgressBar(row.spent, row.category.monthlyBudgetLimit)}
+            ${renderProgressBar(row.spent, row.limit)}
           </div>
         `,
           )

@@ -1,11 +1,14 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category } from '../../types.ts'
-import { computeCategoryBreakdown } from '../../utils/insights.ts'
+import { computeCategoryBreakdown, resolveBudgetLimitForMonth, resolveBudgetLimitForPeriod } from '../../utils/insights.ts'
 import { formatCurrency } from '../../utils/format.ts'
 import { budgetStatus } from '../../utils/budget.ts'
 import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
 import { updateCategory } from '../../data/categoriesRepo.ts'
+import { createBudgetLimitOverride, deleteBudgetLimitOverridesForCategory } from '../../data/budgetLimitOverridesRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
+import { Modal } from '../shared/Modal.ts'
+import { showToast } from '../shared/Toast.ts'
 
 const PERIOD_LABEL: Record<PeriodPreset, string> = {
   'this-month': 'This month',
@@ -14,6 +17,12 @@ const PERIOD_LABEL: Record<PeriodPreset, string> = {
   'last-6': 'Last 6 months',
   'this-year': 'This year',
   all: 'All time',
+}
+
+type BudgetScope = 'this-month' | 'from-now-on' | 'all-months'
+
+function currentMonthKey(): string {
+  return new Date().toISOString().slice(0, 7)
 }
 
 export function mountBudgetsView(root: HTMLElement, store: Store<AppState>): void {
@@ -56,57 +65,92 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>): voi
 
   budgetListEl.addEventListener('click', (event) => {
     const cell = (event.target as HTMLElement).closest<HTMLElement>('.budget-row__limit')
-    if (!cell || cell.classList.contains('is-editing')) return
+    if (!cell) return
     const categoryId = cell.dataset.categoryId!
     const category = store.getState().categories.find((c) => c.id === categoryId)
     if (!category) return
-    editBudgetCell(cell, category)
+    openBudgetLimitModal(category)
   })
 
-  function editBudgetCell(cell: HTMLElement, category: Category): void {
-    cell.classList.add('is-editing')
-    cell.innerHTML = `<input type="number" class="cell-input" min="0" step="10" value="${category.monthlyBudgetLimit ?? ''}" placeholder="No limit">`
-    const input = cell.querySelector<HTMLInputElement>('.cell-input')!
-    input.focus()
-    input.select()
+  function openBudgetLimitModal(category: Category): void {
+    const currentLimit = resolveBudgetLimitForMonth(category, store.getState().budgetLimitOverrides, currentMonthKey())
 
-    let settled = false
-    const commit = () => {
-      if (settled) return
-      settled = true
-      const raw = input.value.trim()
-      const monthlyBudgetLimit = raw === '' ? null : Number(raw)
-      updateCategory(category.id, { monthlyBudgetLimit }).then((updated) => {
-        const { categories } = store.getState()
-        store.setState({ categories: categories.map((c) => (c.id === updated.id ? updated : c)) })
-      })
-    }
-    input.addEventListener('blur', commit)
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') input.blur()
-      else if (event.key === 'Escape') {
-        settled = true
-        renderBudgets(store.getState())
-      }
+    const modal = new Modal(
+      `
+        <h2 class="modal__title">Update ${category.name} budget</h2>
+        <form class="modal__form" id="budget-limit-form">
+          <label class="filter-group">
+            <span class="filter-group__label">Monthly limit</span>
+            <input type="number" class="filter-input" name="limit" min="0" step="10" value="${currentLimit ?? ''}" placeholder="No limit">
+          </label>
+          <div class="filter-group" role="radiogroup" aria-label="Apply to">
+            <span class="filter-group__label">Apply to</span>
+            <label class="modal__radio-row"><input type="radio" name="scope" value="this-month" checked> This month only</label>
+            <label class="modal__radio-row"><input type="radio" name="scope" value="from-now-on"> This month and every month after</label>
+            <label class="modal__radio-row"><input type="radio" name="scope" value="all-months"> All months (replaces any past custom settings for this category)</label>
+          </div>
+          <div class="modal__actions">
+            <button type="button" class="btn" id="modal-cancel">Cancel</button>
+            <button type="submit" class="btn btn--primary">Save</button>
+          </div>
+        </form>
+      `,
+      { ariaLabel: `Update ${category.name} budget` },
+    )
+
+    modal.element.querySelector<HTMLButtonElement>('#modal-cancel')!.addEventListener('click', () => modal.close())
+    modal.element.querySelector<HTMLFormElement>('#budget-limit-form')!.addEventListener('submit', (event) => {
+      event.preventDefault()
+      const form = event.currentTarget as HTMLFormElement
+      const data = new FormData(form)
+      const raw = String(data.get('limit')).trim()
+      const limit = raw === '' ? null : Number(raw)
+      const scope = data.get('scope') as BudgetScope
+      void applyBudgetLimit(category, limit, scope, modal)
     })
   }
 
+  async function applyBudgetLimit(category: Category, limit: number | null, scope: BudgetScope, modal: Modal): Promise<void> {
+    const month = currentMonthKey()
+    try {
+      if (scope === 'all-months') {
+        const [updated] = await Promise.all([updateCategory(category.id, { monthlyBudgetLimit: limit }), deleteBudgetLimitOverridesForCategory(category.id)])
+        const { categories, budgetLimitOverrides } = store.getState()
+        store.setState({
+          categories: categories.map((c) => (c.id === updated.id ? updated : c)),
+          budgetLimitOverrides: budgetLimitOverrides.filter((o) => o.categoryId !== category.id),
+        })
+      } else {
+        const endMonth = scope === 'this-month' ? month : null
+        const created = await createBudgetLimitOverride({ categoryId: category.id, startMonth: month, endMonth, limit })
+        const { budgetLimitOverrides } = store.getState()
+        store.setState({ budgetLimitOverrides: [...budgetLimitOverrides, created] })
+      }
+      modal.close()
+      showToast('Budget updated.', [], 2500)
+    } catch {
+      showToast('Could not save — has migration 0008 been run?')
+    }
+  }
+
   function renderBudgets(state: AppState): void {
-    const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' }, new Date(), periodPresetToFilter(period))
+    const filterPeriod = periodPresetToFilter(period)
+    const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' }, new Date(), filterPeriod)
     const spentByCategory = new Map(breakdown.map((entry) => [entry.categoryId, entry.amount]))
 
     budgetListEl.innerHTML = state.categories
       .map((category) => {
         const spent = spentByCategory.get(category.id) ?? 0
-        const status = budgetStatus(spent, category.monthlyBudgetLimit)
+        const limit = resolveBudgetLimitForPeriod(category, state.budgetLimitOverrides, filterPeriod)
+        const status = budgetStatus(spent, limit)
         return `
           <div class="budget-row" data-status="${status}">
             <span class="budget-row__name">${category.icon} ${category.name}</span>
             <span class="budget-row__spent">${formatCurrency(spent)}</span>
             <span class="budget-row__limit editable-cell" data-category-id="${category.id}">
-              ${category.monthlyBudgetLimit === null ? 'Set limit' : `of ${formatCurrency(category.monthlyBudgetLimit)}`}
+              ${limit === null ? 'Set limit' : `of ${formatCurrency(limit)}`}
             </span>
-            ${renderProgressBar(spent, category.monthlyBudgetLimit)}
+            ${renderProgressBar(spent, limit)}
           </div>
         `
       })

@@ -6,6 +6,7 @@ import { listEmailRules } from '../data/emailRulesRepo.ts'
 import { listMappingRules } from '../data/mappingRulesRepo.ts'
 import { listRecurringRules, updateRecurringRule } from '../data/recurringRulesRepo.ts'
 import { loadAccountBalance } from '../data/accountBalanceRepo.ts'
+import { listBudgetLimitOverrides } from '../data/budgetLimitOverridesRepo.ts'
 import { findRulesDueForGeneration, transactionForDueRule } from '../utils/recurring.ts'
 import { personFromEmail, signOut } from '../lib/auth.ts'
 import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
@@ -95,6 +96,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     emailRules: [],
     mappingRules: [],
     recurringRules: [],
+    budgetLimitOverrides: [],
     accountBalance: null,
     filters: {
       categoryId: 'all',
@@ -105,9 +107,17 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   })
 
   function loadHouseholdData(): Promise<void> {
-    return Promise.all([listCategories(), listTransactions(), listEmailRules(), listMappingRules(), listRecurringRules(), loadAccountBalance()])
-      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance]) => {
-        store.setState({ categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, status: 'ready' })
+    return Promise.all([
+      listCategories(),
+      listTransactions(),
+      listEmailRules(),
+      listMappingRules(),
+      listRecurringRules(),
+      loadAccountBalance(),
+      listBudgetLimitOverrides(),
+    ])
+      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides]) => {
+        store.setState({ categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides, status: 'ready' })
         return generateDueRecurringTransactions()
       })
       .catch((err: unknown) => {

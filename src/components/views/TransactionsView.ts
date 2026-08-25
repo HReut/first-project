@@ -134,7 +134,7 @@ export class TransactionsView {
 
   private renderBudgetCards(state: AppState): void {
     const cardsEl = this.#container.querySelector<HTMLElement>('#tx-budget-cards')!
-    const budgeted = topBudgetedCategories(state.transactions, state.categories).slice(0, BUDGET_CARD_LIMIT)
+    const budgeted = topBudgetedCategories(state.transactions, state.categories, state.budgetLimitOverrides).slice(0, BUDGET_CARD_LIMIT)
 
     if (budgeted.length === 0) {
       cardsEl.innerHTML = `<p class="tx-budget-cards__empty">No category budgets set yet — set some in Budgets.</p>`
@@ -143,15 +143,15 @@ export class TransactionsView {
 
     cardsEl.innerHTML = budgeted
       .map(
-        ({ category, spent }) => `
+        ({ category, spent, limit }) => `
       <div class="tx-budget-card">
         <div class="tx-budget-card__top">
           <span class="tx-budget-card__icon" style="background: color-mix(in srgb, ${category.colorCode} 16%, var(--surface))">${category.icon}</span>
           <span class="tx-budget-card__tag">This month</span>
         </div>
         <p class="tx-budget-card__name">${category.name} Budget</p>
-        <p class="tx-budget-card__amount">${formatCurrency(spent)} <span>of ${formatCurrency(category.monthlyBudgetLimit ?? 0)}</span></p>
-        ${renderProgressBar(spent, category.monthlyBudgetLimit)}
+        <p class="tx-budget-card__amount">${formatCurrency(spent)} <span>of ${formatCurrency(limit ?? 0)}</span></p>
+        ${renderProgressBar(spent, limit)}
       </div>
     `,
       )
@@ -756,7 +756,7 @@ export class TransactionsView {
     const state = this.#store.getState()
     const tx = state.transactions.find((t) => t.id === id)
     if (!tx) return
-    this.commitEdit(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId) })
+    this.commitEdit(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId, state.budgetLimitOverrides) })
     showToast('Transaction approved', [], 2000)
   }
 
@@ -766,7 +766,7 @@ export class TransactionsView {
     const byId = new Map(state.transactions.map((tx) => [tx.id, tx]))
     Promise.all(
       ids.map((id) =>
-        updateTransaction(id, { status: computeReviewedStatus(state.transactions, state.categories, byId.get(id)?.categoryId ?? '') }),
+        updateTransaction(id, { status: computeReviewedStatus(state.transactions, state.categories, byId.get(id)?.categoryId ?? '', state.budgetLimitOverrides) }),
       ),
     ).then((updated) => {
       const updatedById = new Map(updated.map((tx) => [tx.id, tx]))
@@ -871,7 +871,7 @@ export class TransactionsView {
         categoryId,
         account,
         person: PERSON_FOR_ACCOUNT[account] ?? (data.get('person') as Person),
-        status: existing?.status ?? computeReviewedStatus(state.transactions, state.categories, categoryId),
+        status: existing?.status ?? computeReviewedStatus(state.transactions, state.categories, categoryId, state.budgetLimitOverrides),
         source: existing?.source ?? 'manual',
       }
       if (isEdit) {

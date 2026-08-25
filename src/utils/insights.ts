@@ -1,4 +1,4 @@
-import type { AccountBalance, Category, Filters, Person, Transaction, TransactionStatus } from '../types.ts'
+import type { AccountBalance, BudgetLimitOverride, Category, Filters, Person, Transaction, TransactionStatus } from '../types.ts'
 import { budgetPercent, budgetStatus } from './budget.ts'
 import { matchesPeriod } from './filters.ts'
 
@@ -107,32 +107,74 @@ export function computeMonthlyInsights(
   }
 }
 
-/** Budgeted categories (limit set) with their spend for the given period
- * (defaults to this month), sorted by how close each is to blowing its
+/** The limit that actually applies to `category` for `month` — the override
+ * with the latest startMonth that covers it (an "all months" edit clears
+ * every override for the category, so nothing here survives one), or the
+ * category's flat monthlyBudgetLimit if no override applies. */
+export function resolveBudgetLimitForMonth(category: Category, overrides: BudgetLimitOverride[], month: string): number | null {
+  const applicable = overrides
+    .filter((o) => o.categoryId === category.id && o.startMonth <= month && (o.endMonth === null || o.endMonth >= month))
+    .sort((a, b) => (a.startMonth < b.startMonth ? 1 : -1))
+  return applicable.length > 0 ? applicable[0].limit : category.monthlyBudgetLimit
+}
+
+function monthsInRange(start: string, end: string): string[] {
+  const months: string[] = []
+  let cursor = new Date(start)
+  const endDate = new Date(end)
+  while (cursor <= endDate) {
+    months.push(monthKey(cursor))
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+  }
+  return Array.from(new Set(months))
+}
+
+/** The limit for a whole period: a single month's resolved limit for
+ * {kind:'month'}; the sum of each covered month's resolved limit for
+ * {kind:'range'} (so "last 3 months" against a ₪500/mo category shows
+ * ₪1500, correctly reflecting any months with a different override mixed
+ * in); this real calendar month's limit as a stand-in for {kind:'all'},
+ * since summing an unbounded number of months isn't meaningful. Null only
+ * when every covered month resolves to "no limit". */
+export function resolveBudgetLimitForPeriod(category: Category, overrides: BudgetLimitOverride[], period: Filters['period']): number | null {
+  if (period.kind === 'month') return resolveBudgetLimitForMonth(category, overrides, period.month)
+  if (period.kind === 'all') return resolveBudgetLimitForMonth(category, overrides, monthKey(new Date()))
+  const limits = monthsInRange(period.start, period.end).map((m) => resolveBudgetLimitForMonth(category, overrides, m))
+  if (limits.every((l) => l === null)) return null
+  return limits.reduce<number>((total, l) => total + (l ?? 0), 0)
+}
+
+/** Budgeted categories (resolved limit for the given period, defaults to
+ * this month) with their spend, sorted by how close each is to blowing its
  * limit — the "which budgets need attention" ordering shared by the
  * Overview and Transactions pages, and the Budgets page's period selector. */
 export function topBudgetedCategories(
   transactions: Transaction[],
   categories: Category[],
+  overrides: BudgetLimitOverride[] = [],
   period?: Filters['period'],
-): { category: Category; spent: number }[] {
+): { category: Category; spent: number; limit: number | null }[] {
   const breakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' }, new Date(), period)
   const spentByCategory = new Map(breakdown.map((entry) => [entry.categoryId, entry.amount]))
+  const resolvedPeriod: Filters['period'] = period ?? { kind: 'month', month: monthKey(new Date()) }
   return categories
-    .filter((category) => category.monthlyBudgetLimit !== null && category.monthlyBudgetLimit > 0)
-    .map((category) => ({ category, spent: spentByCategory.get(category.id) ?? 0 }))
-    .sort((a, b) => budgetPercent(b.spent, b.category.monthlyBudgetLimit) - budgetPercent(a.spent, a.category.monthlyBudgetLimit))
+    .map((category) => ({ category, spent: spentByCategory.get(category.id) ?? 0, limit: resolveBudgetLimitForPeriod(category, overrides, resolvedPeriod) }))
+    .filter((row) => row.limit !== null && row.limit > 0)
+    .sort((a, b) => budgetPercent(b.spent, b.limit) - budgetPercent(a.spent, a.limit))
 }
 
 /** The status a pending transaction snapshots to when reviewed — its
- * category's current budget standing. Shared by TransactionsView's "Mark
- * reviewed" actions (row, bulk, and new-manual-transaction default) and
- * Overview's Review center quick-approve. */
-export function computeReviewedStatus(transactions: Transaction[], categories: Category[], categoryId: string): TransactionStatus {
+ * category's current budget standing, using whatever limit actually applies
+ * to this real calendar month (an override, if one's set, else the flat
+ * default). Shared by TransactionsView's "Mark reviewed" actions (row,
+ * bulk, and new-manual-transaction default) and Overview's Review center
+ * quick-approve. */
+export function computeReviewedStatus(transactions: Transaction[], categories: Category[], categoryId: string, overrides: BudgetLimitOverride[] = []): TransactionStatus {
   const category = categories.find((c) => c.id === categoryId)
   const breakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' })
   const spent = breakdown.find((entry) => entry.categoryId === categoryId)?.amount ?? 0
-  return budgetStatus(spent, category?.monthlyBudgetLimit ?? null) === 'critical' ? 'exceeded' : 'on_budget'
+  const limit = category ? resolveBudgetLimitForMonth(category, overrides, monthKey(new Date())) : null
+  return budgetStatus(spent, limit) === 'critical' ? 'exceeded' : 'on_budget'
 }
 
 /**

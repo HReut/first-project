@@ -47,6 +47,15 @@ export interface MappingRuleRow {
   updated_at: string
 }
 
+export interface BudgetLimitOverrideRow {
+  id: string
+  category_id: string
+  start_month: string
+  end_month: string | null
+  limit_amount: number | null
+  created_at: string
+}
+
 export interface AccountBalanceRow {
   id: string
   starting_balance: number

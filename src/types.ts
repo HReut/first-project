@@ -85,6 +85,21 @@ export interface RecurringRule {
 
 export type NewRecurringRule = Omit<RecurringRule, 'id' | 'lastGeneratedMonth' | 'occurrencesGenerated'>
 
+/** A scoped exception to a category's default monthlyBudgetLimit — "this
+ * month only" (startMonth === endMonth) or "from now on" (endMonth null,
+ * open-ended). The category's flat monthlyBudgetLimit is still the
+ * fallback for any month with no override — see resolveBudgetLimitForMonth()
+ * in src/utils/insights.ts. */
+export interface BudgetLimitOverride {
+  id: string
+  categoryId: string
+  startMonth: string // YYYY-MM
+  endMonth: string | null // YYYY-MM, null = open-ended
+  limit: number | null // null = "no limit" for the covered month(s)
+}
+
+export type NewBudgetLimitOverride = Omit<BudgetLimitOverride, 'id'>
+
 /** The shared account's real balance, entered once by a household member
  * and recalibrated whenever they want (e.g. after checking the real bank
  * balance). "Total Available" on Overview is startingBalance minus
@@ -120,6 +135,7 @@ export interface AppState {
   emailRules: EmailSyncRule[]
   mappingRules: MappingRule[]
   recurringRules: RecurringRule[]
+  budgetLimitOverrides: BudgetLimitOverride[]
   accountBalance: AccountBalance | null
   filters: Filters
 }
