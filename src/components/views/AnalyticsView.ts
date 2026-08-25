@@ -11,6 +11,7 @@ const PERIOD_LABEL: Record<PeriodPreset, string> = {
   'last-month': 'last month',
   'last-3': 'the last 3 months',
   'last-6': 'the last 6 months',
+  'this-year': 'this year',
   all: 'all time',
 }
 
@@ -67,6 +68,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
                 <option value="last-month">Last month</option>
                 <option value="last-3">Last 3 months</option>
                 <option value="last-6">Last 6 months</option>
+                <option value="this-year">This year</option>
                 <option value="all">All time</option>
               </select>
             </label>

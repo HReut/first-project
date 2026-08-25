@@ -12,6 +12,7 @@ const PERIOD_LABEL: Record<PeriodPreset, string> = {
   'last-month': 'Last month',
   'last-3': 'Last 3 months',
   'last-6': 'Last 6 months',
+  'this-year': 'This year',
   all: 'All time',
 }
 

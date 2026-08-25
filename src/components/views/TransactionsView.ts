@@ -24,7 +24,7 @@ import { openImportFlow } from './TransactionsImport.ts'
 const BUDGET_CARD_LIMIT = 3
 
 type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'account' | 'amount'
-type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'all' | 'custom'
+type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'this-year' | 'all' | 'custom'
 type GroupBy = 'none' | 'category' | 'person' | 'month'
 const PEOPLE: Person[] = ['Reut', 'Keren']
 const STATUS_VALUES: TransactionStatus[] = ['pending', 'on_budget', 'exceeded']
@@ -249,6 +249,7 @@ export class TransactionsView {
                   <option value="last-month">Last month</option>
                   <option value="last-3">Last 3 months</option>
                   <option value="last-6">Last 6 months</option>
+                  <option value="this-year">This year</option>
                   <option value="all">All time</option>
                   <option value="custom">Custom range&hellip;</option>
                 </select>
@@ -490,6 +491,9 @@ export class TransactionsView {
     else if (preset === 'last-month') this.patchFilters({ period: { kind: 'month', month: monthKey(1) } })
     else if (preset === 'last-3') this.patchFilters({ period: { kind: 'range', ...monthsAgoRange(3) } })
     else if (preset === 'last-6') this.patchFilters({ period: { kind: 'range', ...monthsAgoRange(6) } })
+    // Full Jan 1 - Dec 31, not "Jan 1 to today" — matches "This month" covering
+    // the whole current month regardless of today's date within it.
+    else if (preset === 'this-year') this.patchFilters({ period: { kind: 'range', start: `${new Date().getFullYear()}-01-01`, end: `${new Date().getFullYear()}-12-31` } })
     else this.patchFilters({ period: { kind: 'all' } })
   }
 
