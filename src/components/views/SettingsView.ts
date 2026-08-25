@@ -6,6 +6,7 @@ import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSe
 import { createRecurringRule, deleteRecurringRule, updateRecurringRule } from '../../data/recurringRulesRepo.ts'
 import { setAccountBalance } from '../../data/accountBalanceRepo.ts'
 import { ACCOUNT_LABEL } from '../shared/transactionCells.ts'
+import { showToast } from '../shared/Toast.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { effectiveTheme } from '../../lib/theme.ts'
 import { moonIconMarkup, sunIconMarkup } from '../icons/ThemeIcons.ts'
@@ -137,12 +138,21 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
   }
 
   root.querySelector<HTMLButtonElement>('#account-balance-save')!.addEventListener('click', () => {
-    const startingBalance = Number(accountBalanceInput.value)
-    if (!Number.isFinite(startingBalance) || startingBalance < 0) return
+    const raw = accountBalanceInput.value.trim()
+    const startingBalance = Number(raw)
+    if (!raw || !Number.isFinite(startingBalance) || startingBalance < 0) {
+      showToast('Enter a valid balance first.')
+      return
+    }
     const today = new Date().toISOString().slice(0, 10)
-    setAccountBalance({ startingBalance, setAt: today }).then((accountBalance) => {
-      store.setState({ accountBalance })
-    })
+    setAccountBalance({ startingBalance, setAt: today })
+      .then((accountBalance) => {
+        store.setState({ accountBalance })
+        showToast('Balance saved.', [], 2500)
+      })
+      .catch(() => {
+        showToast('Could not save — has migration 0007 been run?')
+      })
   })
 
   // ---------- Category manager ----------
