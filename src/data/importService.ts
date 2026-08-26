@@ -39,6 +39,12 @@ export interface ParsedImportRow {
   categoryId: string | null
   person: Person | null
   matchedRule: boolean
+  /** True when an existing transaction already has this exact date +
+   * merchant + amount — most likely the same statement imported twice.
+   * The preview starts these unchecked rather than silently skipping
+   * them, since a same-day coincidence (two identical coffees) is
+   * possible and the user should get to decide. */
+  isPossibleDuplicate: boolean
 }
 
 /** Hand-rolled RFC4180-ish CSV parser (quoted fields, escaped quotes, commas
@@ -151,8 +157,8 @@ function parseDate(raw: string | undefined): string | null {
  * Parses a CSV file into reviewable rows — see buildImportPreviewFromTable()
  * for the shared logic; this just adds the CSV-specific text -> table step.
  */
-export function buildImportPreview(csvText: string, categories: Category[], mappingRules: MappingRule[]): ParsedImportRow[] {
-  return buildImportPreviewFromTable(parseCsv(csvText), categories, mappingRules)
+export function buildImportPreview(csvText: string, categories: Category[], mappingRules: MappingRule[], existingTransactions: Transaction[]): ParsedImportRow[] {
+  return buildImportPreviewFromTable(parseCsv(csvText), categories, mappingRules, existingTransactions)
 }
 
 /**
@@ -164,13 +170,20 @@ export function buildImportPreview(csvText: string, categories: Category[], mapp
  * written until commitImportedRows() is called on the rows the user
  * confirms in the preview grid.
  */
-export function buildImportPreviewFromTable(table: string[][], categories: Category[], mappingRules: MappingRule[]): ParsedImportRow[] {
+export function buildImportPreviewFromTable(
+  table: string[][],
+  categories: Category[],
+  mappingRules: MappingRule[],
+  existingTransactions: Transaction[],
+): ParsedImportRow[] {
   if (table.length < 2) return []
 
   const [headerRow, ...dataRows] = table
   const columnMapping = detectColumnMapping(headerRow)
   const categoryByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c]))
   const ruleByMerchant = new Map(mappingRules.map((rule) => [rule.merchantKey, rule]))
+  // date+amount+normalized-merchant -> already in the household's data.
+  const existingKeys = new Set(existingTransactions.map((tx) => `${tx.date}|${tx.amount}|${normalizeMerchantKey(tx.merchant)}`))
 
   return dataRows.map((cells) => {
     const merchant = (columnMapping.merchant !== undefined ? cells[columnMapping.merchant] : '')?.trim() ?? ''
@@ -184,14 +197,17 @@ export function buildImportPreviewFromTable(table: string[][], categories: Categ
 
     const categoryId = categoryFromFile ?? rule?.categoryId ?? null
     const person = personFromFile ?? rule?.person ?? null
+    const date = columnMapping.date !== undefined ? parseDate(cells[columnMapping.date]) : null
+    const amount = columnMapping.amount !== undefined ? parseAmount(cells[columnMapping.amount]) : null
 
     return {
-      date: columnMapping.date !== undefined ? parseDate(cells[columnMapping.date]) : null,
+      date,
       merchant,
-      amount: columnMapping.amount !== undefined ? parseAmount(cells[columnMapping.amount]) : null,
+      amount,
       categoryId,
       person,
       matchedRule: !categoryFromFile && !personFromFile && !!rule,
+      isPossibleDuplicate: date !== null && amount !== null && merchant !== '' && existingKeys.has(`${date}|${amount}|${normalizeMerchantKey(merchant)}`),
     }
   })
 }

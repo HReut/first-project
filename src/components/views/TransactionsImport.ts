@@ -48,7 +48,9 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
 
   const state = store.getState()
   const mappingRules = await listMappingRules()
-  const rows = isCsv ? buildImportPreview(await file.text(), state.categories, mappingRules) : buildImportPreviewFromTable(await parseXlsx(file), state.categories, mappingRules)
+  const rows = isCsv
+    ? buildImportPreview(await file.text(), state.categories, mappingRules, state.transactions)
+    : buildImportPreviewFromTable(await parseXlsx(file), state.categories, mappingRules, state.transactions)
 
   if (rows.length === 0) {
     showToast('No data rows found in that file.')
@@ -73,15 +75,20 @@ async function ensureUncategorizedCategory(store: Store<AppState>): Promise<Cate
 
 function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, currentPerson: Person): void {
   const { categories } = store.getState()
+  const duplicateCount = rows.filter((row) => row.isPossibleDuplicate).length
 
   const modal = new Modal(
     `
       <h2 class="modal__title">Import ${rows.length} transaction${rows.length === 1 ? '' : 's'}</h2>
-      <p class="import-preview__hint">Review and fix anything before importing — these are only saved once you confirm.</p>
+      <p class="import-preview__hint">
+        Review and fix anything before importing — these are only saved once you confirm.
+        ${duplicateCount > 0 ? `${duplicateCount} row${duplicateCount === 1 ? ' looks' : 's look'} like ${duplicateCount === 1 ? 'it\'s' : 'they\'re'} already in your data, and start${duplicateCount === 1 ? 's' : ''} unchecked.` : ''}
+      </p>
       <div class="import-preview__table-wrap">
         <table class="import-preview__table">
           <thead>
             <tr>
+              <th></th>
               <th>Date</th>
               <th>Merchant</th>
               <th>Amount</th>
@@ -93,11 +100,13 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
             ${rows
               .map(
                 (row, index) => `
-              <tr data-row="${index}">
+              <tr data-row="${index}" class="${row.isPossibleDuplicate ? 'import-preview__row--duplicate' : ''}">
+                <td><input type="checkbox" class="row-select" data-field="include" ${row.isPossibleDuplicate ? '' : 'checked'}></td>
                 <td><input type="date" class="filter-input" data-field="date" value="${row.date ?? ''}"></td>
                 <td>
                   <input type="text" class="filter-input" data-field="merchant" value="${row.merchant}">
                   ${row.matchedRule ? '<span class="import-preview__rule-badge" title="Auto-filled from a saved rule">Rule</span>' : ''}
+                  ${row.isPossibleDuplicate ? '<span class="import-preview__rule-badge import-preview__rule-badge--warn" title="Same date, merchant, and amount as an existing transaction">Possible duplicate</span>' : ''}
                 </td>
                 <td><input type="number" class="filter-input" data-field="amount" min="0" step="0.01" value="${row.amount ?? ''}"></td>
                 <td>
@@ -120,7 +129,7 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
       </div>
       <div class="modal__actions">
         <button type="button" class="btn" id="import-cancel">Cancel</button>
-        <button type="button" class="btn btn--primary" id="import-confirm">Import ${rows.length} transaction${rows.length === 1 ? '' : 's'}</button>
+        <button type="button" class="btn btn--primary" id="import-confirm">Import selected</button>
       </div>
     `,
     { ariaLabel: 'Import transactions' },
@@ -141,6 +150,12 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
   let skipped = 0
 
   for (const rowEl of rowsEl) {
+    const included = rowEl.querySelector<HTMLInputElement>('[data-field="include"]')!.checked
+    if (!included) {
+      skipped++
+      continue
+    }
+
     const date = rowEl.querySelector<HTMLInputElement>('[data-field="date"]')!.value
     const merchant = rowEl.querySelector<HTMLInputElement>('[data-field="merchant"]')!.value.trim()
     const amount = Number(rowEl.querySelector<HTMLInputElement>('[data-field="amount"]')!.value)
@@ -166,11 +181,7 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
     const { transactions } = store.getState()
     store.setState({ transactions: [...created, ...transactions] })
     modal.close()
-    showToast(
-      skipped > 0
-        ? `Imported ${created.length} transactions (${skipped} skipped — missing date, merchant, or amount).`
-        : `Imported ${created.length} transactions.`,
-    )
+    showToast(skipped > 0 ? `Imported ${created.length} transactions (${skipped} unchecked or incomplete row${skipped === 1 ? '' : 's'} skipped).` : `Imported ${created.length} transactions.`)
   } catch {
     showToast('Import failed — the database may need migration 0003 run first.')
   }

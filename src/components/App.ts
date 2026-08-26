@@ -9,6 +9,9 @@ import { loadAccountBalance } from '../data/accountBalanceRepo.ts'
 import { listBudgetLimitOverrides } from '../data/budgetLimitOverridesRepo.ts'
 import { listActivityLog } from '../data/activityLogRepo.ts'
 import { findRulesDueForGeneration, transactionForDueRule } from '../utils/recurring.ts'
+import { topBudgetedCategories } from '../utils/insights.ts'
+import { budgetStatus } from '../utils/budget.ts'
+import { formatCurrency } from '../utils/format.ts'
 import { personFromEmail, signOut } from '../lib/auth.ts'
 import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
 import { mountAuthGate } from './AuthGate.ts'
@@ -25,10 +28,8 @@ import {
   plusIconMarkup,
   refreshIconMarkup,
   searchIconMarkup,
-  shieldCheckIconMarkup,
   targetIconMarkup,
   uploadIconMarkup,
-  walletIconMarkup,
 } from './icons/NavIcons.ts'
 import { moonIconMarkup, sunIconMarkup } from './icons/ThemeIcons.ts'
 import { mountOverviewView } from './views/OverviewView.ts'
@@ -55,9 +56,7 @@ const PRIMARY_VIEWS: NavEntry[] = [
 ]
 
 const MANAGEMENT_VIEWS: NavEntry[] = [
-  { id: 'accounts', label: 'Accounts', shortLabel: 'Accounts', icon: walletIconMarkup },
   { id: 'history', label: 'History', shortLabel: 'History', icon: historyIconMarkup },
-  { id: 'security', label: 'Security', shortLabel: 'Security', icon: shieldCheckIconMarkup },
   { id: 'settings', label: 'Settings & Automations', shortLabel: 'Settings', icon: gearIconMarkup },
   { id: 'help', label: 'Help Center', shortLabel: 'Help', icon: helpIconMarkup },
 ]
@@ -86,6 +85,32 @@ function isSidebarCollapsed(): boolean {
 
 function avatarInitial(userEmail: string | null): string {
   return (userEmail ?? '?').trim().charAt(0).toUpperCase() || '?'
+}
+
+interface NotificationItem {
+  text: string
+  view: View
+}
+
+/** What the bell actually has to say — pending reviews and categories over
+ * budget this month. Deliberately just these two: both are things the app
+ * already knows and tracks, so surfacing them here saves a trip to
+ * Transactions/Budgets to notice, rather than inventing new signals. */
+function computeNotifications(state: AppState): NotificationItem[] {
+  const items: NotificationItem[] = []
+
+  const pendingCount = state.transactions.filter((tx) => tx.status === 'pending').length
+  if (pendingCount > 0) {
+    items.push({ text: `${pendingCount} transaction${pendingCount === 1 ? '' : 's'} need${pendingCount === 1 ? 's' : ''} review`, view: 'transactions' })
+  }
+
+  for (const { category, spent, limit } of topBudgetedCategories(state.transactions, state.categories, state.budgetLimitOverrides)) {
+    if (budgetStatus(spent, limit) === 'critical') {
+      items.push({ text: `${category.icon} ${category.name} is over budget (${formatCurrency(spent)} of ${formatCurrency(limit ?? 0)})`, view: 'budgets' })
+    }
+  }
+
+  return items
 }
 
 export function mountApp(root: HTMLElement, userEmail: string | null = null): void {
@@ -217,7 +242,16 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           <div class="app-topbar__meta">
             <span class="app-topbar__synced">Last synced: <span id="last-synced-label">just now</span></span>
             <button type="button" class="icon-btn" id="refresh-btn" aria-label="Refresh data">${refreshIconMarkup()}</button>
-            <button type="button" class="icon-btn" id="notif-btn" aria-label="Notifications">${bellIconMarkup()}</button>
+            <div class="notif-wrap">
+              <button type="button" class="icon-btn" id="notif-btn" aria-label="Notifications">
+                ${bellIconMarkup()}
+                <span class="notif-badge" id="notif-badge" hidden></span>
+              </button>
+              <div class="notif-panel" id="notif-panel" hidden>
+                <p class="notif-panel__header">Notifications</p>
+                <div class="notif-panel__list" id="notif-list"></div>
+              </div>
+            </div>
             <span class="app-topbar__avatar" aria-hidden="true">${avatarInitial(userEmail)}</span>
           </div>
         </header>
@@ -229,9 +263,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           <section id="view-budgets" hidden></section>
           <section id="view-savings" hidden></section>
           <section id="view-analytics" hidden></section>
-          <section id="view-accounts" hidden></section>
           <section id="view-history" hidden></section>
-          <section id="view-security" hidden></section>
           <section id="view-settings" hidden></section>
           <section id="view-help" hidden></section>
         </main>
@@ -250,9 +282,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     budgets: root.querySelector<HTMLElement>('#view-budgets')!,
     savings: root.querySelector<HTMLElement>('#view-savings')!,
     analytics: root.querySelector<HTMLElement>('#view-analytics')!,
-    accounts: root.querySelector<HTMLElement>('#view-accounts')!,
     history: root.querySelector<HTMLElement>('#view-history')!,
-    security: root.querySelector<HTMLElement>('#view-security')!,
     settings: root.querySelector<HTMLElement>('#view-settings')!,
     help: root.querySelector<HTMLElement>('#view-help')!,
   }
@@ -333,6 +363,40 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     })
   })
 
+  // ---------- Notifications ----------
+
+  const notifWrapEl = root.querySelector<HTMLElement>('.notif-wrap')!
+  const notifBtn = root.querySelector<HTMLButtonElement>('#notif-btn')!
+  const notifPanel = root.querySelector<HTMLElement>('#notif-panel')!
+  const notifBadge = root.querySelector<HTMLElement>('#notif-badge')!
+  const notifList = root.querySelector<HTMLElement>('#notif-list')!
+
+  function renderNotifications(state: AppState): void {
+    const items = computeNotifications(state)
+    notifBadge.hidden = items.length === 0
+    notifBadge.textContent = String(items.length)
+    notifList.innerHTML =
+      items.length === 0
+        ? `<p class="notif-panel__empty">You're all caught up.</p>`
+        : items.map((item, index) => `<button type="button" class="notif-item" data-notif-index="${index}">${item.text}</button>`).join('')
+    notifList.dataset.views = JSON.stringify(items.map((item) => item.view))
+  }
+
+  notifBtn.addEventListener('click', () => {
+    notifPanel.hidden = !notifPanel.hidden
+  })
+  notifList.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-notif-index]')
+    if (!button) return
+    const views = JSON.parse(notifList.dataset.views ?? '[]') as View[]
+    const view = views[Number(button.dataset.notifIndex)]
+    if (view) navigate(view)
+    notifPanel.hidden = true
+  })
+  document.addEventListener('click', (event) => {
+    if (!notifPanel.hidden && !notifWrapEl.contains(event.target as Node)) notifPanel.hidden = true
+  })
+
   store.subscribe((state) => {
     loadingEl.hidden = state.status !== 'loading'
     errorEl.hidden = state.status !== 'error'
@@ -352,18 +416,6 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         subtitle: 'Track shared savings goals alongside your everyday budget.',
         icon: '🐷',
       })
-      mountPlaceholderView(viewEls.accounts, {
-        eyebrow: 'Management',
-        title: 'Accounts',
-        subtitle: 'Manage linked bank accounts, cards, and shared funds.',
-        icon: '👛',
-      })
-      mountPlaceholderView(viewEls.security, {
-        eyebrow: 'Management',
-        title: 'Security',
-        subtitle: 'Review sign-in activity and manage household access.',
-        icon: '🛡️',
-      })
       mountPlaceholderView(viewEls.help, {
         eyebrow: 'Management',
         title: 'Help Center',
@@ -373,9 +425,11 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     }
 
     applyViewVisibility(state)
+    renderNotifications(state)
   })
 
   applyViewVisibility(store.getState())
+  renderNotifications(store.getState())
 
   loadHouseholdData()
 }

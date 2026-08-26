@@ -576,6 +576,79 @@ p {
   cursor: default;
 }
 
+.notif-wrap {
+  position: relative;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--status-critical);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 14px;
+  z-index: 30;
+}
+
+.notif-panel__header {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0 0 8px;
+}
+
+.notif-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.notif-panel__empty {
+  font-size: 13px;
+  color: var(--text);
+  margin: 0;
+}
+
+.notif-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--text-h);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.notif-item:hover {
+  background: var(--bg);
+}
+
 .app-topbar__avatar {
   width: 34px;
   height: 34px;
@@ -2650,6 +2723,15 @@ p {
   background: var(--accent-bg);
   border-radius: 999px;
   padding: 2px 7px;
+}
+
+.import-preview__rule-badge--warn {
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 14%, var(--surface));
+}
+
+.import-preview__row--duplicate {
+  background: color-mix(in srgb, var(--status-warning) 6%, transparent);
 }
 
 /* ---------- Toggle switch ---------- */

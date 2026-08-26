@@ -1,5 +1,5 @@
 import type { Store } from '../../state/store.ts'
-import type { ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, RecurringRuleDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
+import type { ActivityEntityType, ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, Person, RecurringRuleDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
 import { formatDateTime } from '../../utils/format.ts'
 import { markActivityUndone } from '../../data/activityLogRepo.ts'
 import { restoreTransactions } from '../../data/transactionsRepo.ts'
@@ -21,7 +21,20 @@ function isUndoable(entry: ActivityLogEntry): boolean {
   return false
 }
 
+const ENTITY_TYPE_LABEL: Record<ActivityEntityType, string> = {
+  transaction: 'Transactions',
+  budget_limit: 'Budget limits',
+  settlement: 'Settlements',
+  category: 'Categories',
+  recurring_rule: 'Recurring rules',
+  account_balance: 'Account balance',
+}
+const PEOPLE: Person[] = ['Reut', 'Keren']
+
 export function mountHistoryView(root: HTMLElement, store: Store<AppState>): void {
+  let typeFilter: ActivityEntityType | 'all' = 'all'
+  let personFilter: Person | 'all' = 'all'
+
   root.innerHTML = `
     <section class="band band--hero">
       <div class="band__inner">
@@ -33,12 +46,43 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
 
     <section class="band">
       <div class="band__inner">
+        <div class="tx-page-header">
+          <p class="eyebrow">Activity</p>
+          <div class="tx-page-header__actions">
+            <label class="toolbar-control">
+              <span class="toolbar-control__label">Type</span>
+              <select class="toolbar-control__input" id="history-type-select">
+                <option value="all">All types</option>
+                ${Object.entries(ENTITY_TYPE_LABEL)
+                  .map(([value, label]) => `<option value="${value}">${label}</option>`)
+                  .join('')}
+              </select>
+            </label>
+            <label class="toolbar-control">
+              <span class="toolbar-control__label">Person</span>
+              <select class="toolbar-control__input" id="history-person-select">
+                <option value="all">Both</option>
+                ${PEOPLE.map((p) => `<option value="${p}">${p}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+        </div>
         <div class="activity-list history-list" id="history-log" aria-label="Activity history"></div>
       </div>
     </section>
   `
 
   const logEl = root.querySelector<HTMLElement>('#history-log')!
+  const typeSelect = root.querySelector<HTMLSelectElement>('#history-type-select')!
+  const personSelect = root.querySelector<HTMLSelectElement>('#history-person-select')!
+  typeSelect.addEventListener('change', () => {
+    typeFilter = typeSelect.value as ActivityEntityType | 'all'
+    render(store.getState())
+  })
+  personSelect.addEventListener('change', () => {
+    personFilter = personSelect.value as Person | 'all'
+    render(store.getState())
+  })
 
   logEl.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-undo-id]')
@@ -102,7 +146,16 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
       return
     }
 
-    logEl.innerHTML = state.activityLog
+    const rows = state.activityLog.filter(
+      (entry) => (typeFilter === 'all' || entry.entityType === typeFilter) && (personFilter === 'all' || entry.performedBy === personFilter),
+    )
+
+    if (rows.length === 0) {
+      logEl.innerHTML = `<p class="budget-summary__empty">No activity matches these filters.</p>`
+      return
+    }
+
+    logEl.innerHTML = rows
       .map(
         (entry) => `
       <div class="history-row">

@@ -243,7 +243,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         <div class="hero-card__right">
           <div class="hero-card__right-header">
             <span class="hero-card__right-title">Settlement</span>
-            <a class="card-link" href="#accounts">View Breakdown →</a>
+            <a class="card-link" href="#history">View Breakdown →</a>
           </div>
           ${
             balance

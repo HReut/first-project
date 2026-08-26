@@ -192,7 +192,7 @@ export interface Filters {
   search: string
 }
 
-export type View = 'overview' | 'transactions' | 'budgets' | 'savings' | 'analytics' | 'accounts' | 'history' | 'security' | 'settings' | 'help'
+export type View = 'overview' | 'transactions' | 'budgets' | 'savings' | 'analytics' | 'history' | 'settings' | 'help'
 
 export type LoadStatus = 'loading' | 'ready' | 'error'
 
