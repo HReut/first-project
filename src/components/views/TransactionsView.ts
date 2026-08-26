@@ -748,14 +748,16 @@ export class TransactionsView {
 
   /** Fire-and-forget: a logging failure (e.g. migration 0009 not run)
    * shouldn't block or roll back the real action, which has already
-   * succeeded by the time this is called. */
+   * succeeded by the time this is called — but it shouldn't be silent
+   * either, or a missing migration just looks like "History doesn't work"
+   * with no clue why. */
   private logTx(action: ActivityAction, summary: string, beforeData: unknown = null): void {
     logActivity({ entityType: 'transaction', action, summary, beforeData, performedBy: this.#currentPerson })
       .then((entry) => {
         const { activityLog } = this.#store.getState()
         this.#store.setState({ activityLog: [entry, ...activityLog] })
       })
-      .catch(() => {})
+      .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
   }
 
   private commitEdit(id: string, patch: Partial<NewTransaction>): void {

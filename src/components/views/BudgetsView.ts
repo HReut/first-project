@@ -149,7 +149,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
           const { activityLog } = store.getState()
           store.setState({ activityLog: [entry, ...activityLog] })
         })
-        .catch(() => {})
+        .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
 
       modal.close()
       showToast('Budget updated.', [], 2500)
