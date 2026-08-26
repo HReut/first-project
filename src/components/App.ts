@@ -8,6 +8,7 @@ import { listRecurringRules, updateRecurringRule } from '../data/recurringRulesR
 import { loadAccountBalance } from '../data/accountBalanceRepo.ts'
 import { listBudgetLimitOverrides } from '../data/budgetLimitOverridesRepo.ts'
 import { listActivityLog } from '../data/activityLogRepo.ts'
+import { listSavingsGoals } from '../data/savingsGoalsRepo.ts'
 import { findRulesDueForGeneration, transactionForDueRule } from '../utils/recurring.ts'
 import { topBudgetedCategories } from '../utils/insights.ts'
 import { budgetStatus } from '../utils/budget.ts'
@@ -38,6 +39,7 @@ import { mountBudgetsView } from './views/BudgetsView.ts'
 import { mountAnalyticsView } from './views/AnalyticsView.ts'
 import { mountSettingsView } from './views/SettingsView.ts'
 import { mountHistoryView } from './views/HistoryView.ts'
+import { mountSavingsView } from './views/SavingsView.ts'
 import { mountPlaceholderView } from './views/PlaceholderView.ts'
 
 interface NavEntry {
@@ -128,6 +130,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     budgetLimitOverrides: [],
     accountBalance: null,
     activityLog: [],
+    savingsGoals: [],
     filters: {
       categoryId: 'all',
       person: 'all',
@@ -146,9 +149,21 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       loadAccountBalance(),
       listBudgetLimitOverrides(),
       listActivityLog(),
+      listSavingsGoals(),
     ])
-      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides, activityLog]) => {
-        store.setState({ categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides, activityLog, status: 'ready' })
+      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides, activityLog, savingsGoals]) => {
+        store.setState({
+          categories,
+          transactions,
+          emailRules,
+          mappingRules,
+          recurringRules,
+          accountBalance,
+          budgetLimitOverrides,
+          activityLog,
+          savingsGoals,
+          status: 'ready',
+        })
         return generateDueRecurringTransactions()
       })
       .catch((err: unknown) => {
@@ -410,12 +425,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       mountAnalyticsView(viewEls.analytics, store)
       mountSettingsView(viewEls.settings, store, currentPerson)
       mountHistoryView(viewEls.history, store)
-      mountPlaceholderView(viewEls.savings, {
-        eyebrow: 'Household finance',
-        title: 'Savings',
-        subtitle: 'Track shared savings goals alongside your everyday budget.',
-        icon: '🐷',
-      })
+      mountSavingsView(viewEls.savings, store, currentPerson)
       mountPlaceholderView(viewEls.help, {
         eyebrow: 'Management',
         title: 'Help Center',

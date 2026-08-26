@@ -118,7 +118,7 @@ export interface AccountBalance {
  * table — "currently settled as of" is the performedAt of the latest
  * non-undone entityType==='settlement' entry, see resolveSettledAfter() in
  * src/utils/activity.ts. */
-export type ActivityEntityType = 'transaction' | 'budget_limit' | 'settlement' | 'category' | 'recurring_rule' | 'account_balance'
+export type ActivityEntityType = 'transaction' | 'budget_limit' | 'settlement' | 'category' | 'recurring_rule' | 'account_balance' | 'savings_goal'
 export type ActivityAction =
   | 'created'
   | 'updated'
@@ -149,6 +149,23 @@ export type NewActivityLogEntry = Omit<ActivityLogEntry, 'id' | 'performedAt' | 
 /** beforeData shape for a transaction 'deleted' or 'bulk_deleted' entry. */
 export interface TransactionDeletedBefore {
   transactions: Transaction[]
+}
+
+/** A named savings target — saved/target amounts are edited directly, same
+ * "just re-enter the true number" model as AccountBalance, since savings
+ * aren't necessarily sitting in the account this app already tracks. */
+export interface SavingsGoal {
+  id: string
+  name: string
+  targetAmount: number
+  savedAmount: number
+}
+
+export type NewSavingsGoal = Omit<SavingsGoal, 'id'>
+
+/** beforeData shape for a savings_goal 'deleted' entry. */
+export interface SavingsGoalDeletedBefore {
+  goal: SavingsGoal
 }
 
 /** beforeData shape for a category 'deleted' entry — the category itself,
@@ -208,5 +225,6 @@ export interface AppState {
   budgetLimitOverrides: BudgetLimitOverride[]
   accountBalance: AccountBalance | null
   activityLog: ActivityLogEntry[]
+  savingsGoals: SavingsGoal[]
   filters: Filters
 }

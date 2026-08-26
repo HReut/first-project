@@ -63,6 +63,14 @@ export interface AccountBalanceRow {
   updated_at: string
 }
 
+export interface SavingsGoalRow {
+  id: string
+  name: string
+  target_amount: number
+  saved_amount: number
+  created_at: string
+}
+
 export interface ActivityLogRow {
   id: string
   entity_type: string

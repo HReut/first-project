@@ -1,11 +1,12 @@
 import type { Store } from '../../state/store.ts'
-import type { ActivityEntityType, ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, Person, RecurringRuleDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
+import type { ActivityEntityType, ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, Person, RecurringRuleDeletedBefore, SavingsGoalDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
 import { formatDateTime } from '../../utils/format.ts'
 import { markActivityUndone } from '../../data/activityLogRepo.ts'
 import { restoreTransactions } from '../../data/transactionsRepo.ts'
 import { updateCategory, restoreCategory } from '../../data/categoriesRepo.ts'
 import { deleteBudgetLimitOverride, restoreBudgetLimitOverrides } from '../../data/budgetLimitOverridesRepo.ts'
 import { restoreRecurringRule } from '../../data/recurringRulesRepo.ts'
+import { restoreSavingsGoal } from '../../data/savingsGoalsRepo.ts'
 import { showToast } from '../shared/Toast.ts'
 
 /** Only these entity/action combinations get an Undo button — the ones
@@ -18,6 +19,7 @@ function isUndoable(entry: ActivityLogEntry): boolean {
   if (entry.entityType === 'settlement') return entry.action === 'settled'
   if (entry.entityType === 'category') return entry.action === 'deleted'
   if (entry.entityType === 'recurring_rule') return entry.action === 'deleted'
+  if (entry.entityType === 'savings_goal') return entry.action === 'deleted'
   return false
 }
 
@@ -28,6 +30,7 @@ const ENTITY_TYPE_LABEL: Record<ActivityEntityType, string> = {
   category: 'Categories',
   recurring_rule: 'Recurring rules',
   account_balance: 'Account balance',
+  savings_goal: 'Savings goals',
 }
 const PEOPLE: Person[] = ['Reut', 'Keren']
 
@@ -129,6 +132,11 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
       const restored = await restoreRecurringRule(rule)
       const state = store.getState()
       store.setState({ recurringRules: [...state.recurringRules, restored] })
+    } else if (entry.entityType === 'savings_goal' && entry.action === 'deleted') {
+      const { goal } = entry.beforeData as SavingsGoalDeletedBefore
+      const restored = await restoreSavingsGoal(goal)
+      const state = store.getState()
+      store.setState({ savingsGoals: [...state.savingsGoals, restored] })
     }
     // 'settlement'/'settled' needs no state restore beyond marking this entry
     // undone — resolveSettledAfter() falls back to the previous settlement

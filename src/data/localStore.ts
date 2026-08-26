@@ -1,4 +1,4 @@
-import type { AccountBalance, ActivityLogEntry, BudgetLimitOverride, Category, EmailSyncRule, MappingRule, NewActivityLogEntry, RecurringRule, Transaction } from '../types.ts'
+import type { AccountBalance, ActivityLogEntry, BudgetLimitOverride, Category, EmailSyncRule, MappingRule, NewActivityLogEntry, RecurringRule, SavingsGoal, Transaction } from '../types.ts'
 import { SEED_CATEGORIES } from './mockCategories.ts'
 import { createMockTransactions } from './mockTransactions.ts'
 
@@ -15,6 +15,7 @@ const KEYS = {
   accountBalance: 'opa-tulik:account-balance',
   budgetLimitOverrides: 'opa-tulik:budget-limit-overrides',
   activityLog: 'opa-tulik:activity-log',
+  savingsGoals: 'opa-tulik:savings-goals',
 } as const
 
 function read<T>(key: string): T | null {
@@ -134,4 +135,15 @@ export function updateLocalActivityLog(id: string, patch: Partial<ActivityLogEnt
     KEYS.activityLog,
     entries.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
   )
+}
+
+export function loadLocalSavingsGoals(): SavingsGoal[] {
+  const existing = read<SavingsGoal[]>(KEYS.savingsGoals)
+  if (existing) return existing
+  write(KEYS.savingsGoals, [])
+  return []
+}
+
+export function saveLocalSavingsGoals(goals: SavingsGoal[]): void {
+  write(KEYS.savingsGoals, goals)
 }
