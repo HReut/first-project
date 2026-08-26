@@ -48,3 +48,29 @@ export async function deleteBudgetLimitOverridesForCategory(categoryId: string):
   }
   saveLocalBudgetLimitOverrides(loadLocalBudgetLimitOverrides().filter((o) => o.categoryId !== categoryId))
 }
+
+/** Undoes just the one override an edit created (This month / From now on
+ * scopes) — narrower than deleteBudgetLimitOverridesForCategory(), which
+ * would also remove any unrelated overrides already set for that category. */
+export async function deleteBudgetLimitOverride(id: string): Promise<void> {
+  if (supabase) {
+    const { error } = await supabase.from('budget_limit_overrides').delete().eq('id', id)
+    if (error) throw error
+    return
+  }
+  saveLocalBudgetLimitOverrides(loadLocalBudgetLimitOverrides().filter((o) => o.id !== id))
+}
+
+/** Re-inserts overrides with their original ids — undoes the "All months"
+ * scope's wipe of a category's existing overrides. */
+export async function restoreBudgetLimitOverrides(overrides: BudgetLimitOverride[]): Promise<void> {
+  if (overrides.length === 0) return
+
+  if (supabase) {
+    const rows = overrides.map((o) => ({ id: o.id, category_id: o.categoryId, start_month: o.startMonth, end_month: o.endMonth, limit_amount: o.limit }))
+    const { error } = await supabase.from('budget_limit_overrides').insert(rows)
+    if (error) throw error
+    return
+  }
+  saveLocalBudgetLimitOverrides([...overrides, ...loadLocalBudgetLimitOverrides()])
+}

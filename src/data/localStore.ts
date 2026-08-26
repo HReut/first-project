@@ -1,4 +1,4 @@
-import type { AccountBalance, BudgetLimitOverride, Category, EmailSyncRule, MappingRule, RecurringRule, Transaction } from '../types.ts'
+import type { AccountBalance, ActivityLogEntry, BudgetLimitOverride, Category, EmailSyncRule, MappingRule, NewActivityLogEntry, RecurringRule, Transaction } from '../types.ts'
 import { SEED_CATEGORIES } from './mockCategories.ts'
 import { createMockTransactions } from './mockTransactions.ts'
 
@@ -14,6 +14,7 @@ const KEYS = {
   recurringRules: 'opa-tulik:recurring-rules',
   accountBalance: 'opa-tulik:account-balance',
   budgetLimitOverrides: 'opa-tulik:budget-limit-overrides',
+  activityLog: 'opa-tulik:activity-log',
 } as const
 
 function read<T>(key: string): T | null {
@@ -111,4 +112,26 @@ export function loadLocalBudgetLimitOverrides(): BudgetLimitOverride[] {
 
 export function saveLocalBudgetLimitOverrides(overrides: BudgetLimitOverride[]): void {
   write(KEYS.budgetLimitOverrides, overrides)
+}
+
+export function loadLocalActivityLog(): ActivityLogEntry[] {
+  const existing = read<ActivityLogEntry[]>(KEYS.activityLog)
+  if (existing) return existing
+  write(KEYS.activityLog, [])
+  return []
+}
+
+export function appendLocalActivityLog(input: NewActivityLogEntry): ActivityLogEntry {
+  const entries = loadLocalActivityLog()
+  const created: ActivityLogEntry = { ...input, id: crypto.randomUUID(), performedAt: new Date().toISOString(), undone: false }
+  write(KEYS.activityLog, [created, ...entries])
+  return created
+}
+
+export function updateLocalActivityLog(id: string, patch: Partial<ActivityLogEntry>): void {
+  const entries = loadLocalActivityLog()
+  write(
+    KEYS.activityLog,
+    entries.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
+  )
 }

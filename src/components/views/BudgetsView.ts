@@ -1,11 +1,12 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Category } from '../../types.ts'
+import type { AppState, BudgetLimitChangedBefore, Category, Person } from '../../types.ts'
 import { computeCategoryBreakdown, resolveBudgetLimitForMonth, resolveBudgetLimitForPeriod } from '../../utils/insights.ts'
 import { formatCurrency } from '../../utils/format.ts'
 import { budgetStatus } from '../../utils/budget.ts'
 import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
 import { updateCategory } from '../../data/categoriesRepo.ts'
 import { createBudgetLimitOverride, deleteBudgetLimitOverridesForCategory } from '../../data/budgetLimitOverridesRepo.ts'
+import { logActivity } from '../../data/activityLogRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
@@ -25,7 +26,7 @@ function currentMonthKey(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
-export function mountBudgetsView(root: HTMLElement, store: Store<AppState>): void {
+export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
   let period: PeriodPreset = 'this-month'
 
   root.innerHTML = `
@@ -112,7 +113,14 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>): voi
 
   async function applyBudgetLimit(category: Category, limit: number | null, scope: BudgetScope, modal: Modal): Promise<void> {
     const month = currentMonthKey()
+    const previousCategoryLimit = category.monthlyBudgetLimit
+    // Only "All months" actually clears existing overrides — capturing them
+    // for the other two scopes would make undo try to re-insert overrides
+    // that were never deleted, colliding with their still-live rows.
+    const previousOverrides = scope === 'all-months' ? store.getState().budgetLimitOverrides.filter((o) => o.categoryId === category.id) : []
+
     try {
+      let createdOverrideId: string | null = null
       if (scope === 'all-months') {
         const [updated] = await Promise.all([updateCategory(category.id, { monthlyBudgetLimit: limit }), deleteBudgetLimitOverridesForCategory(category.id)])
         const { categories, budgetLimitOverrides } = store.getState()
@@ -123,9 +131,26 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>): voi
       } else {
         const endMonth = scope === 'this-month' ? month : null
         const created = await createBudgetLimitOverride({ categoryId: category.id, startMonth: month, endMonth, limit })
+        createdOverrideId = created.id
         const { budgetLimitOverrides } = store.getState()
         store.setState({ budgetLimitOverrides: [...budgetLimitOverrides, created] })
       }
+
+      const scopeLabel = scope === 'this-month' ? 'this month only' : scope === 'from-now-on' ? 'this month onward' : 'all months'
+      const before: BudgetLimitChangedBefore = { categoryId: category.id, previousCategoryLimit, previousOverrides, createdOverrideId }
+      logActivity({
+        entityType: 'budget_limit',
+        action: 'changed',
+        summary: `Changed ${category.name} budget to ${limit === null ? 'no limit' : formatCurrency(limit)} (${scopeLabel})`,
+        beforeData: before,
+        performedBy: currentPerson,
+      })
+        .then((entry) => {
+          const { activityLog } = store.getState()
+          store.setState({ activityLog: [entry, ...activityLog] })
+        })
+        .catch(() => {})
+
       modal.close()
       showToast('Budget updated.', [], 2500)
     } catch {

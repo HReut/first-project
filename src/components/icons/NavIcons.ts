@@ -191,6 +191,16 @@ export function filterIconMarkup(): string {
   `.trim()
 }
 
+export function historyIconMarkup(): string {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 20a8 8 0 1 0-6.7-3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M2.5 14v3.5H6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M12 8v4.5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  `.trim()
+}
+
 export function calendarIconMarkup(): string {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">

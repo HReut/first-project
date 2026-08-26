@@ -79,6 +79,25 @@ export async function updateTransaction(id: string, patch: Partial<NewTransactio
   return updated.find((tx) => tx.id === id)!
 }
 
+/** Re-inserts previously-deleted transactions with their original ids —
+ * used by History's Undo on a transaction delete/bulk-delete entry.
+ * createTransactions() can't be reused here since it always lets the
+ * database generate a fresh id, which would make the restored row look
+ * like a brand new transaction rather than the same one coming back. */
+export async function restoreTransactions(transactions: Transaction[]): Promise<Transaction[]> {
+  if (transactions.length === 0) return []
+
+  if (supabase) {
+    const rows = transactions.map((tx) => ({ id: tx.id, ...toRow(tx) }))
+    const { data, error } = await supabase.from('transactions').insert(rows).select()
+    if (error) throw error
+    return (data as TransactionRow[]).map(fromRow)
+  }
+  const existing = loadLocalTransactions(loadLocalCategories())
+  saveLocalTransactions([...transactions, ...existing])
+  return transactions
+}
+
 export async function deleteTransactions(ids: string[]): Promise<void> {
   if (supabase) {
     const { error } = await supabase.from('transactions').delete().in('id', ids)

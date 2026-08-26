@@ -7,6 +7,7 @@ import { listMappingRules } from '../data/mappingRulesRepo.ts'
 import { listRecurringRules, updateRecurringRule } from '../data/recurringRulesRepo.ts'
 import { loadAccountBalance } from '../data/accountBalanceRepo.ts'
 import { listBudgetLimitOverrides } from '../data/budgetLimitOverridesRepo.ts'
+import { listActivityLog } from '../data/activityLogRepo.ts'
 import { findRulesDueForGeneration, transactionForDueRule } from '../utils/recurring.ts'
 import { personFromEmail, signOut } from '../lib/auth.ts'
 import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
@@ -18,6 +19,7 @@ import {
   coinsIconMarkup,
   gearIconMarkup,
   helpIconMarkup,
+  historyIconMarkup,
   homeIconMarkup,
   listIconMarkup,
   plusIconMarkup,
@@ -34,6 +36,7 @@ import { mountTransactionsView } from './views/TransactionsView.ts'
 import { mountBudgetsView } from './views/BudgetsView.ts'
 import { mountAnalyticsView } from './views/AnalyticsView.ts'
 import { mountSettingsView } from './views/SettingsView.ts'
+import { mountHistoryView } from './views/HistoryView.ts'
 import { mountPlaceholderView } from './views/PlaceholderView.ts'
 
 interface NavEntry {
@@ -53,6 +56,7 @@ const PRIMARY_VIEWS: NavEntry[] = [
 
 const MANAGEMENT_VIEWS: NavEntry[] = [
   { id: 'accounts', label: 'Accounts', shortLabel: 'Accounts', icon: walletIconMarkup },
+  { id: 'history', label: 'History', shortLabel: 'History', icon: historyIconMarkup },
   { id: 'security', label: 'Security', shortLabel: 'Security', icon: shieldCheckIconMarkup },
   { id: 'settings', label: 'Settings & Automations', shortLabel: 'Settings', icon: gearIconMarkup },
   { id: 'help', label: 'Help Center', shortLabel: 'Help', icon: helpIconMarkup },
@@ -98,6 +102,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     recurringRules: [],
     budgetLimitOverrides: [],
     accountBalance: null,
+    activityLog: [],
     filters: {
       categoryId: 'all',
       person: 'all',
@@ -115,9 +120,10 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       listRecurringRules(),
       loadAccountBalance(),
       listBudgetLimitOverrides(),
+      listActivityLog(),
     ])
-      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides]) => {
-        store.setState({ categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides, status: 'ready' })
+      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides, activityLog]) => {
+        store.setState({ categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides, activityLog, status: 'ready' })
         return generateDueRecurringTransactions()
       })
       .catch((err: unknown) => {
@@ -224,6 +230,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           <section id="view-savings" hidden></section>
           <section id="view-analytics" hidden></section>
           <section id="view-accounts" hidden></section>
+          <section id="view-history" hidden></section>
           <section id="view-security" hidden></section>
           <section id="view-settings" hidden></section>
           <section id="view-help" hidden></section>
@@ -244,6 +251,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     savings: root.querySelector<HTMLElement>('#view-savings')!,
     analytics: root.querySelector<HTMLElement>('#view-analytics')!,
     accounts: root.querySelector<HTMLElement>('#view-accounts')!,
+    history: root.querySelector<HTMLElement>('#view-history')!,
     security: root.querySelector<HTMLElement>('#view-security')!,
     settings: root.querySelector<HTMLElement>('#view-settings')!,
     help: root.querySelector<HTMLElement>('#view-help')!,
@@ -332,11 +340,12 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
 
     if (state.status === 'ready' && !mounted) {
       mounted = true
-      mountOverviewView(viewEls.overview, store)
+      mountOverviewView(viewEls.overview, store, currentPerson)
       mountTransactionsView(viewEls.transactions, store, currentPerson)
-      mountBudgetsView(viewEls.budgets, store)
+      mountBudgetsView(viewEls.budgets, store, currentPerson)
       mountAnalyticsView(viewEls.analytics, store)
       mountSettingsView(viewEls.settings, store)
+      mountHistoryView(viewEls.history, store)
       mountPlaceholderView(viewEls.savings, {
         eyebrow: 'Household finance',
         title: 'Savings',

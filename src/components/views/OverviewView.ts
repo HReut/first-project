@@ -1,11 +1,13 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Category } from '../../types.ts'
+import type { AppState, Category, Person } from '../../types.ts'
 import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
+import { resolveSettledAfter } from '../../utils/activity.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { updateTransaction } from '../../data/transactionsRepo.ts'
-import { loadBalanceSettledAt, saveBalanceSettledAt } from '../../data/balanceSettleSettings.ts'
+import { logActivity } from '../../data/activityLogRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
+import { showToast } from '../shared/Toast.ts'
 
 const RECENT_ACTIVITY_LIMIT = 5
 const REVIEW_CENTER_LIMIT = 6
@@ -80,7 +82,7 @@ function renderSparkline(values: number[]): string {
   return `<svg class="hero-card__sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>`
 }
 
-export function mountOverviewView(root: HTMLElement, store: Store<AppState>): void {
+export function mountOverviewView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
   root.innerHTML = `
     <section class="band band--page-header">
       <div class="band__inner">
@@ -155,8 +157,23 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
 
   statusBannerEl.addEventListener('click', (event) => {
     if (!(event.target as HTMLElement).closest('[data-mark-settled]')) return
-    saveBalanceSettledAt(new Date().toISOString().slice(0, 10))
-    renderStatusBanner(store.getState())
+    const state = store.getState()
+    const balance = computeSplitBalance(state.transactions, new Date(), resolveSettledAfter(state.activityLog))
+    if (!balance) return
+    logActivity({
+      entityType: 'settlement',
+      action: 'settled',
+      summary: `Settled up: ${balance.owingPerson} paid ${balance.owedPerson} ${formatCurrency(balance.amount)}`,
+      beforeData: null,
+      performedBy: currentPerson,
+    })
+      .then((entry) => {
+        const { activityLog } = store.getState()
+        store.setState({ activityLog: [entry, ...activityLog] })
+      })
+      .catch(() => {
+        showToast('Could not settle up — has migration 0009 been run?')
+      })
   })
 
   reviewEl.addEventListener('click', (event) => {
@@ -189,7 +206,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>): vo
   function renderStatusBanner(state: AppState): void {
     const total = computeTotalAvailable(state.transactions, state.accountBalance)
     const trend = computeSpendTrend(state)
-    const balance = computeSplitBalance(state.transactions, new Date(), loadBalanceSettledAt())
+    const balance = computeSplitBalance(state.transactions, new Date(), resolveSettledAfter(state.activityLog))
 
     statusBannerEl.innerHTML = `
       <div class="card-header">

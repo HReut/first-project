@@ -23,6 +23,10 @@ export function formatDateShort(iso: string): string {
   return new Date(iso).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })
 }
 
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
 export function formatMonthLabel(monthKey: string): string {
   const [year, month] = monthKey.split('-').map(Number)
   return new Date(year, month - 1, 1).toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' })

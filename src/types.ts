@@ -110,6 +110,60 @@ export interface AccountBalance {
   setAt: string // ISO yyyy-mm-dd
 }
 
+/** A household-wide record of "what changed, when, by whom" — every
+ * meaningful change gets an entry; the ones that are actually risky to get
+ * wrong (deleting transactions, changing a budget limit, settling up)
+ * carry enough state in `beforeData` to undo with one click (see
+ * HistoryView.ts). Settlement history lives here too, not in a separate
+ * table — "currently settled as of" is the performedAt of the latest
+ * non-undone entityType==='settlement' entry, see resolveSettledAfter() in
+ * src/utils/activity.ts. */
+export type ActivityEntityType = 'transaction' | 'budget_limit' | 'settlement' | 'category' | 'recurring_rule' | 'account_balance'
+export type ActivityAction =
+  | 'created'
+  | 'updated'
+  | 'deleted'
+  | 'bulk_deleted'
+  | 'bulk_recategorized'
+  | 'bulk_marked_reviewed'
+  | 'changed'
+  | 'settled'
+
+export interface ActivityLogEntry {
+  id: string
+  entityType: ActivityEntityType
+  action: ActivityAction
+  summary: string
+  /** Undo-only, entityType/action-specific JSON — e.g. the deleted
+   * Transaction row(s) for a transaction 'deleted'/'bulk_deleted' entry, or
+   * the previous limit/overrides for a 'budget_limit' 'changed' entry. Null
+   * for entries with no undo action (most of them). */
+  beforeData: unknown
+  performedBy: Person
+  performedAt: string // ISO datetime
+  undone: boolean
+}
+
+export type NewActivityLogEntry = Omit<ActivityLogEntry, 'id' | 'performedAt' | 'undone'>
+
+/** beforeData shape for a transaction 'deleted' or 'bulk_deleted' entry. */
+export interface TransactionDeletedBefore {
+  transactions: Transaction[]
+}
+
+/** beforeData shape for a budget_limit 'changed' entry — enough to put the
+ * category back exactly how it was, whichever scope the edit used. Undo
+ * always: restores previousCategoryLimit (a no-op unless the edit was
+ * "All months"), deletes createdOverrideId if set (a no-op unless the edit
+ * was "This month"/"From now on"), and restores previousOverrides if any
+ * (a no-op unless the edit was "All months" and had overrides to wipe). */
+export interface BudgetLimitChangedBefore {
+  categoryId: string
+  previousCategoryLimit: number | null
+  previousOverrides: BudgetLimitOverride[]
+  createdOverrideId: string | null
+}
+
 export type PeriodFilter =
   | { kind: 'month'; month: string } // YYYY-MM
   | { kind: 'range'; start: string; end: string } // ISO dates, inclusive
@@ -122,7 +176,7 @@ export interface Filters {
   search: string
 }
 
-export type View = 'overview' | 'transactions' | 'budgets' | 'savings' | 'analytics' | 'accounts' | 'security' | 'settings' | 'help'
+export type View = 'overview' | 'transactions' | 'budgets' | 'savings' | 'analytics' | 'accounts' | 'history' | 'security' | 'settings' | 'help'
 
 export type LoadStatus = 'loading' | 'ready' | 'error'
 
@@ -137,5 +191,6 @@ export interface AppState {
   recurringRules: RecurringRule[]
   budgetLimitOverrides: BudgetLimitOverride[]
   accountBalance: AccountBalance | null
+  activityLog: ActivityLogEntry[]
   filters: Filters
 }

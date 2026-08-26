@@ -63,6 +63,17 @@ export interface AccountBalanceRow {
   updated_at: string
 }
 
+export interface ActivityLogRow {
+  id: string
+  entity_type: string
+  action: string
+  summary: string
+  before_data: unknown
+  performed_by: PersonRow
+  performed_at: string
+  undone: boolean
+}
+
 export interface RecurringRuleRow {
   id: string
   merchant: string

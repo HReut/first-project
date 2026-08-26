@@ -1,9 +1,10 @@
 import type { Store } from '../../state/store.ts'
-import type { Account, AppState, Category, NewTransaction, Person, Transaction, TransactionStatus } from '../../types.ts'
+import type { Account, ActivityAction, AppState, Category, NewTransaction, Person, Transaction, TransactionDeletedBefore, TransactionStatus } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel } from '../../utils/format.ts'
 import { computeReviewedStatus, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
+import { logActivity } from '../../data/activityLogRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
 import {
   ACCOUNT_LABEL,
@@ -745,10 +746,23 @@ export class TransactionsView {
     ])
   }
 
+  /** Fire-and-forget: a logging failure (e.g. migration 0009 not run)
+   * shouldn't block or roll back the real action, which has already
+   * succeeded by the time this is called. */
+  private logTx(action: ActivityAction, summary: string, beforeData: unknown = null): void {
+    logActivity({ entityType: 'transaction', action, summary, beforeData, performedBy: this.#currentPerson })
+      .then((entry) => {
+        const { activityLog } = this.#store.getState()
+        this.#store.setState({ activityLog: [entry, ...activityLog] })
+      })
+      .catch(() => {})
+  }
+
   private commitEdit(id: string, patch: Partial<NewTransaction>): void {
     updateTransaction(id, patch).then((updated) => {
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => (tx.id === id ? updated : tx)) })
+      this.logTx('updated', `Updated ${updated.merchant} (${Object.keys(patch).join(', ')})`)
     })
   }
 
@@ -773,25 +787,40 @@ export class TransactionsView {
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => updatedById.get(tx.id) ?? tx) })
       showToast(`${ids.length} transaction${ids.length === 1 ? '' : 's'} approved`, [], 2000)
+      this.logTx('bulk_marked_reviewed', `Marked ${ids.length} transaction${ids.length === 1 ? '' : 's'} reviewed`)
     })
   }
 
   private bulkRecategorize(categoryId: string): void {
     const ids = [...this.#selection]
+    const categoryName = this.#store.getState().categories.find((c) => c.id === categoryId)?.name ?? 'Uncategorized'
     Promise.all(ids.map((id) => updateTransaction(id, { categoryId }))).then((updated) => {
       const byId = new Map(updated.map((tx) => [tx.id, tx]))
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => byId.get(tx.id) ?? tx) })
+      this.logTx('bulk_recategorized', `Recategorized ${ids.length} transaction${ids.length === 1 ? '' : 's'} to ${categoryName}`)
     })
   }
 
   private bulkDelete(): void {
     const ids = [...this.#selection]
+    const idSet = new Set(ids)
+    const { transactions: current } = this.#store.getState()
+    const deleted = current.filter((tx) => idSet.has(tx.id))
+
     deleteTransactions(ids).then(() => {
-      const idSet = new Set(ids)
       const { transactions } = this.#store.getState()
       this.#selection.clear()
       this.#store.setState({ transactions: transactions.filter((tx) => !idSet.has(tx.id)) })
+      const total = deleted.reduce((sum, tx) => sum + tx.amount, 0)
+      const before: TransactionDeletedBefore = { transactions: deleted }
+      this.logTx(
+        deleted.length === 1 ? 'deleted' : 'bulk_deleted',
+        deleted.length === 1
+          ? `Deleted ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})`
+          : `Deleted ${deleted.length} transactions (${formatCurrency(total)} total)`,
+        before,
+      )
     })
   }
 
@@ -881,6 +910,7 @@ export class TransactionsView {
         createTransaction(input).then((created) => {
           const { transactions } = this.#store.getState()
           this.#store.setState({ transactions: [created, ...transactions] })
+          this.logTx('created', `Added ${created.merchant} (${formatCurrency(created.amount)})`)
           modal.close()
         })
       }
