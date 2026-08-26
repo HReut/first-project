@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.ts'
 import type { Account, ActivityAction, AppState, Category, NewTransaction, Person, Transaction, TransactionDeletedBefore, TransactionStatus } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
-import { formatCurrency, formatDateShort, formatMonthLabel } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, formatMonthLabel, personLabel } from '../../utils/format.ts'
 import { computeReviewedStatus, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
@@ -35,12 +35,12 @@ const ACCOUNT_VALUES: Account[] = ['shared', 'reut_personal', 'keren_personal']
  * forced person, since either person may have physically paid it. */
 const PERSON_FOR_ACCOUNT: Partial<Record<Account, Person>> = { reut_personal: 'Reut', keren_personal: 'Keren' }
 const TOGGLEABLE_COLUMNS: { key: SortColumn; label: string }[] = [
-  { key: 'date', label: 'Date' },
-  { key: 'merchant', label: 'Merchant' },
-  { key: 'category', label: 'Category' },
-  { key: 'person', label: 'Person' },
-  { key: 'account', label: 'Account' },
-  { key: 'amount', label: 'Amount' },
+  { key: 'date', label: 'תאריך' },
+  { key: 'merchant', label: 'בית עסק' },
+  { key: 'category', label: 'קטגוריה' },
+  { key: 'person', label: 'משלם/ת' },
+  { key: 'account', label: 'חשבון' },
+  { key: 'amount', label: 'סכום' },
 ]
 
 interface TxGroup {
@@ -131,7 +131,7 @@ export class TransactionsView {
 
   private renderTotalAvailable(state: AppState): void {
     const total = computeTotalAvailable(state.transactions, state.accountBalance)
-    this.#container.querySelector<HTMLElement>('#tx-total-available')!.textContent = total === null ? 'Not set' : formatCurrency(total)
+    this.#container.querySelector<HTMLElement>('#tx-total-available')!.textContent = total === null ? 'לא הוגדר' : formatCurrency(total)
   }
 
   private renderBudgetCards(state: AppState): void {
@@ -139,7 +139,7 @@ export class TransactionsView {
     const budgeted = topBudgetedCategories(state.transactions, state.categories, state.budgetLimitOverrides).slice(0, BUDGET_CARD_LIMIT)
 
     if (budgeted.length === 0) {
-      cardsEl.innerHTML = `<p class="tx-budget-cards__empty">No category budgets set yet — set some in Budgets.</p>`
+      cardsEl.innerHTML = `<p class="tx-budget-cards__empty">עדיין לא הוגדרו תקציבי קטגוריה — הגדר/י בעמוד התקציבים.</p>`
       return
     }
 
@@ -149,10 +149,10 @@ export class TransactionsView {
       <div class="tx-budget-card">
         <div class="tx-budget-card__top">
           <span class="tx-budget-card__icon" style="background: color-mix(in srgb, ${category.colorCode} 16%, var(--surface))">${category.icon}</span>
-          <span class="tx-budget-card__tag">This month</span>
+          <span class="tx-budget-card__tag">החודש</span>
         </div>
-        <p class="tx-budget-card__name">${category.name} Budget</p>
-        <p class="tx-budget-card__amount">${formatCurrency(spent)} <span>of ${formatCurrency(limit ?? 0)}</span></p>
+        <p class="tx-budget-card__name">תקציב ${category.name}</p>
+        <p class="tx-budget-card__amount">${formatCurrency(spent)} <span>מתוך ${formatCurrency(limit ?? 0)}</span></p>
         ${renderProgressBar(spent, limit)}
       </div>
     `,
@@ -169,12 +169,12 @@ export class TransactionsView {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const rows = this.visibleRows(state)
 
-    const header = ['Date', 'Merchant', 'Category', 'Person', 'Account', 'Status', 'Amount']
+    const header = ['תאריך', 'בית עסק', 'קטגוריה', 'משלם/ת', 'חשבון', 'סטטוס', 'סכום']
     const lines = rows.map((tx) => [
       tx.date,
       tx.merchant,
-      categoryById.get(tx.categoryId)?.name ?? 'Uncategorized',
-      tx.person,
+      categoryById.get(tx.categoryId)?.name ?? 'ללא קטגוריה',
+      personLabel(tx.person),
       ACCOUNT_LABEL[tx.account],
       STATUS_LABEL[tx.status],
       tx.amount.toFixed(2),
@@ -196,15 +196,15 @@ export class TransactionsView {
     this.#container.innerHTML = `
       <section class="band band--hero band--hero--tight">
         <div class="band__inner">
-          <p class="breadcrumb">Finance <span aria-hidden="true">/</span> Transactions</p>
+          <p class="breadcrumb">כספים <span aria-hidden="true">/</span> תנועות</p>
           <div class="tx-page-header">
             <div>
-              <h1>Transactions.</h1>
-              <p class="hero__subtitle">Every expense, filterable, sortable, editable in place.</p>
+              <h1>תנועות.</h1>
+              <p class="hero__subtitle">כל הוצאה, ניתנת לסינון, למיון ולעריכה במקום.</p>
             </div>
             <div class="tx-page-header__actions">
               <div class="tx-page-header__stat">
-                <span class="tx-page-header__stat-label">Total available</span>
+                <span class="tx-page-header__stat-label">סה"כ זמין</span>
                 <span class="tx-page-header__stat-value" id="tx-total-available"></span>
               </div>
             </div>
@@ -214,7 +214,7 @@ export class TransactionsView {
 
       <section class="band band--tight">
         <div class="band__inner">
-          <div class="tx-budget-cards" id="tx-budget-cards" aria-label="Budgets at a glance"></div>
+          <div class="tx-budget-cards" id="tx-budget-cards" aria-label="תקציבים במבט מהיר"></div>
         </div>
       </section>
 
@@ -223,80 +223,80 @@ export class TransactionsView {
           <div class="transactions">
             <div class="transactions__toolbar">
               <label class="toolbar-control">
-                <span class="toolbar-control__label">Group by</span>
+                <span class="toolbar-control__label">קיבוץ לפי</span>
                 <select class="toolbar-control__input" id="group-select">
-                  <option value="none">None</option>
-                  <option value="category">Category</option>
-                  <option value="person">Person</option>
-                  <option value="month">Month</option>
+                  <option value="none">ללא</option>
+                  <option value="category">קטגוריה</option>
+                  <option value="person">משלם/ת</option>
+                  <option value="month">חודש</option>
                 </select>
               </label>
 
               <label class="toolbar-control">
-                <span class="toolbar-control__label">Sort by</span>
+                <span class="toolbar-control__label">מיון לפי</span>
                 <select class="toolbar-control__input" id="sort-select">
-                  <option value="date">Date</option>
-                  <option value="merchant">Merchant</option>
-                  <option value="category">Category</option>
-                  <option value="person">Person</option>
-                  <option value="amount">Amount</option>
+                  <option value="date">תאריך</option>
+                  <option value="merchant">בית עסק</option>
+                  <option value="category">קטגוריה</option>
+                  <option value="person">משלם/ת</option>
+                  <option value="amount">סכום</option>
                 </select>
               </label>
-              <button type="button" class="icon-btn" id="sort-direction-btn" aria-label="Toggle sort direction"></button>
+              <button type="button" class="icon-btn" id="sort-direction-btn" aria-label="החלפת כיוון המיון"></button>
 
               <label class="toolbar-control">
-                <span class="toolbar-control__label">Period</span>
+                <span class="toolbar-control__label">תקופה</span>
                 <select class="toolbar-control__input" id="period-select">
-                  <option value="this-month">This month</option>
-                  <option value="last-month">Last month</option>
-                  <option value="last-3">Last 3 months</option>
-                  <option value="last-6">Last 6 months</option>
-                  <option value="this-year">This year</option>
-                  <option value="all">All time</option>
-                  <option value="custom">Custom range&hellip;</option>
+                  <option value="this-month">החודש</option>
+                  <option value="last-month">חודש שעבר</option>
+                  <option value="last-3">3 החודשים האחרונים</option>
+                  <option value="last-6">6 החודשים האחרונים</option>
+                  <option value="this-year">השנה</option>
+                  <option value="all">כל הזמנים</option>
+                  <option value="custom">טווח מותאם אישית&hellip;</option>
                 </select>
               </label>
 
               <label class="toolbar-control toolbar-control--search">
-                <input type="search" class="toolbar-control__input" id="search-input" placeholder="Filter descriptions…" value="${filters.search}">
+                <input type="search" class="toolbar-control__input" id="search-input" placeholder="סינון לפי תיאור…" value="${filters.search}">
               </label>
 
               <div class="transactions__toolbar-spacer"></div>
 
-              <button type="button" class="btn btn--sm" id="export-csv-btn">${downloadIconMarkup()}<span>Export</span></button>
-              <button type="button" class="btn btn--sm" id="filters-toggle-btn" aria-label="Filter by person or category">
-                ${filterIconMarkup()}<span>Filter</span><span class="filter-badge" id="filter-badge" hidden>0</span>
+              <button type="button" class="btn btn--sm" id="export-csv-btn">${downloadIconMarkup()}<span>ייצוא</span></button>
+              <button type="button" class="btn btn--sm" id="filters-toggle-btn" aria-label="סינון לפי מי שילם/ה או קטגוריה">
+                ${filterIconMarkup()}<span>סינון</span><span class="filter-badge" id="filter-badge" hidden>0</span>
               </button>
-              <button type="button" class="btn btn--sm" id="columns-toggle-btn" aria-label="Choose visible columns">
-                ${columnsIconMarkup()}<span>Columns</span><span class="filter-badge" id="columns-badge" hidden>0</span>
+              <button type="button" class="btn btn--sm" id="columns-toggle-btn" aria-label="בחירת עמודות מוצגות">
+                ${columnsIconMarkup()}<span>עמודות</span><span class="filter-badge" id="columns-badge" hidden>0</span>
               </button>
 
               <div class="filter-bar" id="filter-bar">
                 <div class="filter-bar__header">
-                  <span class="filter-bar__title">Filter by</span>
-                  <button type="button" class="filter-bar__clear" id="clear-filters-btn">Clear</button>
+                  <span class="filter-bar__title">סינון לפי</span>
+                  <button type="button" class="filter-bar__clear" id="clear-filters-btn">ניקוי</button>
                 </div>
 
-                <div class="filter-group filter-group--person" role="group" aria-label="Filter by person">
-                  <button type="button" class="segmented-btn" data-person="all">All</button>
-                  ${PEOPLE.map((p) => `<button type="button" class="segmented-btn" data-person="${p}">${p}</button>`).join('')}
+                <div class="filter-group filter-group--person" role="group" aria-label="סינון לפי מי שילם/ה">
+                  <button type="button" class="segmented-btn" data-person="all">הכול</button>
+                  ${PEOPLE.map((p) => `<button type="button" class="segmented-btn" data-person="${p}">${personLabel(p)}</button>`).join('')}
                 </div>
 
                 <label class="filter-group">
-                  <span class="filter-group__label">Category</span>
+                  <span class="filter-group__label">קטגוריה</span>
                   <select class="filter-select" id="category-select">
-                    <option value="all">All categories</option>
+                    <option value="all">כל הקטגוריות</option>
                     ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
                   </select>
                 </label>
 
                 <div class="filter-group filter-group--custom-range" id="custom-range" hidden>
                   <label class="filter-group">
-                    <span class="filter-group__label">From</span>
+                    <span class="filter-group__label">מתאריך</span>
                     <input type="date" class="filter-input" id="range-start">
                   </label>
                   <label class="filter-group">
-                    <span class="filter-group__label">To</span>
+                    <span class="filter-group__label">עד תאריך</span>
                     <input type="date" class="filter-input" id="range-end">
                   </label>
                 </div>
@@ -304,8 +304,8 @@ export class TransactionsView {
 
               <div class="filter-bar" id="columns-bar">
                 <div class="filter-bar__header">
-                  <span class="filter-bar__title">Show columns</span>
-                  <button type="button" class="filter-bar__clear" id="reset-columns-btn">Reset</button>
+                  <span class="filter-bar__title">הצגת עמודות</span>
+                  <button type="button" class="filter-bar__clear" id="reset-columns-btn">איפוס</button>
                 </div>
                 ${TOGGLEABLE_COLUMNS.map(
                   (col) => `
@@ -329,13 +329,13 @@ export class TransactionsView {
               <table class="transactions__table">
                 <thead>
                   <tr>
-                    <th class="select-cell"><input type="checkbox" id="select-all" aria-label="Select all"></th>
-                    <th data-sort="date">Date</th>
-                    <th data-sort="merchant">Merchant</th>
-                    <th data-sort="category">Category</th>
-                    <th data-sort="person">Person</th>
-                    <th data-sort="account">Account</th>
-                    <th class="is-numeric" data-sort="amount">Amount</th>
+                    <th class="select-cell"><input type="checkbox" id="select-all" aria-label="בחירת הכול"></th>
+                    <th data-sort="date">תאריך</th>
+                    <th data-sort="merchant">בית עסק</th>
+                    <th data-sort="category">קטגוריה</th>
+                    <th data-sort="person">משלם/ת</th>
+                    <th data-sort="account">חשבון</th>
+                    <th class="is-numeric" data-sort="amount">סכום</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -477,7 +477,7 @@ export class TransactionsView {
     const select = this.#container.querySelector<HTMLSelectElement>('#category-select')!
     const current = select.value
     select.innerHTML = `
-      <option value="all">All categories</option>
+      <option value="all">כל הקטגוריות</option>
       ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
     `
     select.value = current
@@ -657,8 +657,8 @@ export class TransactionsView {
       settled = true
       this.commitEdit(tx.id, { categoryId: select.value })
       this.promptSaveMappingRule(tx, 'category', select.value)
-      const categoryName = categories.find((c) => c.id === select.value)?.name ?? 'Uncategorized'
-      showToast(`Category updated to ${categoryName}`, [], 2000)
+      const categoryName = categories.find((c) => c.id === select.value)?.name ?? 'ללא קטגוריה'
+      showToast(`הקטגוריה עודכנה ל${categoryName}`, [], 2000)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -687,7 +687,7 @@ export class TransactionsView {
       const account = select.value as Account
       const forcedPerson = PERSON_FOR_ACCOUNT[account]
       this.commitEdit(tx.id, forcedPerson ? { account, person: forcedPerson } : { account })
-      showToast(`Account updated to ${ACCOUNT_LABEL[account]}`, [], 2000)
+      showToast(`החשבון עודכן ל${ACCOUNT_LABEL[account]}`, [], 2000)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -715,7 +715,7 @@ export class TransactionsView {
       settled = true
       const status = select.value as TransactionStatus
       this.commitEdit(tx.id, { status })
-      showToast(`Status updated to ${STATUS_LABEL[status]}`, [], 2000)
+      showToast(`הסטטוס עודכן ל${STATUS_LABEL[status]}`, [], 2000)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -733,17 +733,18 @@ export class TransactionsView {
    * — no blocking modal, since this is a nice-to-have not a required step. */
   private promptSaveMappingRule(tx: Transaction, field: 'category' | 'person', value: string): void {
     const merchantKey = normalizeMerchantKey(tx.merchant)
-    showToast(`Remember this ${field} for "${tx.merchant}" in future imports?`, [
+    const fieldLabel = field === 'category' ? 'הקטגוריה' : 'מי שילם/ה'
+    showToast(`לזכור את ${fieldLabel} הזו עבור "${tx.merchant}" בייבואים עתידיים?`, [
       {
-        label: 'Save rule',
+        label: 'שמירת כלל',
         primary: true,
         onClick: () => {
           upsertMappingRule(merchantKey, field === 'category' ? { categoryId: value } : { person: value as Person }).catch(() =>
-            showToast('Could not save that rule.'),
+            showToast('לא ניתן היה לשמור את הכלל.'),
           )
         },
       },
-      { label: 'Dismiss', onClick: () => {} },
+      { label: 'התעלמות', onClick: () => {} },
     ])
   }
 
@@ -765,7 +766,7 @@ export class TransactionsView {
     updateTransaction(id, patch).then((updated) => {
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => (tx.id === id ? updated : tx)) })
-      this.logTx('updated', `Updated ${updated.merchant} (${Object.keys(patch).join(', ')})`)
+      this.logTx('updated', `עודכן ${updated.merchant} (${Object.keys(patch).join(', ')})`)
     })
   }
 
@@ -774,7 +775,7 @@ export class TransactionsView {
     const tx = state.transactions.find((t) => t.id === id)
     if (!tx) return
     this.commitEdit(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId, state.budgetLimitOverrides) })
-    showToast('Transaction approved', [], 2000)
+    showToast('התנועה אושרה', [], 2000)
   }
 
   private bulkMarkReviewed(): void {
@@ -789,19 +790,19 @@ export class TransactionsView {
       const updatedById = new Map(updated.map((tx) => [tx.id, tx]))
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => updatedById.get(tx.id) ?? tx) })
-      showToast(`${ids.length} transaction${ids.length === 1 ? '' : 's'} approved`, [], 2000)
-      this.logTx('bulk_marked_reviewed', `Marked ${ids.length} transaction${ids.length === 1 ? '' : 's'} reviewed`)
+      showToast(`${ids.length} תנועות אושרו`, [], 2000)
+      this.logTx('bulk_marked_reviewed', `${ids.length} תנועות סומנו כנבדקו`)
     })
   }
 
   private bulkRecategorize(categoryId: string): void {
     const ids = [...this.#selection]
-    const categoryName = this.#store.getState().categories.find((c) => c.id === categoryId)?.name ?? 'Uncategorized'
+    const categoryName = this.#store.getState().categories.find((c) => c.id === categoryId)?.name ?? 'ללא קטגוריה'
     Promise.all(ids.map((id) => updateTransaction(id, { categoryId }))).then((updated) => {
       const byId = new Map(updated.map((tx) => [tx.id, tx]))
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => byId.get(tx.id) ?? tx) })
-      this.logTx('bulk_recategorized', `Recategorized ${ids.length} transaction${ids.length === 1 ? '' : 's'} to ${categoryName}`)
+      this.logTx('bulk_recategorized', `${ids.length} תנועות שויכו מחדש ל${categoryName}`)
     })
   }
 
@@ -814,10 +815,10 @@ export class TransactionsView {
 
     const message =
       deleted.length === 1
-        ? `Delete ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})? You can undo this from History.`
-        : `Delete ${deleted.length} transactions (${formatCurrency(total)} total)? You can undo this from History.`
+        ? `למחוק את ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})? ניתן לבטל זאת מההיסטוריה.`
+        : `למחוק ${deleted.length} תנועות (סה"כ ${formatCurrency(total)})? ניתן לבטל זאת מההיסטוריה.`
 
-    confirmDialog(message, 'Delete').then((confirmed) => {
+    confirmDialog(message, 'מחיקה').then((confirmed) => {
       if (!confirmed) return
 
       deleteTransactions(ids).then(() => {
@@ -828,8 +829,8 @@ export class TransactionsView {
         this.logTx(
           deleted.length === 1 ? 'deleted' : 'bulk_deleted',
           deleted.length === 1
-            ? `Deleted ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})`
-            : `Deleted ${deleted.length} transactions (${formatCurrency(total)} total)`,
+            ? `נמחקה ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})`
+            : `נמחקו ${deleted.length} תנועות (סה"כ ${formatCurrency(total)})`,
           before,
         )
       })
@@ -842,45 +843,45 @@ export class TransactionsView {
     const today = isoDate(new Date())
     const modal = new Modal(
       `
-        <h2 class="modal__title">${isEdit ? 'Edit transaction' : 'Add transaction'}</h2>
+        <h2 class="modal__title">${isEdit ? 'עריכת תנועה' : 'הוספת תנועה'}</h2>
         <form class="modal__form" id="add-expense-form">
           <label class="filter-group">
-            <span class="filter-group__label">Date</span>
+            <span class="filter-group__label">תאריך</span>
             <input type="date" class="filter-input" name="date" value="${existing?.date ?? today}" required>
           </label>
           <label class="filter-group">
-            <span class="filter-group__label">Merchant</span>
-            <input type="text" class="filter-input" name="merchant" placeholder="e.g. Shufersal" value="${existing?.merchant ?? ''}" required>
+            <span class="filter-group__label">בית עסק</span>
+            <input type="text" class="filter-input" name="merchant" placeholder="לדוגמה: שופרסל" value="${existing?.merchant ?? ''}" required>
           </label>
           <label class="filter-group">
-            <span class="filter-group__label">Amount</span>
+            <span class="filter-group__label">סכום</span>
             <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing?.amount ?? ''}" required>
           </label>
           <label class="filter-group">
-            <span class="filter-group__label">Category</span>
+            <span class="filter-group__label">קטגוריה</span>
             <select class="filter-select" name="categoryId" required>
               ${categories.map((c) => `<option value="${c.id}" ${c.id === existing?.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
             </select>
           </label>
           <label class="filter-group">
-            <span class="filter-group__label">Account</span>
+            <span class="filter-group__label">חשבון</span>
             <select class="filter-select" name="account" required>
               ${ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === (existing?.account ?? 'shared') ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')}
             </select>
           </label>
           <label class="filter-group">
-            <span class="filter-group__label">Person</span>
+            <span class="filter-group__label">מי שילם/ה</span>
             <select class="filter-select" name="person" required>
-              ${PEOPLE.map((p) => `<option value="${p}" ${p === existing?.person ? 'selected' : ''}>${p}</option>`).join('')}
+              ${PEOPLE.map((p) => `<option value="${p}" ${p === existing?.person ? 'selected' : ''}>${personLabel(p)}</option>`).join('')}
             </select>
           </label>
           <div class="modal__actions">
-            <button type="button" class="btn" id="modal-cancel">Cancel</button>
-            <button type="submit" class="btn btn--primary">${isEdit ? 'Save changes' : 'Add transaction'}</button>
+            <button type="button" class="btn" id="modal-cancel">ביטול</button>
+            <button type="submit" class="btn btn--primary">${isEdit ? 'שמירת שינויים' : 'הוספת תנועה'}</button>
           </div>
         </form>
       `,
-      { ariaLabel: isEdit ? 'Edit transaction' : 'Add transaction' },
+      { ariaLabel: isEdit ? 'עריכת תנועה' : 'הוספת תנועה' },
     )
 
     const accountSelect = modal.element.querySelector<HTMLSelectElement>('select[name="account"]')!
@@ -922,9 +923,9 @@ export class TransactionsView {
         createTransaction(input).then((created) => {
           const { transactions } = this.#store.getState()
           this.#store.setState({ transactions: [created, ...transactions] })
-          this.logTx('created', `Added ${created.merchant} (${formatCurrency(created.amount)})`)
+          this.logTx('created', `נוספה ${created.merchant} (${formatCurrency(created.amount)})`)
           modal.close()
-          showToast(`✓ Added ${created.merchant} (${formatCurrency(created.amount)})`, [], 2500)
+          showToast(`✓ נוספה ${created.merchant} (${formatCurrency(created.amount)})`, [], 2500)
         })
       }
     })
@@ -946,7 +947,7 @@ export class TransactionsView {
       if (!visibleIds.has(id)) this.#selection.delete(id)
     }
 
-    this.#container.querySelector<HTMLElement>('#transactions-count')!.textContent = `${rows.length} ${rows.length === 1 ? 'result' : 'results'}`
+    this.#container.querySelector<HTMLElement>('#transactions-count')!.textContent = `${rows.length} תוצאות`
 
     const thead = this.#container.querySelector('thead')!
     thead.querySelectorAll<HTMLElement>('[data-sort]').forEach((th) => {
@@ -957,7 +958,7 @@ export class TransactionsView {
     this.#container.querySelector<HTMLSelectElement>('#sort-select')!.value = this.#sort.column
     const sortDirBtn = this.#container.querySelector<HTMLButtonElement>('#sort-direction-btn')!
     sortDirBtn.textContent = this.#sort.direction === 'asc' ? '↑' : '↓'
-    sortDirBtn.setAttribute('aria-label', this.#sort.direction === 'asc' ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending')
+    sortDirBtn.setAttribute('aria-label', this.#sort.direction === 'asc' ? 'ממוין בסדר עולה — לחיצה למיון יורד' : 'ממוין בסדר יורד — לחיצה למיון עולה')
 
     const activeFilterCount = (state.filters.person !== 'all' ? 1 : 0) + (state.filters.categoryId !== 'all' ? 1 : 0)
     const filterBadge = this.#container.querySelector<HTMLElement>('#filter-badge')!
@@ -978,8 +979,8 @@ export class TransactionsView {
     table.dataset.hideColumns = Array.from(this.#hiddenColumns).join(' ')
 
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" class="transactions__empty">No transactions match these filters.</td></tr>`
-      cardsContainer.innerHTML = `<p class="transactions__empty">No transactions match these filters.</p>`
+      tbody.innerHTML = `<tr><td colspan="8" class="transactions__empty">אין תנועות התואמות לסינון הזה.</td></tr>`
+      cardsContainer.innerHTML = `<p class="transactions__empty">אין תנועות התואמות לסינון הזה.</p>`
     } else if (this.#groupBy !== 'none') {
       const groups = this.buildGroups(rows, categoryById)
       tbody.innerHTML = groups.map((g) => this.renderGroupRows(g, categoryById)).join('')
@@ -1000,14 +1001,11 @@ export class TransactionsView {
     const selectedRows = rows.filter((tx) => this.#selection.has(tx.id))
     const activeRows = selectedRows.length > 0 ? selectedRows : rows
     const total = activeRows.reduce((sum, tx) => sum + tx.amount, 0)
-    const countLabel =
-      selectedRows.length > 0
-        ? `${selectedRows.length} transaction${selectedRows.length === 1 ? '' : 's'} selected`
-        : `${rows.length} transaction${rows.length === 1 ? '' : 's'}`
+    const countLabel = selectedRows.length > 0 ? `${selectedRows.length} תנועות נבחרו` : `${rows.length} תנועות`
 
     footerEl.innerHTML = `
       <span>${countLabel}</span>
-      <span class="tx-footer-summary__net"><strong>Total:</strong> ${formatCurrency(total)}</span>
+      <span class="tx-footer-summary__net"><strong>סה"כ:</strong> ${formatCurrency(total)}</span>
     `
   }
 
@@ -1023,8 +1021,8 @@ export class TransactionsView {
         const txs = byPerson.get(p)!
         return {
           key: p,
-          label: p,
-          icon: p.charAt(0),
+          label: personLabel(p),
+          icon: personLabel(p).charAt(0),
           color: `var(--person-${p.toLowerCase()})`,
           rows: txs,
           total: txs.reduce((sum, tx) => sum + tx.amount, 0),
@@ -1081,7 +1079,7 @@ export class TransactionsView {
         <span class="group-header__chevron" aria-hidden="true">${collapsed ? '›' : '⌄'}</span>
         ${g.color ? `<span class="group-header__dot" style="background: ${g.color}" aria-hidden="true"></span>` : ''}
         <span class="group-header__name">${g.icon} ${g.label}</span>
-        <span class="group-header__count">${g.rows.length} ${g.rows.length === 1 ? 'item' : 'items'}</span>
+        <span class="group-header__count">${g.rows.length} פריטים</span>
         <span class="group-header__total">${formatCurrency(g.total)}</span>
       </button>
     `
@@ -1121,7 +1119,7 @@ export class TransactionsView {
         <td class="editable-cell" data-field="person" data-id="${tx.id}">${renderPersonBadge(tx.person)}</td>
         <td class="editable-cell" data-field="account" data-id="${tx.id}">${renderAccountBadge(tx.account)}</td>
         <td class="is-numeric editable-cell" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.amount)}</td>
-        <td>${tx.status === 'pending' ? `<button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">Mark reviewed</button>` : ''}</td>
+        <td>${tx.status === 'pending' ? `<button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button>` : ''}</td>
       </tr>
     `
   }
@@ -1129,7 +1127,7 @@ export class TransactionsView {
   private renderCard(tx: Transaction, categoryById: Map<string, Category>): string {
     return `
       <article class="tx-card" data-id="${tx.id}">
-        <input type="checkbox" class="row-select tx-card__select" data-id="${tx.id}" aria-label="Select transaction" ${this.#selection.has(tx.id) ? 'checked' : ''}>
+        <input type="checkbox" class="row-select tx-card__select" data-id="${tx.id}" aria-label="בחירת תנועה" ${this.#selection.has(tx.id) ? 'checked' : ''}>
         <div class="tx-card__body">
           <div class="tx-card__top">
             ${renderMerchantCell(tx)}
@@ -1145,7 +1143,7 @@ export class TransactionsView {
           </div>
           ${
             tx.status === 'pending'
-              ? `<div class="tx-card__footer"><button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">Mark reviewed</button></div>`
+              ? `<div class="tx-card__footer"><button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button></div>`
               : ''
           }
         </div>
@@ -1162,13 +1160,13 @@ export class TransactionsView {
     }
     bar.hidden = false
     bar.innerHTML = `
-      <span class="bulk-bar__count">${this.#selection.size} selected</span>
-      <button type="button" class="btn btn--sm" data-bulk-mark-reviewed>Mark reviewed</button>
+      <span class="bulk-bar__count">${this.#selection.size} נבחרו</span>
+      <button type="button" class="btn btn--sm" data-bulk-mark-reviewed>סמן כנבדק</button>
       <select class="filter-select filter-select--sm" data-bulk-recategorize>
-        <option value="">Set category…</option>
+        <option value="">הגדרת קטגוריה…</option>
         ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
       </select>
-      <button type="button" class="btn btn--sm btn--danger" data-bulk-delete>Delete</button>
+      <button type="button" class="btn btn--sm btn--danger" data-bulk-delete>מחיקה</button>
     `
   }
 }

@@ -2,7 +2,7 @@ import type { Store } from '../../state/store.ts'
 import type { Account, AppState, Category, Person, Transaction } from '../../types.ts'
 import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveSettledAfter } from '../../utils/activity.ts'
-import { formatCurrency, formatDateShort } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, personLabel } from '../../utils/format.ts'
 import { updateTransaction } from '../../data/transactionsRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
@@ -87,12 +87,12 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     <section class="band band--page-header">
       <div class="band__inner">
         <div class="page-header">
-          <h1 class="page-header__title">Overview</h1>
+          <h1 class="page-header__title">סקירה כללית</h1>
           <div class="page-header__tools">
-            <span class="badge-pill">🔒 Encrypted Environment</span>
-            <div class="segmented" role="group" aria-label="Data context">
-              <button type="button" class="segmented-btn is-active" data-context="shared">Shared</button>
-              <button type="button" class="segmented-btn" data-context="private">Private</button>
+            <span class="badge-pill">🔒 סביבה מוצפנת</span>
+            <div class="segmented" role="group" aria-label="היקף נתונים">
+              <button type="button" class="segmented-btn is-active" data-context="shared">משותף</button>
+              <button type="button" class="segmented-btn" data-context="private">פרטי</button>
             </div>
           </div>
         </div>
@@ -113,13 +113,13 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <div class="review-center" id="review-center" aria-label="Pending review"></div>
+        <div class="review-center" id="review-center" aria-label="בבדיקה"></div>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
-        <div class="budget-summary" id="budget-summary" aria-label="Monthly budget progress"></div>
+        <div class="budget-summary" id="budget-summary" aria-label="התקדמות תקציב חודשי"></div>
       </div>
     </section>
 
@@ -132,10 +132,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     <section class="band">
       <div class="band__inner">
         <div class="section-header">
-          <p class="eyebrow">Recent activity</p>
-          <a class="card-link" href="#transactions">View All →</a>
+          <p class="eyebrow">פעילות אחרונה</p>
+          <a class="card-link" href="#transactions">צפייה בהכול ←</a>
         </div>
-        <div class="activity-list" id="activity-list" aria-label="Recent transactions"></div>
+        <div class="activity-list" id="activity-list" aria-label="תנועות אחרונות"></div>
       </div>
     </section>
   `
@@ -178,7 +178,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     logActivity({
       entityType: 'settlement',
       action: 'settled',
-      summary: `Settled up: ${balance.owingPerson} paid ${balance.owedPerson} ${formatCurrency(balance.amount)}`,
+      summary: `סגירת חוב: ${personLabel(balance.owingPerson)} שילם/ה ל${personLabel(balance.owedPerson)} ${formatCurrency(balance.amount)}`,
       beforeData: null,
       performedBy: currentPerson,
     })
@@ -187,7 +187,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         store.setState({ activityLog: [entry, ...activityLog] })
       })
       .catch(() => {
-        showToast('Could not settle up — has migration 0009 been run?')
+        showToast('לא ניתן היה לסגור את החוב — האם הרצת את מיגרציה 0009?')
       })
   })
 
@@ -226,23 +226,23 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     statusBannerEl.innerHTML = `
       <div class="card-header">
         <div>
-          <h2 class="card-header__title">Total Available</h2>
+          <h2 class="card-header__title">סה"כ זמין</h2>
           <p class="card-header__meta">
             ${
               total === null
-                ? 'Not tracked yet'
-                : `<span class="status-dot" aria-hidden="true"></span>As of ${formatDateShort(state.accountBalance!.setAt)}`
+                ? 'עדיין לא נמדד'
+                : `<span class="status-dot" aria-hidden="true"></span>נכון ל-${formatDateShort(state.accountBalance!.setAt)}`
             }
-            ${dataContext === 'private' ? ' · always the shared total, regardless of this toggle' : ''}
+            ${dataContext === 'private' ? ' · תמיד הסכום המשותף הכולל, ללא קשר למתג הזה' : ''}
           </p>
         </div>
-        <a class="card-link" href="#settings">${total === null ? 'Set balance →' : 'Update balance →'}</a>
+        <a class="card-link" href="#settings">${total === null ? 'הגדרת יתרה ←' : 'עדכון יתרה ←'}</a>
       </div>
       <div class="hero-card__split">
         <div class="hero-card__left">
           ${
             total === null
-              ? `<p class="total-available__empty">Enter your shared account's balance in Settings to track this.</p>`
+              ? `<p class="total-available__empty">הזן/י את יתרת החשבון המשותף בהגדרות כדי לעקוב אחרי זה.</p>`
               : `<p class="total-available__value">${formatCurrency(total)}</p>
                  ${
                    trend.deltaPercent === null
@@ -250,7 +250,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
                      : `<div class="hero-card__trend">
                           ${renderSparkline(trend.series)}
                           <span class="hero-card__trend-label ${trend.deltaPercent <= 0 ? 'is-good' : 'is-bad'}">
-                            ${trend.deltaPercent <= 0 ? '↓' : '↑'} ${Math.abs(Math.round(trend.deltaPercent * 10) / 10)}% <span class="hero-card__trend-caption">vs last 3-mo avg</span>
+                            ${trend.deltaPercent <= 0 ? '↓' : '↑'} ${Math.abs(Math.round(trend.deltaPercent * 10) / 10)}% <span class="hero-card__trend-caption">לעומת ממוצע 3 החודשים האחרונים</span>
                           </span>
                         </div>`
                  }`
@@ -258,17 +258,17 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         </div>
         <div class="hero-card__right">
           <div class="hero-card__right-header">
-            <span class="hero-card__right-title">Settlement</span>
-            <a class="card-link" href="#history">View Breakdown →</a>
+            <span class="hero-card__right-title">התחשבנות</span>
+            <a class="card-link" href="#history">צפייה בפירוט ←</a>
           </div>
           ${
             balance
               ? `<p class="settlement-card__debt">
-                   <span class="settlement-card__debt-names">${balance.owingPerson} owes ${balance.owedPerson}</span>
+                   <span class="settlement-card__debt-names">${personLabel(balance.owingPerson)} חייב/ת ל${personLabel(balance.owedPerson)}</span>
                    <span class="settlement-card__debt-amount">${formatCurrency(balance.amount)}</span>
                  </p>
-                 <button type="button" class="btn btn--primary btn--sm" data-mark-settled>Settle Up</button>`
-              : `<p class="settlement-card__settled"><span class="review-center__empty-check" aria-hidden="true">✓</span>Settled up this month</p>`
+                 <button type="button" class="btn btn--primary btn--sm" data-mark-settled>סגירת חוב</button>`
+              : `<p class="settlement-card__settled"><span class="review-center__empty-check" aria-hidden="true">✓</span>מסודר החודש</p>`
           }
         </div>
       </div>
@@ -282,13 +282,13 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
 
     const header = `
       <div class="card-header">
-        <h2 class="card-header__title">Monthly Expenses</h2>
-        <a class="card-link" href="#analytics">View All →</a>
+        <h2 class="card-header__title">הוצאות חודשיות</h2>
+        <a class="card-link" href="#analytics">צפייה בהכול ←</a>
       </div>
     `
 
     if (total === 0) {
-      monthlyExpensesEl.innerHTML = `${header}<p class="chart-empty">No spending recorded yet this month.</p>`
+      monthlyExpensesEl.innerHTML = `${header}<p class="chart-empty">לא נרשמו הוצאות החודש עדיין.</p>`
       return
     }
 
@@ -296,11 +296,11 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     const otherAmount = breakdown.slice(EXPENSE_LIST_LIMIT).reduce((sum, entry) => sum + entry.amount, 0)
     const slices = top.map((entry) => ({
       id: entry.categoryId,
-      label: categoryById.get(entry.categoryId)?.name ?? 'Other',
+      label: categoryById.get(entry.categoryId)?.name ?? 'אחר',
       color: categoryById.get(entry.categoryId)?.colorCode ?? 'var(--text)',
       amount: entry.amount,
     }))
-    if (otherAmount > 0) slices.push({ id: 'other', label: 'Other', color: 'var(--text)', amount: otherAmount })
+    if (otherAmount > 0) slices.push({ id: 'other', label: 'אחר', color: 'var(--text)', amount: otherAmount })
 
     // Percentage-of-circumference donut: r is chosen so 2πr ≈ 100, so
     // stroke-dasharray/offset can be plain percentages. The whole <svg> is
@@ -317,7 +317,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
       ${header}
       <div class="expense-breakdown">
         <div class="expense-breakdown__chart">
-          <svg class="donut-svg" viewBox="0 0 42 42" role="img" aria-label="Expense breakdown by category">
+          <svg class="donut-svg" viewBox="0 0 42 42" role="img" aria-label="פילוח הוצאות לפי קטגוריה">
             <circle class="donut-svg__bg" cx="21" cy="21" r="15.9155" fill="transparent" stroke-width="6" />
             ${arcs
               .map(
@@ -338,7 +338,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
           </svg>
           <div class="donut-svg__hole">
             <span class="donut-chart__total">${formatCurrency(total)}</span>
-            <span class="donut-chart__total-label">This month</span>
+            <span class="donut-chart__total-label">החודש</span>
           </div>
         </div>
         <ul class="expense-breakdown__legend">
@@ -397,12 +397,12 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     if (pending.length === 0) {
       reviewEl.innerHTML = `
         <div class="review-center__header">
-          <h2 class="review-center__title">Review center</h2>
-          <a class="card-link" href="#transactions">View All →</a>
+          <h2 class="review-center__title">מרכז בדיקה</h2>
+          <a class="card-link" href="#transactions">צפייה בהכול ←</a>
         </div>
         <div class="review-center__empty-state">
           <span class="review-center__empty-check" aria-hidden="true">✓</span>
-          <span>All caught up — nothing waiting on you.</span>
+          <span>הכול מעודכן — אין דבר שממתין לך.</span>
         </div>
       `
       return
@@ -411,10 +411,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     const visible = pending.slice(0, REVIEW_CENTER_LIMIT)
     reviewEl.innerHTML = `
       <div class="review-center__header">
-        <h2 class="review-center__title">Review center</h2>
+        <h2 class="review-center__title">מרכז בדיקה</h2>
         <div class="review-center__header-right">
-          <span class="review-center__count">${pending.length} awaiting approval</span>
-          <a class="card-link" href="#transactions">View All →</a>
+          <span class="review-center__count">${pending.length} ממתינות לאישור</span>
+          <a class="card-link" href="#transactions">צפייה בהכול ←</a>
         </div>
       </div>
       <div class="review-center__rows">
@@ -426,7 +426,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
             ${renderMerchantCell(tx)}
             ${renderCategoryBadge(categoryById.get(tx.categoryId))}
             <span class="review-row__amount">${formatCurrency(tx.amount)}</span>
-            <button type="button" class="btn btn--approve" data-mark-reviewed-id="${tx.id}">Mark reviewed</button>
+            <button type="button" class="btn btn--approve" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button>
           </div>
         `,
           )
@@ -441,10 +441,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     if (budgeted.length === 0) {
       budgetEl.innerHTML = `
         <div class="budget-summary__header">
-          <h2 class="budget-summary__title">Budget progress</h2>
-          <a class="card-link" href="#budgets">View All →</a>
+          <h2 class="budget-summary__title">התקדמות תקציב</h2>
+          <a class="card-link" href="#budgets">צפייה בהכול ←</a>
         </div>
-        <p class="budget-summary__empty">No category budgets set yet — set some in Budgets.</p>
+        <p class="budget-summary__empty">עדיין לא הוגדרו תקציבי קטגוריה — הגדר/י בעמוד התקציבים.</p>
       `
       return
     }
@@ -452,8 +452,8 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     const visible = budgeted.slice(0, BUDGET_PROGRESS_LIMIT)
     budgetEl.innerHTML = `
       <div class="budget-summary__header">
-        <h2 class="budget-summary__title">Budget progress</h2>
-        <a class="card-link" href="#budgets">View All ${budgeted.length} →</a>
+        <h2 class="budget-summary__title">התקדמות תקציב</h2>
+        <a class="card-link" href="#budgets">צפייה בכל ${budgeted.length} ←</a>
       </div>
       <div class="budget-progress-grid">
         ${visible
@@ -487,7 +487,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
       rows.push(`
         <div class="insights-row__item">
           <span class="insights-row__icon" aria-hidden="true">${categoryById.get(latestAutoTx.categoryId)?.icon ?? '🧾'}</span>
-          <span class="insights-row__text"><strong>${latestAutoTx.merchant}</strong> auto-captured from your inbox · ${formatCurrency(latestAutoTx.amount)} · ${formatDateShort(latestAutoTx.date)}</span>
+          <span class="insights-row__text"><strong>${latestAutoTx.merchant}</strong> נלכד אוטומטית מתיבת הדואר שלך · ${formatCurrency(latestAutoTx.amount)} · ${formatDateShort(latestAutoTx.date)}</span>
         </div>
       `)
     }
@@ -495,7 +495,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
       rows.push(`
         <div class="insights-row__item">
           <span class="insights-row__icon" aria-hidden="true">💡</span>
-          <span class="insights-row__text">Spending on ${insight.category.name.toLowerCase()} is <strong class="is-good">${Math.round(Math.abs(insight.deltaPercent))}% lower</strong> than last month — you're on track to save an extra ${formatCurrency(insight.savedAmount)}.</span>
+          <span class="insights-row__text">ההוצאה על ${insight.category.name} <strong class="is-good">נמוכה ב-${Math.round(Math.abs(insight.deltaPercent))}%</strong> מהחודש שעבר — את/ה בדרך לחסוך עוד ${formatCurrency(insight.savedAmount)}.</span>
         </div>
       `)
     }
