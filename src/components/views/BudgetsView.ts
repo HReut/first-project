@@ -15,12 +15,12 @@ import { confirmDialog } from '../shared/confirmDialog.ts'
 import { showToast } from '../shared/Toast.ts'
 
 const PERIOD_LABEL: Record<PeriodPreset, string> = {
-  'this-month': 'This month',
-  'last-month': 'Last month',
-  'last-3': 'Last 3 months',
-  'last-6': 'Last 6 months',
-  'this-year': 'This year',
-  all: 'All time',
+  'this-month': 'החודש',
+  'last-month': 'חודש שעבר',
+  'last-3': '3 החודשים האחרונים',
+  'last-6': '6 החודשים האחרונים',
+  'this-year': 'השנה',
+  all: 'כל הזמנים',
 }
 
 type BudgetScope = 'this-month' | 'from-now-on' | 'all-months'
@@ -39,18 +39,18 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
   root.innerHTML = `
     <section class="band band--hero">
       <div class="band__inner">
-        <p class="eyebrow">Household finance</p>
-        <h1>Budgets.</h1>
-        <p class="hero__subtitle">Set targets per category and see where the money actually goes.</p>
+        <p class="eyebrow">כספי משק הבית</p>
+        <h1>תקציבים.</h1>
+        <p class="hero__subtitle">הגדר/י יעדים לכל קטגוריה וראה/י לאן הכסף באמת הולך.</p>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
         <div class="tx-page-header">
-          <p class="eyebrow">Category budgets</p>
+          <p class="eyebrow">תקציבי קטגוריות</p>
           <label class="toolbar-control">
-            <span class="toolbar-control__label">Period</span>
+            <span class="toolbar-control__label">תקופה</span>
             <select class="toolbar-control__input" id="budgets-period-select">
               ${Object.entries(PERIOD_LABEL)
                 .map(([value, label]) => `<option value="${value}">${label}</option>`)
@@ -58,20 +58,20 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
             </select>
           </label>
         </div>
-        <div class="budget-list" id="budget-list" aria-label="Category budgets"></div>
+        <div class="budget-list" id="budget-list" aria-label="תקציבי קטגוריות"></div>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="Recurring & installment expenses">
-          <h2 class="settings-card__title">Recurring &amp; installment expenses</h2>
+        <section class="settings-card" aria-label="הוצאות קבועות ותשלומים">
+          <h2 class="settings-card__title">הוצאות קבועות ותשלומים</h2>
           <p class="settings-card__desc">
-            Bills that repeat every N months (rent, internet, building committee…) — leave "Installments"
-            blank for these, they run forever until you switch them off. For a card purchase split into
-            fixed payments (e.g. a 12-payment furniture buy), set "Installments" to that count — it stops
-            generating on its own once all payments are made. Either way, each due rule adds a Pending
-            transaction automatically when the app loads.
+            חשבונות שחוזרים כל N חודשים (שכר דירה, אינטרנט, ועד בית…) — השאר/י את "תשלומים"
+            ריק עבורם, הם ימשיכו לרוץ עד שתכבה/י אותם. לרכישה בכרטיס אשראי המחולקת
+            לתשלומים קבועים (למשל רהיט ב-12 תשלומים), הגדר/י את "תשלומים" למספר הזה — זה ייפסק
+            להיווצר אוטומטית לאחר שכל התשלומים בוצעו. בכל מקרה, כל כלל שמגיע זמנו מוסיף תנועה
+            ממתינה אוטומטית בטעינת האפליקציה.
           </p>
           <div class="settings-list settings-list--recurring" id="recurring-manager"></div>
         </section>
@@ -102,25 +102,25 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
 
     const modal = new Modal(
       `
-        <h2 class="modal__title">Update ${category.name} budget</h2>
+        <h2 class="modal__title">עדכון תקציב ${category.name}</h2>
         <form class="modal__form" id="budget-limit-form">
           <label class="filter-group">
-            <span class="filter-group__label">Monthly limit</span>
-            <input type="number" class="filter-input" name="limit" min="0" step="10" value="${currentLimit ?? ''}" placeholder="No limit">
+            <span class="filter-group__label">מגבלה חודשית</span>
+            <input type="number" class="filter-input" name="limit" min="0" step="10" value="${currentLimit ?? ''}" placeholder="ללא מגבלה">
           </label>
-          <div class="filter-group" role="radiogroup" aria-label="Apply to">
-            <span class="filter-group__label">Apply to</span>
-            <label class="modal__radio-row"><input type="radio" name="scope" value="this-month" checked> This month only</label>
-            <label class="modal__radio-row"><input type="radio" name="scope" value="from-now-on"> This month and every month after</label>
-            <label class="modal__radio-row"><input type="radio" name="scope" value="all-months"> All months (replaces any past custom settings for this category)</label>
+          <div class="filter-group" role="radiogroup" aria-label="החל על">
+            <span class="filter-group__label">החל על</span>
+            <label class="modal__radio-row"><input type="radio" name="scope" value="this-month" checked> החודש בלבד</label>
+            <label class="modal__radio-row"><input type="radio" name="scope" value="from-now-on"> החודש וכל חודש מכאן ואילך</label>
+            <label class="modal__radio-row"><input type="radio" name="scope" value="all-months"> כל החודשים (מחליף הגדרות מותאמות קודמות לקטגוריה זו)</label>
           </div>
           <div class="modal__actions">
-            <button type="button" class="btn" id="modal-cancel">Cancel</button>
-            <button type="submit" class="btn btn--primary">Save</button>
+            <button type="button" class="btn" id="modal-cancel">ביטול</button>
+            <button type="submit" class="btn btn--primary">שמירה</button>
           </div>
         </form>
       `,
-      { ariaLabel: `Update ${category.name} budget` },
+      { ariaLabel: `עדכון תקציב ${category.name}` },
     )
 
     modal.element.querySelector<HTMLButtonElement>('#modal-cancel')!.addEventListener('click', () => modal.close())
@@ -160,12 +160,12 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         store.setState({ budgetLimitOverrides: [...budgetLimitOverrides, created] })
       }
 
-      const scopeLabel = scope === 'this-month' ? 'this month only' : scope === 'from-now-on' ? 'this month onward' : 'all months'
+      const scopeLabel = scope === 'this-month' ? 'החודש בלבד' : scope === 'from-now-on' ? 'מהחודש ואילך' : 'כל החודשים'
       const before: BudgetLimitChangedBefore = { categoryId: category.id, previousCategoryLimit, previousOverrides, createdOverrideId }
       logActivity({
         entityType: 'budget_limit',
         action: 'changed',
-        summary: `Changed ${category.name} budget to ${limit === null ? 'no limit' : formatCurrency(limit)} (${scopeLabel})`,
+        summary: `תקציב ${category.name} שונה ל${limit === null ? 'ללא מגבלה' : formatCurrency(limit)} (${scopeLabel})`,
         beforeData: before,
         performedBy: currentPerson,
       })
@@ -176,9 +176,9 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
 
       modal.close()
-      showToast('Budget updated.', [], 2500)
+      showToast('התקציב עודכן.', [], 2500)
     } catch {
-      showToast('Could not save — has migration 0008 been run?')
+      showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0008?')
     }
   }
 
@@ -197,7 +197,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
             <span class="budget-row__name">${category.icon} ${category.name}</span>
             <span class="budget-row__spent">${formatCurrency(spent)}</span>
             <span class="budget-row__limit editable-cell" data-category-id="${category.id}">
-              ${limit === null ? 'Set limit' : `of ${formatCurrency(limit)}`}
+              ${limit === null ? 'הגדרת מגבלה' : `מתוך ${formatCurrency(limit)}`}
             </span>
             ${renderProgressBar(spent, limit)}
           </div>
@@ -215,8 +215,8 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     const currentMonth = currentMonthKey()
 
     const statusText = (rule: (typeof state.recurringRules)[number]): string => {
-      if (rule.totalOccurrences !== null) return `${rule.occurrencesGenerated} of ${rule.totalOccurrences} paid`
-      return rule.lastGeneratedMonth === currentMonth ? 'Generated this month' : 'Not yet generated this month'
+      if (rule.totalOccurrences !== null) return `שולמו ${rule.occurrencesGenerated} מתוך ${rule.totalOccurrences}`
+      return rule.lastGeneratedMonth === currentMonth ? 'נוצרה החודש' : 'עדיין לא נוצרה החודש'
     }
 
     recurringManagerEl.innerHTML = `
@@ -224,47 +224,47 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         .map(
           (rule) => `
         <div class="settings-list__row" data-id="${rule.id}">
-          <input type="text" class="name-input" value="${rule.merchant}" placeholder="Bill name" data-rule-field="merchant">
-          <input type="number" class="budget-input" value="${rule.amount}" min="0" step="1" title="Amount" data-rule-field="amount">
+          <input type="text" class="name-input" value="${rule.merchant}" placeholder="שם החשבון" data-rule-field="merchant">
+          <input type="number" class="budget-input" value="${rule.amount}" min="0" step="1" title="סכום" data-rule-field="amount">
           <select class="filter-select" data-rule-field="categoryId">${categoryOptions(rule.categoryId)}</select>
           <select class="filter-select" data-rule-field="account">${accountOptions(rule.account)}</select>
           <span class="settings-list__inline-field">
-            <span>Every</span>
-            <input type="number" class="icon-input" value="${rule.intervalMonths}" min="1" max="24" title="Every N months" data-rule-field="intervalMonths">
-            <span>mo · day</span>
-            <input type="number" class="icon-input" value="${rule.dayOfMonth}" min="1" max="28" title="Day of month" data-rule-field="dayOfMonth">
+            <span>כל</span>
+            <input type="number" class="icon-input" value="${rule.intervalMonths}" min="1" max="24" title="כל N חודשים" data-rule-field="intervalMonths">
+            <span>חוד׳ · יום</span>
+            <input type="number" class="icon-input" value="${rule.dayOfMonth}" min="1" max="28" title="יום בחודש" data-rule-field="dayOfMonth">
           </span>
           <span class="settings-list__inline-field">
-            <span>Installments</span>
-            <input type="number" class="icon-input" value="${rule.totalOccurrences ?? ''}" min="1" max="60" placeholder="∞" title="Blank = ongoing bill; a number = installment plan that stops after that many payments" data-rule-field="totalOccurrences">
+            <span>תשלומים</span>
+            <input type="number" class="icon-input" value="${rule.totalOccurrences ?? ''}" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים" data-rule-field="totalOccurrences">
           </span>
           <span class="settings-list__usage">${statusText(rule)}</span>
           <label class="toggle">
             <input type="checkbox" data-rule-field="isActive" ${rule.isActive ? 'checked' : ''}>
             <span class="toggle__track"><span class="toggle__thumb"></span></span>
-            <span class="toggle__label">Active</span>
+            <span class="toggle__label">פעיל</span>
           </label>
-          <button type="button" class="btn btn--sm btn--danger" data-delete-recurring="${rule.id}">Delete</button>
+          <button type="button" class="btn btn--sm btn--danger" data-delete-recurring="${rule.id}">מחיקה</button>
         </div>
       `,
         )
         .join('')}
       <div class="settings-list__row settings-list__row--add">
-        <input type="text" class="name-input" id="new-recurring-merchant" placeholder="Bill name (e.g. Rent, or Sofa)">
-        <input type="number" class="budget-input" id="new-recurring-amount" placeholder="Amount per payment" min="0" step="1">
+        <input type="text" class="name-input" id="new-recurring-merchant" placeholder="שם החשבון (למשל: שכר דירה, או ספה)">
+        <input type="number" class="budget-input" id="new-recurring-amount" placeholder="סכום לתשלום" min="0" step="1">
         <select class="filter-select" id="new-recurring-category">${categoryOptions('')}</select>
         <select class="filter-select" id="new-recurring-account">${accountOptions('shared')}</select>
         <span class="settings-list__inline-field">
-          <span>Every</span>
-          <input type="number" class="icon-input" id="new-recurring-interval" value="1" min="1" max="24" title="Every N months">
-          <span>mo · day</span>
-          <input type="number" class="icon-input" id="new-recurring-day" value="1" min="1" max="28" title="Day of month">
+          <span>כל</span>
+          <input type="number" class="icon-input" id="new-recurring-interval" value="1" min="1" max="24" title="כל N חודשים">
+          <span>חוד׳ · יום</span>
+          <input type="number" class="icon-input" id="new-recurring-day" value="1" min="1" max="28" title="יום בחודש">
         </span>
         <span class="settings-list__inline-field">
-          <span>Installments</span>
-          <input type="number" class="icon-input" id="new-recurring-installments" min="1" max="60" placeholder="∞" title="Blank = ongoing bill; a number = installment plan that stops after that many payments">
+          <span>תשלומים</span>
+          <input type="number" class="icon-input" id="new-recurring-installments" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים">
         </span>
-        <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ Add</button>
+        <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ הוספה</button>
       </div>
     `
   }
@@ -302,7 +302,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     updateRecurringRule(id, patch).then((updated) => {
       const { recurringRules } = store.getState()
       store.setState({ recurringRules: recurringRules.map((r) => (r.id === updated.id ? updated : r)) })
-      logRecurring('updated', `Updated recurring rule ${updated.merchant} (${field})`)
+      logRecurring('updated', `כלל חוזר עודכן: ${updated.merchant} (${field})`)
     })
   })
 
@@ -312,13 +312,13 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       const id = deleteBtn.dataset.deleteRecurring!
       const rule = store.getState().recurringRules.find((r) => r.id === id)
       if (!rule) return
-      confirmDialog(`Delete "${rule.merchant}"? Future payments will stop generating. You can undo this from History.`, 'Delete').then((confirmed) => {
+      confirmDialog(`למחוק את "${rule.merchant}"? תשלומים עתידיים יפסיקו להיווצר. ניתן לבטל זאת מההיסטוריה.`, 'מחיקה').then((confirmed) => {
         if (!confirmed) return
         deleteRecurringRule(id).then(() => {
           const { recurringRules } = store.getState()
           store.setState({ recurringRules: recurringRules.filter((r) => r.id !== id) })
           const before: RecurringRuleDeletedBefore = { rule }
-          logRecurring('deleted', `Deleted recurring rule ${rule.merchant}`, before)
+          logRecurring('deleted', `כלל חוזר נמחק: ${rule.merchant}`, before)
         })
       })
       return
@@ -352,7 +352,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       }).then((created) => {
         const { recurringRules } = store.getState()
         store.setState({ recurringRules: [...recurringRules, created] })
-        logRecurring('created', `Added recurring rule ${created.merchant} (${formatCurrency(created.amount)})`)
+        logRecurring('created', `נוסף כלל חוזר: ${created.merchant} (${formatCurrency(created.amount)})`)
       })
     }
   })

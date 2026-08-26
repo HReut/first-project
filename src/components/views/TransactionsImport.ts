@@ -5,9 +5,13 @@ import { listMappingRules } from '../../data/mappingRulesRepo.ts'
 import { createCategory } from '../../data/categoriesRepo.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
+import { personLabel } from '../../utils/format.ts'
 
 const PEOPLE: Person[] = ['Reut', 'Keren']
-const UNCATEGORIZED_NAME = 'Uncategorized'
+/** Must match the category's `name` in the database exactly (see the
+ * category-rename SQL run alongside the Hebrew localization) — this is how
+ * an existing "Uncategorized" row is found instead of creating a duplicate. */
+const UNCATEGORIZED_NAME = 'ללא קטגוריה'
 
 let fileInput: HTMLInputElement | null = null
 
@@ -32,7 +36,7 @@ function getFileInput(onFile: (file: File) => void): HTMLInputElement {
  * from arbitrary PDF statements is too unreliable to trust silently. */
 export function openImportFlow(store: Store<AppState>, currentPerson: Person): void {
   const input = getFileInput((file) => {
-    handleFile(file, store, currentPerson).catch(() => showToast('Could not read that file.'))
+    handleFile(file, store, currentPerson).catch(() => showToast('לא ניתן היה לקרוא את הקובץ.'))
   })
   input.click()
 }
@@ -42,7 +46,7 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
   const isCsv = name.endsWith('.csv')
   const isXlsx = name.endsWith('.xlsx') || name.endsWith('.xls')
   if (!isCsv && !isXlsx) {
-    showToast('PDF import is not supported — export as CSV or Excel instead.')
+    showToast('ייבוא PDF אינו נתמך — יש לייצא כ-CSV או אקסל במקום.')
     return
   }
 
@@ -53,7 +57,7 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
     : buildImportPreviewFromTable(await parseXlsx(file), state.categories, mappingRules, state.transactions)
 
   if (rows.length === 0) {
-    showToast('No data rows found in that file.')
+    showToast('לא נמצאו שורות נתונים בקובץ הזה.')
     return
   }
 
@@ -79,21 +83,21 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
 
   const modal = new Modal(
     `
-      <h2 class="modal__title">Import ${rows.length} transaction${rows.length === 1 ? '' : 's'}</h2>
+      <h2 class="modal__title">ייבוא ${rows.length} תנועות</h2>
       <p class="import-preview__hint">
-        Review and fix anything before importing — these are only saved once you confirm.
-        ${duplicateCount > 0 ? `${duplicateCount} row${duplicateCount === 1 ? ' looks' : 's look'} like ${duplicateCount === 1 ? 'it\'s' : 'they\'re'} already in your data, and start${duplicateCount === 1 ? 's' : ''} unchecked.` : ''}
+        סקור/י ותקן/י כל דבר לפני הייבוא — אלה נשמרות רק לאחר אישור.
+        ${duplicateCount > 0 ? `${duplicateCount} שורות נראות כאילו כבר קיימות בנתונים שלך, ומתחילות לא מסומנות.` : ''}
       </p>
       <div class="import-preview__table-wrap">
         <table class="import-preview__table">
           <thead>
             <tr>
               <th></th>
-              <th>Date</th>
-              <th>Merchant</th>
-              <th>Amount</th>
-              <th>Category</th>
-              <th>Person</th>
+              <th>תאריך</th>
+              <th>בית עסק</th>
+              <th>סכום</th>
+              <th>קטגוריה</th>
+              <th>מי שילם/ה</th>
             </tr>
           </thead>
           <tbody>
@@ -105,19 +109,19 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
                 <td><input type="date" class="filter-input" data-field="date" value="${row.date ?? ''}"></td>
                 <td>
                   <input type="text" class="filter-input" data-field="merchant" value="${row.merchant}">
-                  ${row.matchedRule ? '<span class="import-preview__rule-badge" title="Auto-filled from a saved rule">Rule</span>' : ''}
-                  ${row.isPossibleDuplicate ? '<span class="import-preview__rule-badge import-preview__rule-badge--warn" title="Same date, merchant, and amount as an existing transaction">Possible duplicate</span>' : ''}
+                  ${row.matchedRule ? '<span class="import-preview__rule-badge" title="מולא אוטומטית מכלל שמור">כלל</span>' : ''}
+                  ${row.isPossibleDuplicate ? '<span class="import-preview__rule-badge import-preview__rule-badge--warn" title="אותו תאריך, בית עסק וסכום כמו תנועה קיימת">כפילות אפשרית</span>' : ''}
                 </td>
                 <td><input type="number" class="filter-input" data-field="amount" min="0" step="0.01" value="${row.amount ?? ''}"></td>
                 <td>
                   <select class="filter-select" data-field="category">
-                    <option value="" ${row.categoryId === null ? 'selected' : ''}>Not detected — Uncategorized</option>
+                    <option value="" ${row.categoryId === null ? 'selected' : ''}>לא זוהה — ללא קטגוריה</option>
                     ${categories.map((c) => `<option value="${c.id}" ${c.id === row.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
                   </select>
                 </td>
                 <td>
                   <select class="filter-select" data-field="person">
-                    ${PEOPLE.map((p) => `<option value="${p}" ${p === (row.person ?? currentPerson) ? 'selected' : ''}>${p}</option>`).join('')}
+                    ${PEOPLE.map((p) => `<option value="${p}" ${p === (row.person ?? currentPerson) ? 'selected' : ''}>${personLabel(p)}</option>`).join('')}
                   </select>
                 </td>
               </tr>
@@ -128,11 +132,11 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
         </table>
       </div>
       <div class="modal__actions">
-        <button type="button" class="btn" id="import-cancel">Cancel</button>
-        <button type="button" class="btn btn--primary" id="import-confirm">Import selected</button>
+        <button type="button" class="btn" id="import-cancel">ביטול</button>
+        <button type="button" class="btn btn--primary" id="import-confirm">ייבוא נבחרים</button>
       </div>
     `,
-    { ariaLabel: 'Import transactions' },
+    { ariaLabel: 'ייבוא תנועות' },
   )
   modal.element.classList.add('modal--import-preview')
 
@@ -172,7 +176,7 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
   }
 
   if (inputs.length === 0) {
-    showToast('No valid rows to import — check the date, merchant, and amount columns.')
+    showToast('אין שורות תקינות לייבוא — בדוק/י את עמודות התאריך, בית העסק והסכום.')
     return
   }
 
@@ -181,8 +185,8 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
     const { transactions } = store.getState()
     store.setState({ transactions: [...created, ...transactions] })
     modal.close()
-    showToast(skipped > 0 ? `Imported ${created.length} transactions (${skipped} unchecked or incomplete row${skipped === 1 ? '' : 's'} skipped).` : `Imported ${created.length} transactions.`)
+    showToast(skipped > 0 ? `יובאו ${created.length} תנועות (${skipped} שורות לא מסומנות או חסרות דולגו).` : `יובאו ${created.length} תנועות.`)
   } catch {
-    showToast('Import failed — the database may need migration 0003 run first.')
+    showToast('הייבוא נכשל — ייתכן שיש להריץ קודם את מיגרציה 0003.')
   }
 }
