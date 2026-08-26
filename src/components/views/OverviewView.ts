@@ -1,5 +1,5 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Category, Person } from '../../types.ts'
+import type { Account, AppState, Category, Person, Transaction } from '../../types.ts'
 import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveSettledAfter } from '../../utils/activity.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
@@ -25,13 +25,13 @@ interface Improvement {
  * "Smart Insight" card — real, computed from actual transactions (unlike
  * the placeholder figures above). Null when nothing improved or there's
  * not enough history yet. */
-function computeBiggestImprovement(state: AppState): Improvement | null {
-  const thisMonth = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' })
+function computeBiggestImprovement(transactions: Transaction[], categories: Category[]): Improvement | null {
+  const thisMonth = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' })
   const lastMonthDate = new Date()
   lastMonthDate.setMonth(lastMonthDate.getMonth() - 1)
-  const lastMonth = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' }, lastMonthDate)
+  const lastMonth = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' }, lastMonthDate)
   const lastByCategory = new Map(lastMonth.map((entry) => [entry.categoryId, entry.amount]))
-  const categoryById = new Map(state.categories.map((category) => [category.id, category]))
+  const categoryById = new Map(categories.map((category) => [category.id, category]))
 
   let best: Improvement | null = null
   for (const entry of thisMonth) {
@@ -56,12 +56,12 @@ interface SpendTrend {
 /** Real month-over-month total spend, used as the trend widget next to Total
  * Available — there's no account-balance history to chart, so this is the
  * closest honest proxy for "how are things moving". */
-function computeSpendTrend(state: AppState): SpendTrend {
+function computeSpendTrend(transactions: Transaction[]): SpendTrend {
   const series: number[] = []
   for (let i = TREND_MONTHS - 1; i >= 0; i--) {
     const date = new Date()
     date.setMonth(date.getMonth() - i)
-    const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' }, date)
+    const breakdown = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' }, date)
     series.push(breakdown.reduce((sum, entry) => sum + entry.amount, 0))
   }
   const priorMonths = series.slice(0, -1)
@@ -148,11 +148,26 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   const insightsRowEl = root.querySelector<HTMLElement>('#insights-row')!
   const activityEl = root.querySelector<HTMLElement>('#activity-list')!
 
-  // Shared/Private is a purely visual toggle for now — it doesn't filter
-  // anything yet, matching the redesign's look ahead of that feature existing.
+  // Shared = the household view (all transactions). Private = just what
+  // currentPerson paid from their own personal-account pocket. Total
+  // Available and Settlement stay on the real, full transaction list either
+  // way — both are inherently joint figures with no meaningful "just mine"
+  // version; everything else (spend trend, breakdown, budgets, activity)
+  // scopes to the toggle.
+  let dataContext: 'shared' | 'private' = 'shared'
+  const personalAccount: Account = currentPerson === 'Reut' ? 'reut_personal' : 'keren_personal'
+
+  function scopedTransactions(state: AppState): Transaction[] {
+    return dataContext === 'shared' ? state.transactions : state.transactions.filter((tx) => tx.account === personalAccount)
+  }
+
   const contextButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-context]'))
   contextButtons.forEach((btn) => {
-    btn.addEventListener('click', () => contextButtons.forEach((b) => b.classList.toggle('is-active', b === btn)))
+    btn.addEventListener('click', () => {
+      dataContext = (btn.dataset.context as 'shared' | 'private') ?? 'shared'
+      contextButtons.forEach((b) => b.classList.toggle('is-active', b === btn))
+      render(store.getState())
+    })
   })
 
   statusBannerEl.addEventListener('click', (event) => {
@@ -205,7 +220,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
 
   function renderStatusBanner(state: AppState): void {
     const total = computeTotalAvailable(state.transactions, state.accountBalance)
-    const trend = computeSpendTrend(state)
+    const trend = computeSpendTrend(scopedTransactions(state))
     const balance = computeSplitBalance(state.transactions, new Date(), resolveSettledAfter(state.activityLog))
 
     statusBannerEl.innerHTML = `
@@ -218,6 +233,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
                 ? 'Not tracked yet'
                 : `<span class="status-dot" aria-hidden="true"></span>As of ${formatDateShort(state.accountBalance!.setAt)}`
             }
+            ${dataContext === 'private' ? ' · always the shared total, regardless of this toggle' : ''}
           </p>
         </div>
         <a class="card-link" href="#settings">${total === null ? 'Set balance →' : 'Update balance →'}</a>
@@ -260,7 +276,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   }
 
   function renderMonthlyExpenses(state: AppState): void {
-    const breakdown = computeCategoryBreakdown(state.transactions, { categoryId: 'all', person: 'all' })
+    const breakdown = computeCategoryBreakdown(scopedTransactions(state), { categoryId: 'all', person: 'all' })
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const total = breakdown.reduce((sum, entry) => sum + entry.amount, 0)
 
@@ -372,7 +388,9 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
 
   function renderReviewCenter(state: AppState): void {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
-    const pending = state.transactions.filter((tx) => tx.status === 'pending').sort((a, b) => (a.date < b.date ? 1 : -1))
+    const pending = scopedTransactions(state)
+      .filter((tx) => tx.status === 'pending')
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
 
     reviewEl.classList.toggle('review-center--compact', pending.length === 0)
 
@@ -418,7 +436,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   }
 
   function renderBudgetSummary(state: AppState): void {
-    const budgeted = topBudgetedCategories(state.transactions, state.categories, state.budgetLimitOverrides)
+    const budgeted = topBudgetedCategories(scopedTransactions(state), state.categories, state.budgetLimitOverrides)
 
     if (budgeted.length === 0) {
       budgetEl.innerHTML = `
@@ -460,8 +478,9 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
    * two near-empty cards read as more clutter than help. */
   function renderInsightsRow(state: AppState): void {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
-    const latestAutoTx = [...state.transactions].filter((tx) => tx.source === 'email_auto').sort((a, b) => (a.date < b.date ? 1 : -1))[0]
-    const insight = computeBiggestImprovement(state)
+    const scoped = scopedTransactions(state)
+    const latestAutoTx = [...scoped].filter((tx) => tx.source === 'email_auto').sort((a, b) => (a.date < b.date ? 1 : -1))[0]
+    const insight = computeBiggestImprovement(scoped, state.categories)
 
     const rows: string[] = []
     if (latestAutoTx) {
@@ -487,7 +506,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
 
   function renderActivity(state: AppState): void {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
-    const recent = [...state.transactions].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, RECENT_ACTIVITY_LIMIT)
+    const recent = [...scopedTransactions(state)].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, RECENT_ACTIVITY_LIMIT)
 
     activityEl.innerHTML = recent
       .map(
