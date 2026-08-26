@@ -83,6 +83,27 @@ export async function updateRecurringRule(id: string, patch: RecurringRulePatch)
   return updated.find((rule) => rule.id === id)!
 }
 
+/** Re-inserts a previously-deleted rule with its original id (and its
+ * generation state — lastGeneratedMonth/occurrencesGenerated — so it
+ * doesn't regenerate an already-paid month) — used by History's Undo on a
+ * recurring_rule 'deleted' entry. createRecurringRule() can't be reused
+ * here since it always lets the database generate a fresh id and resets
+ * generation state to "never generated". */
+export async function restoreRecurringRule(rule: RecurringRule): Promise<RecurringRule> {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('recurring_rules')
+      .insert({ id: rule.id, ...toRow(rule) })
+      .select()
+      .single()
+    if (error) throw error
+    return fromRow(data as RecurringRuleRow)
+  }
+  const rules = loadLocalRecurringRules()
+  saveLocalRecurringRules([...rules, rule])
+  return rule
+}
+
 export async function deleteRecurringRule(id: string): Promise<void> {
   if (supabase) {
     const { error } = await supabase.from('recurring_rules').delete().eq('id', id)

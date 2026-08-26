@@ -160,6 +160,13 @@ export interface CategoryDeletedBefore {
   overrides: BudgetLimitOverride[]
 }
 
+/** beforeData shape for a recurring_rule 'deleted' entry — the rule as it
+ * was, including its generation state, so undo doesn't regenerate an
+ * already-paid month. */
+export interface RecurringRuleDeletedBefore {
+  rule: RecurringRule
+}
+
 /** beforeData shape for a budget_limit 'changed' entry — enough to put the
  * category back exactly how it was, whichever scope the edit used. Undo
  * always: restores previousCategoryLimit (a no-op unless the edit was

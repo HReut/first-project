@@ -1,5 +1,5 @@
 import type { Store } from '../../state/store.ts'
-import type { Account, AppState, BudgetLimitChangedBefore, Category, NewRecurringRule, Person } from '../../types.ts'
+import type { Account, AppState, BudgetLimitChangedBefore, Category, NewRecurringRule, Person, RecurringRuleDeletedBefore } from '../../types.ts'
 import { computeCategoryBreakdown, resolveBudgetLimitForMonth, resolveBudgetLimitForPeriod } from '../../utils/insights.ts'
 import { formatCurrency } from '../../utils/format.ts'
 import { budgetStatus } from '../../utils/budget.ts'
@@ -269,6 +269,17 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     `
   }
 
+  /** Fire-and-forget, same reasoning as the other logXxx helpers: a logging
+   * failure shouldn't block the real action, but shouldn't be silent either. */
+  function logRecurring(action: 'created' | 'updated' | 'deleted', summary: string, beforeData: unknown = null): void {
+    logActivity({ entityType: 'recurring_rule', action, summary, beforeData, performedBy: currentPerson })
+      .then((entry) => {
+        const { activityLog } = store.getState()
+        store.setState({ activityLog: [entry, ...activityLog] })
+      })
+      .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
+  }
+
   recurringManagerEl.addEventListener('change', (event) => {
     const input = (event.target as HTMLElement).closest<HTMLElement>('[data-rule-field]') as HTMLInputElement | HTMLSelectElement | null
     if (!input) return
@@ -291,6 +302,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     updateRecurringRule(id, patch).then((updated) => {
       const { recurringRules } = store.getState()
       store.setState({ recurringRules: recurringRules.map((r) => (r.id === updated.id ? updated : r)) })
+      logRecurring('updated', `Updated recurring rule ${updated.merchant} (${field})`)
     })
   })
 
@@ -299,11 +311,14 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     if (deleteBtn) {
       const id = deleteBtn.dataset.deleteRecurring!
       const rule = store.getState().recurringRules.find((r) => r.id === id)
-      confirmDialog(`Delete "${rule?.merchant ?? 'this'}"? Future payments will stop generating.`, 'Delete').then((confirmed) => {
+      if (!rule) return
+      confirmDialog(`Delete "${rule.merchant}"? Future payments will stop generating. You can undo this from History.`, 'Delete').then((confirmed) => {
         if (!confirmed) return
         deleteRecurringRule(id).then(() => {
           const { recurringRules } = store.getState()
           store.setState({ recurringRules: recurringRules.filter((r) => r.id !== id) })
+          const before: RecurringRuleDeletedBefore = { rule }
+          logRecurring('deleted', `Deleted recurring rule ${rule.merchant}`, before)
         })
       })
       return
@@ -337,6 +352,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       }).then((created) => {
         const { recurringRules } = store.getState()
         store.setState({ recurringRules: [...recurringRules, created] })
+        logRecurring('created', `Added recurring rule ${created.merchant} (${formatCurrency(created.amount)})`)
       })
     }
   })

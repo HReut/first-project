@@ -1,10 +1,11 @@
 import type { Store } from '../../state/store.ts'
-import type { ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
+import type { ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, RecurringRuleDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
 import { formatDateTime } from '../../utils/format.ts'
 import { markActivityUndone } from '../../data/activityLogRepo.ts'
 import { restoreTransactions } from '../../data/transactionsRepo.ts'
 import { updateCategory, restoreCategory } from '../../data/categoriesRepo.ts'
 import { deleteBudgetLimitOverride, restoreBudgetLimitOverrides } from '../../data/budgetLimitOverridesRepo.ts'
+import { restoreRecurringRule } from '../../data/recurringRulesRepo.ts'
 import { showToast } from '../shared/Toast.ts'
 
 /** Only these entity/action combinations get an Undo button — the ones
@@ -16,6 +17,7 @@ function isUndoable(entry: ActivityLogEntry): boolean {
   if (entry.entityType === 'budget_limit') return entry.action === 'changed'
   if (entry.entityType === 'settlement') return entry.action === 'settled'
   if (entry.entityType === 'category') return entry.action === 'deleted'
+  if (entry.entityType === 'recurring_rule') return entry.action === 'deleted'
   return false
 }
 
@@ -78,6 +80,11 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
         categories: [...state.categories, restoredCategory],
         budgetLimitOverrides: [...state.budgetLimitOverrides, ...before.overrides],
       })
+    } else if (entry.entityType === 'recurring_rule' && entry.action === 'deleted') {
+      const { rule } = entry.beforeData as RecurringRuleDeletedBefore
+      const restored = await restoreRecurringRule(rule)
+      const state = store.getState()
+      store.setState({ recurringRules: [...state.recurringRules, restored] })
     }
     // 'settlement'/'settled' needs no state restore beyond marking this entry
     // undone — resolveSettledAfter() falls back to the previous settlement

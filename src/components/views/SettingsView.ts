@@ -128,6 +128,18 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       .then((accountBalance) => {
         store.setState({ accountBalance })
         showToast('Balance saved.', [], 2500)
+        logActivity({
+          entityType: 'account_balance',
+          action: 'changed',
+          summary: `Set shared account balance to ${formatCurrency(startingBalance)}`,
+          beforeData: null,
+          performedBy: currentPerson,
+        })
+          .then((entry) => {
+            const { activityLog } = store.getState()
+            store.setState({ activityLog: [entry, ...activityLog] })
+          })
+          .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
       })
       .catch(() => {
         showToast('Could not save — has migration 0007 been run?')
