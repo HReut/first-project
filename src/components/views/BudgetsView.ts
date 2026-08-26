@@ -11,6 +11,7 @@ import { logActivity } from '../../data/activityLogRepo.ts'
 import { ACCOUNT_LABEL } from '../shared/transactionCells.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { Modal } from '../shared/Modal.ts'
+import { confirmDialog } from '../shared/confirmDialog.ts'
 import { showToast } from '../shared/Toast.ts'
 
 const PERIOD_LABEL: Record<PeriodPreset, string> = {
@@ -297,9 +298,13 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-recurring]')
     if (deleteBtn) {
       const id = deleteBtn.dataset.deleteRecurring!
-      deleteRecurringRule(id).then(() => {
-        const { recurringRules } = store.getState()
-        store.setState({ recurringRules: recurringRules.filter((r) => r.id !== id) })
+      const rule = store.getState().recurringRules.find((r) => r.id === id)
+      confirmDialog(`Delete "${rule?.merchant ?? 'this'}"? Future payments will stop generating.`, 'Delete').then((confirmed) => {
+        if (!confirmed) return
+        deleteRecurringRule(id).then(() => {
+          const { recurringRules } = store.getState()
+          store.setState({ recurringRules: recurringRules.filter((r) => r.id !== id) })
+        })
       })
       return
     }

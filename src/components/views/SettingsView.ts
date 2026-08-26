@@ -5,6 +5,7 @@ import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/em
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
 import { setAccountBalance } from '../../data/accountBalanceRepo.ts'
 import { showToast } from '../shared/Toast.ts'
+import { confirmDialog } from '../shared/confirmDialog.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { effectiveTheme } from '../../lib/theme.ts'
 import { moonIconMarkup, sunIconMarkup } from '../icons/ThemeIcons.ts'
@@ -178,9 +179,13 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
     const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-category]')
     if (deleteBtn && !deleteBtn.disabled) {
       const id = deleteBtn.dataset.deleteCategory!
-      deleteCategory(id).then(() => {
-        const { categories } = store.getState()
-        store.setState({ categories: categories.filter((c) => c.id !== id) })
+      const category = store.getState().categories.find((c) => c.id === id)
+      confirmDialog(`Delete the "${category?.name ?? 'this'}" category? This can't be undone.`, 'Delete').then((confirmed) => {
+        if (!confirmed) return
+        deleteCategory(id).then(() => {
+          const { categories } = store.getState()
+          store.setState({ categories: categories.filter((c) => c.id !== id) })
+        })
       })
       return
     }
@@ -294,9 +299,12 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
     const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-rule]')
     if (deleteBtn) {
       const id = deleteBtn.dataset.deleteRule!
-      deleteEmailRule(id).then(() => {
-        const { emailRules } = store.getState()
-        store.setState({ emailRules: emailRules.filter((r) => r.id !== id) })
+      confirmDialog('Delete this auto-capture rule?', 'Delete').then((confirmed) => {
+        if (!confirmed) return
+        deleteEmailRule(id).then(() => {
+          const { emailRules } = store.getState()
+          store.setState({ emailRules: emailRules.filter((r) => r.id !== id) })
+        })
       })
       return
     }
