@@ -14,8 +14,8 @@ export function mountPlaceholderView(root: HTMLElement, opts: { eyebrow: string;
       <div class="band__inner">
         <div class="placeholder-card">
           <span class="placeholder-card__icon" aria-hidden="true">${opts.icon}</span>
-          <h2 class="placeholder-card__title">Coming soon</h2>
-          <p class="placeholder-card__body">This page isn't built yet — it's here so the navigation matches the full design. Ask for it when you're ready to wire it up.</p>
+          <h2 class="placeholder-card__title">בקרוב</h2>
+          <p class="placeholder-card__body">העמוד הזה עדיין לא נבנה — הוא כאן כדי שהניווט יתאים לעיצוב המלא. בקש/י שיחובר כשתהיה/י מוכן/ה.</p>
         </div>
       </div>
     </section>

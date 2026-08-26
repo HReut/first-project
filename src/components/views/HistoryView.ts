@@ -1,6 +1,6 @@
 import type { Store } from '../../state/store.ts'
 import type { ActivityEntityType, ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, Person, RecurringRuleDeletedBefore, SavingsGoalDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
-import { formatDateTime } from '../../utils/format.ts'
+import { formatDateTime, personLabel } from '../../utils/format.ts'
 import { markActivityUndone } from '../../data/activityLogRepo.ts'
 import { restoreTransactions } from '../../data/transactionsRepo.ts'
 import { updateCategory, restoreCategory } from '../../data/categoriesRepo.ts'
@@ -24,13 +24,13 @@ function isUndoable(entry: ActivityLogEntry): boolean {
 }
 
 const ENTITY_TYPE_LABEL: Record<ActivityEntityType, string> = {
-  transaction: 'Transactions',
-  budget_limit: 'Budget limits',
-  settlement: 'Settlements',
-  category: 'Categories',
-  recurring_rule: 'Recurring rules',
-  account_balance: 'Account balance',
-  savings_goal: 'Savings goals',
+  transaction: 'תנועות',
+  budget_limit: 'מגבלות תקציב',
+  settlement: 'התחשבנויות',
+  category: 'קטגוריות',
+  recurring_rule: 'כללים חוזרים',
+  account_balance: 'יתרת חשבון',
+  savings_goal: 'יעדי חיסכון',
 }
 const PEOPLE: Person[] = ['Reut', 'Keren']
 
@@ -41,36 +41,36 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
   root.innerHTML = `
     <section class="band band--hero">
       <div class="band__inner">
-        <p class="eyebrow">Household finance</p>
-        <h1>History.</h1>
-        <p class="hero__subtitle">Every change, who made it, and when — undo the ones that are easy to get wrong.</p>
+        <p class="eyebrow">כספי משק הבית</p>
+        <h1>היסטוריה.</h1>
+        <p class="hero__subtitle">כל שינוי, מי ביצע אותו ומתי — ביטול לפעולות שקל לטעות בהן.</p>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
         <div class="tx-page-header">
-          <p class="eyebrow">Activity</p>
+          <p class="eyebrow">פעילות</p>
           <div class="tx-page-header__actions">
             <label class="toolbar-control">
-              <span class="toolbar-control__label">Type</span>
+              <span class="toolbar-control__label">סוג</span>
               <select class="toolbar-control__input" id="history-type-select">
-                <option value="all">All types</option>
+                <option value="all">כל הסוגים</option>
                 ${Object.entries(ENTITY_TYPE_LABEL)
                   .map(([value, label]) => `<option value="${value}">${label}</option>`)
                   .join('')}
               </select>
             </label>
             <label class="toolbar-control">
-              <span class="toolbar-control__label">Person</span>
+              <span class="toolbar-control__label">מי שילם/ה</span>
               <select class="toolbar-control__input" id="history-person-select">
-                <option value="all">Both</option>
-                ${PEOPLE.map((p) => `<option value="${p}">${p}</option>`).join('')}
+                <option value="all">שניהם</option>
+                ${PEOPLE.map((p) => `<option value="${p}">${personLabel(p)}</option>`).join('')}
               </select>
             </label>
           </div>
         </div>
-        <div class="activity-list history-list" id="history-log" aria-label="Activity history"></div>
+        <div class="activity-list history-list" id="history-log" aria-label="היסטוריית פעילות"></div>
       </div>
     </section>
   `
@@ -94,11 +94,11 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
     const entry = store.getState().activityLog.find((e) => e.id === id)
     if (!entry) return
     button.disabled = true
-    button.textContent = 'Undoing…'
+    button.textContent = 'מבטל…'
     void undoEntry(entry).catch(() => {
-      showToast('Could not undo that.')
+      showToast('לא ניתן היה לבטל את הפעולה.')
       button.disabled = false
-      button.textContent = 'Undo'
+      button.textContent = 'ביטול'
     })
   })
 
@@ -145,12 +145,12 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
     await markActivityUndone(entry.id)
     const { activityLog } = store.getState()
     store.setState({ activityLog: activityLog.map((e) => (e.id === entry.id ? { ...e, undone: true } : e)) })
-    showToast('Undone.', [], 2000)
+    showToast('בוטל.', [], 2000)
   }
 
   function render(state: AppState): void {
     if (state.activityLog.length === 0) {
-      logEl.innerHTML = `<p class="budget-summary__empty">Nothing logged yet — changes you make will show up here.</p>`
+      logEl.innerHTML = `<p class="budget-summary__empty">עדיין לא נרשם דבר — שינויים שתבצע/י יופיעו כאן.</p>`
       return
     }
 
@@ -159,7 +159,7 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
     )
 
     if (rows.length === 0) {
-      logEl.innerHTML = `<p class="budget-summary__empty">No activity matches these filters.</p>`
+      logEl.innerHTML = `<p class="budget-summary__empty">אין פעילות התואמת לסינון הזה.</p>`
       return
     }
 
@@ -169,13 +169,13 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
       <div class="history-row">
         <div class="history-row__main">
           <span class="history-row__summary">${entry.summary}</span>
-          <span class="history-row__meta">${formatDateTime(entry.performedAt)} · ${entry.performedBy}</span>
+          <span class="history-row__meta">${formatDateTime(entry.performedAt)} · ${personLabel(entry.performedBy)}</span>
         </div>
         ${
           isUndoable(entry)
-            ? `<button type="button" class="btn btn--sm" data-undo-id="${entry.id}">Undo</button>`
+            ? `<button type="button" class="btn btn--sm" data-undo-id="${entry.id}">ביטול</button>`
             : entry.undone
-              ? `<span class="history-row__undone-tag">Undone</span>`
+              ? `<span class="history-row__undone-tag">בוטל</span>`
               : ''
         }
       </div>

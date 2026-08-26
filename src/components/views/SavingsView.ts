@@ -23,19 +23,19 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
   root.innerHTML = `
     <section class="band band--hero">
       <div class="band__inner">
-        <p class="eyebrow">Household finance</p>
-        <h1>Savings.</h1>
-        <p class="hero__subtitle">Track shared savings goals alongside your everyday budget.</p>
+        <p class="eyebrow">כספי משק הבית</p>
+        <h1>חיסכון.</h1>
+        <p class="hero__subtitle">מעקב אחר יעדי חיסכון משותפים לצד התקציב היומיומי שלך.</p>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="Savings goals">
-          <h2 class="settings-card__title">Goals</h2>
+        <section class="settings-card" aria-label="יעדי חיסכון">
+          <h2 class="settings-card__title">יעדים</h2>
           <p class="settings-card__desc">
-            "Saved so far" is a number you update directly, the same way the shared account balance works — it's
-            not calculated from your transactions, since savings might not sit in the same account.
+            "נחסך עד כה" הוא מספר שמעדכנים ידנית, באותו אופן שבו פועלת יתרת החשבון המשותף — הוא
+            אינו מחושב מהתנועות שלך, מכיוון שהחיסכון לא בהכרח נמצא באותו חשבון.
           </p>
           <div class="settings-list" id="savings-list"></div>
         </section>
@@ -63,38 +63,38 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
         .map(
           (goal) => `
         <div class="settings-list__row" data-id="${goal.id}">
-          <input type="text" class="name-input" value="${goal.name}" placeholder="Goal name" data-field="name">
+          <input type="text" class="name-input" value="${goal.name}" placeholder="שם היעד" data-field="name">
           <span class="settings-list__inline-field">
-            <span>Saved</span>
+            <span>נחסך</span>
             <input type="number" class="budget-input" value="${goal.savedAmount}" min="0" step="10" data-field="savedAmount">
           </span>
           <span class="settings-list__inline-field">
-            <span>of</span>
+            <span>מתוך</span>
             <input type="number" class="budget-input" value="${goal.targetAmount}" min="1" step="10" data-field="targetAmount">
           </span>
           <span class="settings-list__usage">${Math.round(Math.min(100, (goal.savedAmount / goal.targetAmount) * 100))}%</span>
-          <button type="button" class="btn btn--sm btn--danger" data-delete-goal="${goal.id}">Delete</button>
+          <button type="button" class="btn btn--sm btn--danger" data-delete-goal="${goal.id}">מחיקה</button>
           ${renderGoalProgress(goal.savedAmount, goal.targetAmount)}
         </div>
       `,
         )
         .join('')}
       <div class="settings-list__row settings-list__row--add">
-        <input type="text" class="name-input" id="new-goal-name" placeholder="Goal name (e.g. Vacation fund)">
+        <input type="text" class="name-input" id="new-goal-name" placeholder="שם היעד (למשל: קרן לחופשה)">
         <span class="settings-list__inline-field">
-          <span>Saved</span>
+          <span>נחסך</span>
           <input type="number" class="budget-input" id="new-goal-saved" value="0" min="0" step="10">
         </span>
         <span class="settings-list__inline-field">
-          <span>of</span>
-          <input type="number" class="budget-input" id="new-goal-target" placeholder="Target" min="1" step="10">
+          <span>מתוך</span>
+          <input type="number" class="budget-input" id="new-goal-target" placeholder="יעד" min="1" step="10">
         </span>
-        <button type="button" class="btn btn--primary btn--sm" id="add-goal-btn">+ Add</button>
+        <button type="button" class="btn btn--primary btn--sm" id="add-goal-btn">+ הוספה</button>
       </div>
     `
 
     if (state.savingsGoals.length === 0) {
-      listEl.insertAdjacentHTML('afterbegin', `<p class="budget-summary__empty">No savings goals yet — add one below.</p>`)
+      listEl.insertAdjacentHTML('afterbegin', `<p class="budget-summary__empty">עדיין אין יעדי חיסכון — הוסף/י אחד למטה.</p>`)
     }
   }
 
@@ -112,7 +112,7 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
     updateSavingsGoal(id, patch).then((updated) => {
       const { savingsGoals } = store.getState()
       store.setState({ savingsGoals: savingsGoals.map((g) => (g.id === updated.id ? updated : g)) })
-      logSavings('updated', `Updated savings goal ${updated.name} (${field === 'name' ? 'name' : field === 'savedAmount' ? 'saved amount' : 'target'})`)
+      logSavings('updated', `יעד החיסכון ${updated.name} עודכן (${field === 'name' ? 'שם' : field === 'savedAmount' ? 'סכום שנחסך' : 'יעד'})`)
     })
   })
 
@@ -122,13 +122,13 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
       const id = deleteBtn.dataset.deleteGoal!
       const goal = store.getState().savingsGoals.find((g) => g.id === id)
       if (!goal) return
-      confirmDialog(`Delete the "${goal.name}" savings goal? You can undo this from History.`, 'Delete').then((confirmed) => {
+      confirmDialog(`למחוק את יעד החיסכון "${goal.name}"? ניתן לבטל זאת מההיסטוריה.`, 'מחיקה').then((confirmed) => {
         if (!confirmed) return
         deleteSavingsGoal(id).then(() => {
           const { savingsGoals } = store.getState()
           store.setState({ savingsGoals: savingsGoals.filter((g) => g.id !== id) })
           const before: SavingsGoalDeletedBefore = { goal }
-          logSavings('deleted', `Deleted savings goal ${goal.name}`, before)
+          logSavings('deleted', `יעד החיסכון ${goal.name} נמחק`, before)
         })
       })
       return
@@ -141,7 +141,7 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
       const name = nameInput.value.trim()
       const targetAmount = Number(targetInput.value)
       if (!name || !Number.isFinite(targetAmount) || targetAmount <= 0) {
-        showToast('Enter a goal name and a target amount first.')
+        showToast('הזן/י שם ליעד וסכום יעד תחילה.')
         return
       }
       const savedAmount = Number.isFinite(Number(savedInput.value)) ? Number(savedInput.value) : 0
@@ -149,7 +149,7 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
       createSavingsGoal({ name, targetAmount, savedAmount }).then((created) => {
         const { savingsGoals } = store.getState()
         store.setState({ savingsGoals: [...savingsGoals, created] })
-        logSavings('created', `Added savings goal ${created.name} (target ${formatCurrency(created.targetAmount)})`)
+        logSavings('created', `נוסף יעד חיסכון ${created.name} (יעד ${formatCurrency(created.targetAmount)})`)
       })
     }
   })
