@@ -77,11 +77,11 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     <section class="band">
       <div class="band__inner">
         <section class="settings-card" aria-label="Connected email accounts">
-          <h2 class="settings-card__title">Email accounts</h2>
+          <h2 class="settings-card__title">Email accounts <span class="soon-badge">Soon</span></h2>
           <p class="settings-card__desc">
             The email address to watch for each person, and whether auto-capture is
             switched on for it. This only gates a future email-parsing integration —
-            it doesn't connect to an inbox yet.
+            it doesn't connect to an inbox yet, so nothing here does anything until it does.
           </p>
           <div class="settings-list" id="email-accounts"></div>
         </section>
@@ -91,8 +91,12 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     <section class="band">
       <div class="band__inner">
         <section class="settings-card" aria-label="Email auto-sync rules">
-          <h2 class="settings-card__title">Auto-capture rules</h2>
-          <p class="settings-card__desc">When an invoice from a matching sender/keyword arrives, it's pre-filled with these defaults and dropped into the Review Center.</p>
+          <h2 class="settings-card__title">Auto-capture rules <span class="soon-badge">Soon</span></h2>
+          <p class="settings-card__desc">
+            When an invoice from a matching sender/keyword arrives, it's pre-filled with these defaults and
+            dropped into the Review Center — once email auto-capture (above) is actually connected. For now
+            these rules are saved but nothing triggers them.
+          </p>
           <div class="settings-list" id="rule-builder"></div>
         </section>
       </div>

@@ -1139,6 +1139,22 @@ p {
   flex-wrap: wrap;
 }
 
+/** Marks a feature that's visible in the UI but not actually wired up yet
+ * (e.g. email auto-capture) — so it reads as "not built yet", not "broken". */
+.soon-badge {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 14%, var(--surface));
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
 .badge-pill {
   display: inline-flex;
   align-items: center;
