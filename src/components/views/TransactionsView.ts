@@ -18,6 +18,7 @@ import {
 } from '../shared/transactionCells.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { Modal } from '../shared/Modal.ts'
+import { confirmDialog } from '../shared/confirmDialog.ts'
 import { showToast } from '../shared/Toast.ts'
 import { columnsIconMarkup, downloadIconMarkup, filterIconMarkup } from '../icons/NavIcons.ts'
 import { openImportFlow } from './TransactionsImport.ts'
@@ -809,20 +810,29 @@ export class TransactionsView {
     const idSet = new Set(ids)
     const { transactions: current } = this.#store.getState()
     const deleted = current.filter((tx) => idSet.has(tx.id))
+    const total = deleted.reduce((sum, tx) => sum + tx.amount, 0)
 
-    deleteTransactions(ids).then(() => {
-      const { transactions } = this.#store.getState()
-      this.#selection.clear()
-      this.#store.setState({ transactions: transactions.filter((tx) => !idSet.has(tx.id)) })
-      const total = deleted.reduce((sum, tx) => sum + tx.amount, 0)
-      const before: TransactionDeletedBefore = { transactions: deleted }
-      this.logTx(
-        deleted.length === 1 ? 'deleted' : 'bulk_deleted',
-        deleted.length === 1
-          ? `Deleted ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})`
-          : `Deleted ${deleted.length} transactions (${formatCurrency(total)} total)`,
-        before,
-      )
+    const message =
+      deleted.length === 1
+        ? `Delete ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})? You can undo this from History.`
+        : `Delete ${deleted.length} transactions (${formatCurrency(total)} total)? You can undo this from History.`
+
+    confirmDialog(message, 'Delete').then((confirmed) => {
+      if (!confirmed) return
+
+      deleteTransactions(ids).then(() => {
+        const { transactions } = this.#store.getState()
+        this.#selection.clear()
+        this.#store.setState({ transactions: transactions.filter((tx) => !idSet.has(tx.id)) })
+        const before: TransactionDeletedBefore = { transactions: deleted }
+        this.logTx(
+          deleted.length === 1 ? 'deleted' : 'bulk_deleted',
+          deleted.length === 1
+            ? `Deleted ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})`
+            : `Deleted ${deleted.length} transactions (${formatCurrency(total)} total)`,
+          before,
+        )
+      })
     })
   }
 
@@ -914,6 +924,7 @@ export class TransactionsView {
           this.#store.setState({ transactions: [created, ...transactions] })
           this.logTx('created', `Added ${created.merchant} (${formatCurrency(created.amount)})`)
           modal.close()
+          showToast(`✓ Added ${created.merchant} (${formatCurrency(created.amount)})`, [], 2500)
         })
       }
     })
