@@ -24,7 +24,7 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
     <section class="band band--hero">
       <div class="band__inner">
         <p class="eyebrow">כספי משק הבית</p>
-        <h1>חיסכון.</h1>
+        <h1>חסכונות.</h1>
         <p class="hero__subtitle">מעקב אחר יעדי חיסכון משותפים לצד התקציב היומיומי שלך.</p>
       </div>
     </section>

@@ -79,7 +79,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     <section class="band band--hero">
       <div class="band__inner">
         <p class="eyebrow">כספי משק הבית</p>
-        <h1>אנליטיקה.</h1>
+        <h1>אנליזות.</h1>
         <p class="hero__subtitle">מגמות הוצאה וכיצד ההוצאות מתחלקות בין שניכם.</p>
       </div>
     </section>

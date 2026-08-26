@@ -54,8 +54,8 @@ const PRIMARY_VIEWS: NavEntry[] = [
   { id: 'overview', label: 'סקירה כללית', shortLabel: 'סקירה', icon: homeIconMarkup },
   { id: 'transactions', label: 'תנועות', shortLabel: 'תנועות', icon: listIconMarkup },
   { id: 'budgets', label: 'תקציבים', shortLabel: 'תקציבים', icon: targetIconMarkup },
-  { id: 'savings', label: 'חיסכון', shortLabel: 'חיסכון', icon: coinsIconMarkup },
-  { id: 'analytics', label: 'אנליטיקה', shortLabel: 'אנליטיקה', icon: chartIconMarkup },
+  { id: 'savings', label: 'חסכונות', shortLabel: 'חסכונות', icon: coinsIconMarkup },
+  { id: 'analytics', label: 'אנליזות', shortLabel: 'אנליזות', icon: chartIconMarkup },
 ]
 
 const MANAGEMENT_VIEWS: NavEntry[] = [
