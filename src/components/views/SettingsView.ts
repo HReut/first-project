@@ -1,9 +1,10 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Person } from '../../types.ts'
+import type { AppState, CategoryDeletedBefore, Person } from '../../types.ts'
 import { createCategory, deleteCategory, updateCategory } from '../../data/categoriesRepo.ts'
 import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/emailRulesRepo.ts'
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
 import { setAccountBalance } from '../../data/accountBalanceRepo.ts'
+import { logActivity } from '../../data/activityLogRepo.ts'
 import { showToast } from '../shared/Toast.ts'
 import { confirmDialog } from '../shared/confirmDialog.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
@@ -20,7 +21,7 @@ function themeToggleIcon(): string {
   return effectiveTheme() === 'dark' ? sunIconMarkup() : moonIconMarkup()
 }
 
-export function mountSettingsView(root: HTMLElement, store: Store<AppState>): void {
+export function mountSettingsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
   let accountSettings = loadEmailAccountSettings()
 
   root.innerHTML = `
@@ -163,6 +164,17 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
     `
   }
 
+  /** Fire-and-forget, same reasoning as TransactionsView's logTx: a logging
+   * failure shouldn't block the real action, but shouldn't be silent either. */
+  function logCategory(action: 'created' | 'updated' | 'deleted', summary: string, beforeData: unknown = null): void {
+    logActivity({ entityType: 'category', action, summary, beforeData, performedBy: currentPerson })
+      .then((entry) => {
+        const { activityLog } = store.getState()
+        store.setState({ activityLog: [entry, ...activityLog] })
+      })
+      .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
+  }
+
   categoryManagerEl.addEventListener('change', (event) => {
     const input = (event.target as HTMLElement).closest<HTMLInputElement>('[data-field]')
     if (!input) return
@@ -172,6 +184,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
     updateCategory(id, { [field]: input.value }).then((updated) => {
       const { categories } = store.getState()
       store.setState({ categories: categories.map((c) => (c.id === updated.id ? updated : c)) })
+      logCategory('updated', `Updated category ${updated.name} (${field})`)
     })
   })
 
@@ -179,12 +192,21 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
     const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-category]')
     if (deleteBtn && !deleteBtn.disabled) {
       const id = deleteBtn.dataset.deleteCategory!
-      const category = store.getState().categories.find((c) => c.id === id)
-      confirmDialog(`Delete the "${category?.name ?? 'this'}" category? This can't be undone.`, 'Delete').then((confirmed) => {
+      const state = store.getState()
+      const category = state.categories.find((c) => c.id === id)
+      if (!category) return
+      const overrides = state.budgetLimitOverrides.filter((o) => o.categoryId === id)
+
+      confirmDialog(`Delete the "${category.name}" category? You can undo this from History.`, 'Delete').then((confirmed) => {
         if (!confirmed) return
         deleteCategory(id).then(() => {
-          const { categories } = store.getState()
-          store.setState({ categories: categories.filter((c) => c.id !== id) })
+          const { categories, budgetLimitOverrides } = store.getState()
+          store.setState({
+            categories: categories.filter((c) => c.id !== id),
+            budgetLimitOverrides: budgetLimitOverrides.filter((o) => o.categoryId !== id),
+          })
+          const before: CategoryDeletedBefore = { category, overrides }
+          logCategory('deleted', `Deleted category ${category.name}`, before)
         })
       })
       return
@@ -204,6 +226,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>): vo
       }).then((created) => {
         const { categories } = store.getState()
         store.setState({ categories: [...categories, created] })
+        logCategory('created', `Added category ${created.name}`)
       })
     }
   })

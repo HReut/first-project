@@ -344,7 +344,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       mountTransactionsView(viewEls.transactions, store, currentPerson)
       mountBudgetsView(viewEls.budgets, store, currentPerson)
       mountAnalyticsView(viewEls.analytics, store)
-      mountSettingsView(viewEls.settings, store)
+      mountSettingsView(viewEls.settings, store, currentPerson)
       mountHistoryView(viewEls.history, store)
       mountPlaceholderView(viewEls.savings, {
         eyebrow: 'Household finance',

@@ -1,9 +1,9 @@
 import type { Store } from '../../state/store.ts'
-import type { ActivityLogEntry, AppState, BudgetLimitChangedBefore, TransactionDeletedBefore } from '../../types.ts'
+import type { ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
 import { formatDateTime } from '../../utils/format.ts'
 import { markActivityUndone } from '../../data/activityLogRepo.ts'
 import { restoreTransactions } from '../../data/transactionsRepo.ts'
-import { updateCategory } from '../../data/categoriesRepo.ts'
+import { updateCategory, restoreCategory } from '../../data/categoriesRepo.ts'
 import { deleteBudgetLimitOverride, restoreBudgetLimitOverrides } from '../../data/budgetLimitOverridesRepo.ts'
 import { showToast } from '../shared/Toast.ts'
 
@@ -15,6 +15,7 @@ function isUndoable(entry: ActivityLogEntry): boolean {
   if (entry.entityType === 'transaction') return entry.action === 'deleted' || entry.action === 'bulk_deleted'
   if (entry.entityType === 'budget_limit') return entry.action === 'changed'
   if (entry.entityType === 'settlement') return entry.action === 'settled'
+  if (entry.entityType === 'category') return entry.action === 'deleted'
   return false
 }
 
@@ -67,6 +68,15 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
       store.setState({
         categories: state.categories.map((c) => (c.id === updatedCategory.id ? updatedCategory : c)),
         budgetLimitOverrides: [...state.budgetLimitOverrides.filter((o) => o.id !== before.createdOverrideId), ...before.previousOverrides],
+      })
+    } else if (entry.entityType === 'category' && entry.action === 'deleted') {
+      const before = entry.beforeData as CategoryDeletedBefore
+      const restoredCategory = await restoreCategory(before.category)
+      if (before.overrides.length > 0) await restoreBudgetLimitOverrides(before.overrides)
+      const state = store.getState()
+      store.setState({
+        categories: [...state.categories, restoredCategory],
+        budgetLimitOverrides: [...state.budgetLimitOverrides, ...before.overrides],
       })
     }
     // 'settlement'/'settled' needs no state restore beyond marking this entry

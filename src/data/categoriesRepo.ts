@@ -49,6 +49,20 @@ export async function updateCategory(id: string, patch: Partial<NewCategory>): P
   return updated.find((category) => category.id === id)!
 }
 
+/** Re-inserts a previously-deleted category with its original id — used by
+ * History's Undo on a category 'deleted' entry. createCategory() can't be
+ * reused here since it always lets the database generate a fresh id. */
+export async function restoreCategory(category: Category): Promise<Category> {
+  if (supabase) {
+    const { data, error } = await supabase.from('categories').insert({ id: category.id, ...toRow(category) }).select().single()
+    if (error) throw error
+    return fromRow(data as CategoryRow)
+  }
+  const categories = loadLocalCategories()
+  saveLocalCategories([...categories, category])
+  return category
+}
+
 export async function deleteCategory(id: string): Promise<void> {
   if (supabase) {
     const { error } = await supabase.from('categories').delete().eq('id', id)

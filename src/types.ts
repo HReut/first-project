@@ -151,6 +151,15 @@ export interface TransactionDeletedBefore {
   transactions: Transaction[]
 }
 
+/** beforeData shape for a category 'deleted' entry — the category itself,
+ * plus any budget_limit_overrides that cascade-deleted along with it (the
+ * DB foreign key is ON DELETE CASCADE for that table), so undo can put both
+ * back. */
+export interface CategoryDeletedBefore {
+  category: Category
+  overrides: BudgetLimitOverride[]
+}
+
 /** beforeData shape for a budget_limit 'changed' entry — enough to put the
  * category back exactly how it was, whichever scope the edit used. Undo
  * always: restores previousCategoryLimit (a no-op unless the edit was
