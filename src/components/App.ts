@@ -16,6 +16,7 @@ import { formatCurrency } from '../utils/format.ts'
 import { personFromEmail, signOut } from '../lib/auth.ts'
 import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
 import { mountAuthGate } from './AuthGate.ts'
+import { confirmDialog } from './shared/confirmDialog.ts'
 import { catLogoMarkup } from './icons/CatLogo.ts'
 import {
   bellIconMarkup,
@@ -303,6 +304,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   }
   const navButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.sidebar__link, .bottom-nav__link'))
   let mounted = false
+  let settingsHasUnsavedChanges: (() => boolean) | null = null
 
   function applyViewVisibility(state: AppState): void {
     navButtons.forEach((btn) => btn.classList.toggle('is-active', btn.dataset.view === state.view))
@@ -311,9 +313,23 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     }
   }
 
-  function navigate(view: View): void {
+  function goToView(view: View): void {
     if (location.hash.replace('#', '') !== view) location.hash = view
     store.setState({ view })
+  }
+
+  /** Warns before leaving Settings if there's typed-but-unsaved text (an
+   * "add new" row that was never submitted) — everything else on Settings
+   * auto-saves on blur, so it's already safe by the time a click navigates
+   * away. Scoped to Settings only; other pages navigate immediately. */
+  function navigate(view: View): void {
+    if (store.getState().view === 'settings' && view !== 'settings' && settingsHasUnsavedChanges?.()) {
+      confirmDialog('You have unsaved text on Settings that hasn’t been added yet. Leave anyway?', 'Leave').then((confirmed) => {
+        if (confirmed) goToView(view)
+      })
+      return
+    }
+    goToView(view)
   }
 
   navButtons.forEach((btn) => {
@@ -434,7 +450,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       mountTransactionsView(viewEls.transactions, store, currentPerson)
       mountBudgetsView(viewEls.budgets, store, currentPerson)
       mountAnalyticsView(viewEls.analytics, store)
-      mountSettingsView(viewEls.settings, store, currentPerson)
+      settingsHasUnsavedChanges = mountSettingsView(viewEls.settings, store, currentPerson)
       mountHistoryView(viewEls.history, store)
       mountSavingsView(viewEls.savings, store, currentPerson)
       mountPlaceholderView(viewEls.help, {

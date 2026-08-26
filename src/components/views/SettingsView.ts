@@ -21,7 +21,7 @@ function themeToggleIcon(): string {
   return effectiveTheme() === 'dark' ? sunIconMarkup() : moonIconMarkup()
 }
 
-export function mountSettingsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
+export function mountSettingsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): () => boolean {
   let accountSettings = loadEmailAccountSettings()
 
   root.innerHTML = `
@@ -378,4 +378,17 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
   renderCategoryManager(store.getState())
   renderEmailAccounts()
   renderRuleBuilder(store.getState())
+
+  /** Typed-but-not-yet-submitted text — the "add new" rows only save on an
+   * explicit button click (unlike existing-row edits, which auto-save on
+   * blur, so they're already safe by the time a nav click fires). Checked
+   * by App.ts before letting a sidebar/logo click navigate away. */
+  return function hasUnsavedChanges(): boolean {
+    const newCategoryName = root.querySelector<HTMLInputElement>('#new-category-name')?.value.trim()
+    const newRuleKeyword = root.querySelector<HTMLInputElement>('#new-rule-keyword')?.value.trim()
+    const balanceInput = root.querySelector<HTMLInputElement>('#account-balance-input')
+    const savedBalance = store.getState().accountBalance
+    const balanceChanged = !!balanceInput && balanceInput.value.trim() !== (savedBalance ? String(savedBalance.startingBalance) : '')
+    return !!newCategoryName || !!newRuleKeyword || balanceChanged
+  }
 }
