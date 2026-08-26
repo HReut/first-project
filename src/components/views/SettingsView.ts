@@ -24,9 +24,14 @@ function themeToggleIcon(): string {
 export function mountSettingsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): () => boolean {
   let accountSettings = loadEmailAccountSettings()
   // True while an existing category's color/icon/name has been typed/picked
-  // but not yet committed (blurred) — so a nav click mid-edit still warns,
-  // same as the "add new" rows below.
+  // but not yet blurred, OR while its save request is still in flight.
+  // Clicking a nav button blurs the focused input (firing `change`) *before*
+  // the button's own click event runs — so if we cleared this flag as soon
+  // as `change` fires, it'd already be false by the time navigate() checks
+  // it. Keeping it true until the request resolves is what actually makes
+  // the warning appear on a real click-away.
   let categoryFieldsDirty = false
+  let categorySavesInFlight = 0
 
   root.innerHTML = `
     <section class="band band--hero">
@@ -206,11 +211,15 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     const id = row.dataset.id!
     const field = input.dataset.field!
     categoryFieldsDirty = false
-    updateCategory(id, { [field]: input.value }).then((updated) => {
-      const { categories } = store.getState()
-      store.setState({ categories: categories.map((c) => (c.id === updated.id ? updated : c)) })
-      logCategory('updated', `Updated category ${updated.name} (${field})`)
-    })
+    categorySavesInFlight++
+    updateCategory(id, { [field]: input.value })
+      .then((updated) => {
+        const { categories } = store.getState()
+        store.setState({ categories: categories.map((c) => (c.id === updated.id ? updated : c)) })
+        logCategory('updated', `Updated category ${updated.name} (${field})`)
+      })
+      .catch(() => showToast('Could not save that category change — try again.'))
+      .finally(() => categorySavesInFlight--)
   })
 
   categoryManagerEl.addEventListener('click', (event) => {
@@ -399,6 +408,6 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     const balanceInput = root.querySelector<HTMLInputElement>('#account-balance-input')
     const savedBalance = store.getState().accountBalance
     const balanceChanged = !!balanceInput && balanceInput.value.trim() !== (savedBalance ? String(savedBalance.startingBalance) : '')
-    return !!newCategoryName || !!newRuleKeyword || balanceChanged || categoryFieldsDirty
+    return !!newCategoryName || !!newRuleKeyword || balanceChanged || categoryFieldsDirty || categorySavesInFlight > 0
   }
 }
