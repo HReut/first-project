@@ -1076,7 +1076,7 @@ export class TransactionsView {
     const collapsed = this.#collapsedGroups.has(g.key)
     return `
       <button type="button" class="group-header" data-group-toggle="${g.key}" aria-expanded="${!collapsed}">
-        <span class="group-header__chevron" aria-hidden="true">${collapsed ? '›' : '⌄'}</span>
+        <span class="group-header__chevron" aria-hidden="true">${collapsed ? '‹' : '⌄'}</span>
         ${g.color ? `<span class="group-header__dot" style="background: ${g.color}" aria-hidden="true"></span>` : ''}
         <span class="group-header__name">${g.icon} ${g.label}</span>
         <span class="group-header__count">${g.rows.length} פריטים</span>

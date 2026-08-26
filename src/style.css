@@ -183,7 +183,7 @@ p {
   top: 0;
   height: 100vh;
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
   padding: 20px 14px;
   gap: 4px;
   transition: width 0.2s ease;
@@ -194,7 +194,7 @@ p {
 .sidebar-edge-toggle {
   position: absolute;
   top: 28px;
-  right: -12px;
+  inset-inline-end: -12px;
   width: 24px;
   height: 24px;
   display: flex;
@@ -334,7 +334,7 @@ p {
   font: inherit;
   font-size: 14px;
   font-weight: 500;
-  text-align: left;
+  text-align: start;
   color: var(--text);
   background: transparent;
   border: none;
@@ -593,7 +593,7 @@ p {
 .notif-badge {
   position: absolute;
   top: -4px;
-  right: -4px;
+  inset-inline-end: -4px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
@@ -609,7 +609,7 @@ p {
 .notif-panel {
   position: absolute;
   top: calc(100% + 10px);
-  right: 0;
+  inset-inline-end: 0;
   width: 320px;
   max-width: calc(100vw - 32px);
   background: var(--surface);
@@ -644,7 +644,7 @@ p {
 .notif-item {
   display: block;
   width: 100%;
-  text-align: left;
+  text-align: start;
   padding: 8px 10px;
   border-radius: 8px;
   border: none;
@@ -1144,7 +1144,7 @@ p {
 .soon-badge {
   display: inline-block;
   vertical-align: middle;
-  margin-left: 8px;
+  margin-inline-start: 8px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -1283,7 +1283,7 @@ p {
   background: var(--status-good);
   flex-shrink: 0;
   display: inline-block;
-  margin-right: 6px;
+  margin-inline-end: 6px;
 }
 
 .total-available__value {
@@ -1316,8 +1316,8 @@ p {
 .hero-card__right {
   flex: 1;
   min-width: 0;
-  padding-left: 32px;
-  border-left: 1px solid var(--border);
+  padding-inline-start: 32px;
+  border-inline-start: 1px solid var(--border);
 }
 
 @media (max-width: 720px) {
@@ -1327,9 +1327,9 @@ p {
   }
 
   .hero-card__right {
-    padding-left: 0;
+    padding-inline-start: 0;
     padding-top: 20px;
-    border-left: none;
+    border-inline-start: none;
     border-top: 1px solid var(--border);
   }
 }
@@ -1526,7 +1526,7 @@ p {
   font-weight: 600;
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: end;
   white-space: nowrap;
 }
 
@@ -1535,7 +1535,7 @@ p {
   font-weight: 500;
   color: var(--text);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: end;
   width: 36px;
 }
 
@@ -1910,11 +1910,11 @@ p {
 .tx-footer-summary strong {
   color: var(--text-h);
   font-weight: 600;
-  margin-right: 4px;
+  margin-inline-end: 4px;
 }
 
 .tx-footer-summary__net {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 14px;
 }
 
@@ -2033,7 +2033,7 @@ p {
   align-items: stretch;
   gap: 16px;
   position: absolute;
-  right: 0;
+  inset-inline-end: 0;
   top: calc(100% + 8px);
   z-index: 95;
   min-width: 260px;
@@ -2165,7 +2165,7 @@ p {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-h);
-  margin-right: auto;
+  margin-inline-end: auto;
 }
 
 /* ---------- Transactions table ---------- */
@@ -2207,7 +2207,7 @@ p {
 }
 
 .transactions__table th {
-  text-align: left;
+  text-align: start;
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
@@ -2250,7 +2250,7 @@ p {
 
 .transactions__table th.is-numeric,
 .transactions__table td.is-numeric {
-  text-align: right;
+  text-align: end;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
@@ -2280,7 +2280,7 @@ p {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-h);
-  text-align: left;
+  text-align: start;
   background: var(--bg);
   border: none;
   border-radius: 10px;
@@ -2476,7 +2476,7 @@ p {
 .editable-cell--status {
   display: inline-flex;
   border-radius: 999px;
-  margin-left: 6px;
+  margin-inline-start: 6px;
 }
 
 .editable-cell--status .cell-input {
@@ -2564,7 +2564,7 @@ p {
   font-weight: 500;
   font-style: italic;
   color: var(--text);
-  margin-left: 6px;
+  margin-inline-start: 6px;
   white-space: nowrap;
 }
 
@@ -2623,7 +2623,7 @@ p {
   font-size: 11px;
   font-weight: 600;
   color: #fff;
-  margin-right: 6px;
+  margin-inline-end: 6px;
 }
 
 .person-badge[data-person='Reut'] {
@@ -2721,7 +2721,7 @@ p {
   position: sticky;
   top: 0;
   background: var(--surface);
-  text-align: left;
+  text-align: start;
   font-weight: 600;
   color: var(--text);
   padding: 10px 10px;
@@ -2742,7 +2742,7 @@ p {
 
 .import-preview__rule-badge {
   display: inline-block;
-  margin-left: 6px;
+  margin-inline-start: 6px;
   font-size: 10px;
   font-weight: 700;
   color: var(--accent);
@@ -2791,7 +2791,7 @@ p {
 .toggle__thumb {
   position: absolute;
   top: 2px;
-  left: 2px;
+  inset-inline-start: 2px;
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -2805,7 +2805,7 @@ p {
 }
 
 .toggle input:checked + .toggle__track .toggle__thumb {
-  transform: translateX(14px);
+  transform: translateX(-14px);
 }
 
 .toggle input:focus-visible + .toggle__track {
@@ -3098,7 +3098,7 @@ p {
   font-weight: 600;
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: end;
   min-width: 70px;
 }
 
