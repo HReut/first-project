@@ -1,23 +1,28 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category, Filters, Person, Transaction } from '../../types.ts'
 import { computeAnalyticsHighlights, computeCategoryBreakdown } from '../../utils/insights.ts'
-import { formatCurrency, formatDateShort, formatMonthLabel, formatPercent } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, formatPercent, personLabel } from '../../utils/format.ts'
 import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
 
 const MONTHLY_SERIES_LENGTH = 6
 const PEOPLE: Person[] = ['Reut', 'Keren']
 
 const PERIOD_LABEL: Record<PeriodPreset, string> = {
-  'this-month': 'this month',
-  'last-month': 'last month',
-  'last-3': 'the last 3 months',
-  'last-6': 'the last 6 months',
-  'this-year': 'this year',
-  all: 'all time',
+  'this-month': 'החודש',
+  'last-month': 'חודש שעבר',
+  'last-3': '3 החודשים האחרונים',
+  'last-6': '6 החודשים האחרונים',
+  'this-year': 'השנה',
+  all: 'כל הזמנים',
 }
 
 function monthKeyAgo(monthsAgo: number, from = new Date()): string {
   return new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1).toISOString().slice(0, 7)
+}
+
+function monthLabelShort(monthKey: string): string {
+  const [year, month] = monthKey.split('-').map(Number)
+  return new Date(year, month - 1, 1).toLocaleDateString('he-IL', { month: 'short' })
 }
 
 function computeMonthlySeries(transactions: Transaction[], months: number, filters: Pick<Filters, 'categoryId' | 'person'>): { month: string; total: number }[] {
@@ -66,16 +71,16 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
   }
 
   function periodLabel(): string {
-    if (period === 'custom') return customStart && customEnd ? `${formatDateShort(customStart)} – ${formatDateShort(customEnd)}` : 'this month'
+    if (period === 'custom') return customStart && customEnd ? `${formatDateShort(customStart)} – ${formatDateShort(customEnd)}` : 'החודש'
     return PERIOD_LABEL[period]
   }
 
   root.innerHTML = `
     <section class="band band--hero">
       <div class="band__inner">
-        <p class="eyebrow">Household finance</p>
-        <h1>Analytics.</h1>
-        <p class="hero__subtitle">Spending trends and how expenses split between the two of you.</p>
+        <p class="eyebrow">כספי משק הבית</p>
+        <h1>אנליטיקה.</h1>
+        <p class="hero__subtitle">מגמות הוצאה וכיצד ההוצאות מתחלקות בין שניכם.</p>
       </div>
     </section>
 
@@ -84,41 +89,41 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
         <div class="chart-card">
           <div class="transactions__toolbar" id="analytics-toolbar">
             <label class="toolbar-control">
-              <span class="toolbar-control__label">Period</span>
+              <span class="toolbar-control__label">תקופה</span>
               <select class="toolbar-control__input" id="analytics-period-select">
-                <option value="this-month">This month</option>
-                <option value="last-month">Last month</option>
-                <option value="last-3">Last 3 months</option>
-                <option value="last-6">Last 6 months</option>
-                <option value="this-year">This year</option>
-                <option value="all">All time</option>
-                <option value="custom">Custom range&hellip;</option>
+                <option value="this-month">החודש</option>
+                <option value="last-month">חודש שעבר</option>
+                <option value="last-3">3 החודשים האחרונים</option>
+                <option value="last-6">6 החודשים האחרונים</option>
+                <option value="this-year">השנה</option>
+                <option value="all">כל הזמנים</option>
+                <option value="custom">טווח מותאם אישית&hellip;</option>
               </select>
             </label>
 
             <div class="filter-group filter-group--custom-range" id="analytics-custom-range" hidden>
               <label class="filter-group">
-                <span class="filter-group__label">From</span>
+                <span class="filter-group__label">מתאריך</span>
                 <input type="date" class="filter-input" id="analytics-range-start">
               </label>
               <label class="filter-group">
-                <span class="filter-group__label">To</span>
+                <span class="filter-group__label">עד תאריך</span>
                 <input type="date" class="filter-input" id="analytics-range-end">
               </label>
             </div>
 
             <label class="toolbar-control">
-              <span class="toolbar-control__label">Category</span>
+              <span class="toolbar-control__label">קטגוריה</span>
               <select class="toolbar-control__input" id="analytics-category-select">
-                <option value="all">All categories</option>
+                <option value="all">כל הקטגוריות</option>
               </select>
             </label>
 
             <label class="toolbar-control">
-              <span class="toolbar-control__label">Person</span>
+              <span class="toolbar-control__label">מי שילם/ה</span>
               <select class="toolbar-control__input" id="analytics-person-select">
-                <option value="all">Everyone</option>
-                ${PEOPLE.map((p) => `<option value="${p}">${p}</option>`).join('')}
+                <option value="all">כולם</option>
+                ${PEOPLE.map((p) => `<option value="${p}">${personLabel(p)}</option>`).join('')}
               </select>
             </label>
           </div>
@@ -129,7 +134,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     <section class="band band--tight">
       <div class="band__inner">
         <div class="chart-card">
-          <h2 class="chart-card__title" id="highlights-title">Highlights — this month</h2>
+          <h2 class="chart-card__title" id="highlights-title">רגעים בולטים — החודש</h2>
           <div class="highlight-grid" id="highlights-grid"></div>
         </div>
       </div>
@@ -138,7 +143,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     <section class="band">
       <div class="band__inner">
         <div class="chart-card">
-          <h2 class="chart-card__title" id="distribution-title">Spending distribution — this month</h2>
+          <h2 class="chart-card__title" id="distribution-title">פילוח הוצאות — החודש</h2>
           <div class="hbar-chart" id="distribution-chart"></div>
         </div>
       </div>
@@ -147,7 +152,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     <section class="band">
       <div class="band__inner">
         <div class="chart-card">
-          <h2 class="chart-card__title">Last ${MONTHLY_SERIES_LENGTH} months</h2>
+          <h2 class="chart-card__title">${MONTHLY_SERIES_LENGTH} החודשים האחרונים</h2>
           <div class="column-chart" id="monthly-chart"></div>
         </div>
       </div>
@@ -157,10 +162,10 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
       <div class="band__inner">
         <div class="chart-card">
           <div class="chart-card__header">
-            <h2 class="chart-card__title" id="person-chart-title">Reut vs. Keren — this month</h2>
+            <h2 class="chart-card__title" id="person-chart-title">רעות מול קרן — החודש</h2>
             <ul class="chart-legend">
-              <li class="chart-legend__item"><span class="chart-legend__key" style="background: var(--person-reut)"></span>Reut</li>
-              <li class="chart-legend__item"><span class="chart-legend__key" style="background: var(--person-keren)"></span>Keren</li>
+              <li class="chart-legend__item"><span class="chart-legend__key" style="background: var(--person-reut)"></span>${personLabel('Reut')}</li>
+              <li class="chart-legend__item"><span class="chart-legend__key" style="background: var(--person-keren)"></span>${personLabel('Keren')}</li>
             </ul>
           </div>
           <div class="grouped-bar-chart" id="person-chart"></div>
@@ -221,43 +226,43 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
   function renderCategoryOptions(state: AppState): void {
     const selected = categorySelect.value
     categorySelect.innerHTML =
-      `<option value="all">All categories</option>` + state.categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')
+      `<option value="all">כל הקטגוריות</option>` + state.categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')
     categorySelect.value = selected
   }
 
   function renderHighlights(state: AppState): void {
-    highlightsTitleEl.textContent = `Highlights — ${periodLabel()}`
+    highlightsTitleEl.textContent = `רגעים בולטים — ${periodLabel()}`
     const highlights = computeAnalyticsHighlights(state.transactions, state.categories, { categoryId, person }, resolvedPeriod())
 
     if (highlights.transactionCount === 0) {
-      highlightsGridEl.innerHTML = `<p class="chart-empty">No spending recorded for ${periodLabel()}.</p>`
+      highlightsGridEl.innerHTML = `<p class="chart-empty">לא נרשמו הוצאות ל${periodLabel()}.</p>`
       return
     }
 
     const delta = highlights.deltaVsPreviousPeriod
     const deltaSub =
       delta === null
-        ? 'No prior period to compare'
-        : `<span class="${delta.amount <= 0 ? 'is-good' : 'is-bad'}">${delta.amount <= 0 ? '↓' : '↑'} ${delta.percent === null ? formatCurrency(Math.abs(delta.amount)) : formatPercent(Math.abs(delta.percent))}</span> vs previous period`
+        ? 'אין תקופה קודמת להשוואה'
+        : `<span class="${delta.amount <= 0 ? 'is-good' : 'is-bad'}">${delta.amount <= 0 ? '↓' : '↑'} ${delta.percent === null ? formatCurrency(Math.abs(delta.amount)) : formatPercent(Math.abs(delta.percent))}</span> לעומת התקופה הקודמת`
 
     const cards = [
-      { label: 'Total spent', value: formatCurrency(highlights.totalAmount), sub: deltaSub },
+      { label: 'סה"כ הוצאה', value: formatCurrency(highlights.totalAmount), sub: deltaSub },
       {
-        label: 'Top category',
+        label: 'קטגוריה מובילה',
         value: highlights.topCategory ? `${highlights.topCategory.category.icon} ${highlights.topCategory.category.name}` : '—',
         sub: highlights.topCategory ? formatCurrency(highlights.topCategory.amount) : '',
       },
       {
-        label: 'Top merchant',
+        label: 'בית העסק המוביל',
         value: highlights.topMerchant?.merchant ?? '—',
-        sub: highlights.topMerchant ? `${formatCurrency(highlights.topMerchant.amount)} across ${highlights.topMerchant.count} transaction${highlights.topMerchant.count === 1 ? '' : 's'}` : '',
+        sub: highlights.topMerchant ? `${formatCurrency(highlights.topMerchant.amount)} ב-${highlights.topMerchant.count} תנועות` : '',
       },
       {
-        label: 'Biggest transaction',
+        label: 'התנועה הגדולה ביותר',
         value: highlights.biggestTransaction ? formatCurrency(highlights.biggestTransaction.amount) : '—',
         sub: highlights.biggestTransaction ? `${highlights.biggestTransaction.merchant} · ${formatDateShort(highlights.biggestTransaction.date)}` : '',
       },
-      { label: 'Transactions', value: String(highlights.transactionCount), sub: `${formatCurrency(highlights.avgAmount)} average` },
+      { label: 'תנועות', value: String(highlights.transactionCount), sub: `ממוצע ${formatCurrency(highlights.avgAmount)}` },
     ]
 
     highlightsGridEl.innerHTML = cards
@@ -278,10 +283,10 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const max = Math.max(1, ...breakdown.map((entry) => entry.amount))
 
-    distributionTitleEl.textContent = `Spending distribution — ${periodLabel()}`
+    distributionTitleEl.textContent = `פילוח הוצאות — ${periodLabel()}`
 
     if (breakdown.length === 0) {
-      distributionEl.innerHTML = `<p class="chart-empty">No spending recorded for ${periodLabel()}.</p>`
+      distributionEl.innerHTML = `<p class="chart-empty">לא נרשמו הוצאות ל${periodLabel()}.</p>`
       return
     }
 
@@ -310,7 +315,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     monthlyEl.innerHTML = series
       .map((point) => {
         const height = (point.total / max) * 100
-        const label = formatMonthLabel(point.month).split(' ')[0].slice(0, 3)
+        const label = monthLabelShort(point.month)
         return `
           <div class="column" title="${label}: ${formatCurrency(point.total)}">
             <span class="column__value">${formatCurrency(point.total)}</span>
@@ -323,16 +328,16 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
   }
 
   function renderPersonChart(state: AppState): void {
-    personTitleEl.textContent = `Reut vs. Keren — ${periodLabel()}`
+    personTitleEl.textContent = `רעות מול קרן — ${periodLabel()}`
 
     if (person !== 'all') {
-      personEl.innerHTML = `<p class="chart-empty">Set Person to "Everyone" to compare Reut and Keren.</p>`
+      personEl.innerHTML = `<p class="chart-empty">הגדר/י מי שילם/ה ל"כולם" כדי להשוות בין רעות לקרן.</p>`
       return
     }
 
     const rows = computePersonBreakdown(state.transactions, state.categories, categoryId, resolvedPeriod())
     if (rows.length === 0) {
-      personEl.innerHTML = `<p class="chart-empty">No spending recorded for ${periodLabel()}.</p>`
+      personEl.innerHTML = `<p class="chart-empty">לא נרשמו הוצאות ל${periodLabel()}.</p>`
       return
     }
     const max = Math.max(1, ...rows.flatMap((row) => [row.reut, row.keren]))
@@ -343,10 +348,10 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
       <div class="grouped-bar-row">
         <span class="grouped-bar-row__label">${row.category.icon} ${row.category.name}</span>
         <span class="grouped-bar-row__bars">
-          <span class="mini-bar" title="Reut: ${formatCurrency(row.reut)}">
+          <span class="mini-bar" title="${personLabel('Reut')}: ${formatCurrency(row.reut)}">
             <span class="mini-bar__fill" style="width: ${(row.reut / max) * 100}%; background: var(--person-reut)"></span>
           </span>
-          <span class="mini-bar" title="Keren: ${formatCurrency(row.keren)}">
+          <span class="mini-bar" title="${personLabel('Keren')}: ${formatCurrency(row.keren)}">
             <span class="mini-bar__fill" style="width: ${(row.keren / max) * 100}%; background: var(--person-keren)"></span>
           </span>
         </span>
