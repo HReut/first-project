@@ -24,6 +24,16 @@ export interface SplitBalance {
   amount: number
 }
 
+export interface AnalyticsHighlights {
+  totalAmount: number
+  transactionCount: number
+  avgAmount: number
+  topCategory: { category: Category; amount: number } | null
+  topMerchant: { merchant: string; amount: number; count: number } | null
+  biggestTransaction: Transaction | null
+  deltaVsPreviousPeriod: { amount: number; percent: number | null } | null
+}
+
 function monthKey(date: Date): string {
   return date.toISOString().slice(0, 7)
 }
@@ -66,6 +76,71 @@ export function computeCategoryBreakdown(
     amount,
     share: total === 0 ? 0 : (amount / total) * 100,
   })).sort((a, b) => b.amount - a.amount)
+}
+
+/** The equal-length period immediately preceding `period` — last month for a
+ * {kind:'month'}, the same number of days immediately before `start` for a
+ * {kind:'range'}. Null for {kind:'all'}, since there's no meaningful "before
+ * all time" to compare against. */
+function previousPeriod(period: Filters['period']): Filters['period'] | null {
+  if (period.kind === 'all') return null
+  if (period.kind === 'month') {
+    const [year, month] = period.month.split('-').map(Number)
+    return { kind: 'month', month: new Date(year, month - 2, 1).toISOString().slice(0, 7) }
+  }
+  const start = new Date(period.start)
+  const end = new Date(period.end)
+  const spanDays = Math.round((end.getTime() - start.getTime()) / 86_400_000)
+  const prevEnd = new Date(start)
+  prevEnd.setDate(prevEnd.getDate() - 1)
+  const prevStart = new Date(prevEnd)
+  prevStart.setDate(prevStart.getDate() - spanDays)
+  return { kind: 'range', start: prevStart.toISOString().slice(0, 10), end: prevEnd.toISOString().slice(0, 10) }
+}
+
+/**
+ * Standout facts for the Analytics page's Highlights cards: total spend, top
+ * category/merchant, the single biggest transaction, and the change vs the
+ * equal-length period right before this one — all scoped by the same
+ * category/person/period filters as the charts next to them.
+ */
+export function computeAnalyticsHighlights(
+  transactions: Transaction[],
+  categories: Category[],
+  filters: Pick<Filters, 'categoryId' | 'person'>,
+  period: Filters['period'],
+): AnalyticsHighlights {
+  const scoped = scopeByPersonAndCategory(transactions, filters)
+  const currentTx = scoped.filter((tx) => matchesPeriod(tx.date, period))
+
+  const totalAmount = sum(currentTx)
+  const transactionCount = currentTx.length
+  const avgAmount = transactionCount === 0 ? 0 : totalAmount / transactionCount
+
+  const byCategory = new Map<string, number>()
+  for (const tx of currentTx) byCategory.set(tx.categoryId, (byCategory.get(tx.categoryId) ?? 0) + tx.amount)
+  const topCategoryEntry = Array.from(byCategory).sort((a, b) => b[1] - a[1])[0]
+  const topCategoryMatch = topCategoryEntry && categories.find((c) => c.id === topCategoryEntry[0])
+  const topCategory = topCategoryMatch && topCategoryEntry ? { category: topCategoryMatch, amount: topCategoryEntry[1] } : null
+
+  const byMerchant = new Map<string, { amount: number; count: number }>()
+  for (const tx of currentTx) {
+    const entry = byMerchant.get(tx.merchant) ?? { amount: 0, count: 0 }
+    entry.amount += tx.amount
+    entry.count += 1
+    byMerchant.set(tx.merchant, entry)
+  }
+  const topMerchantEntry = Array.from(byMerchant).sort((a, b) => b[1].amount - a[1].amount)[0]
+  const topMerchant = topMerchantEntry ? { merchant: topMerchantEntry[0], amount: topMerchantEntry[1].amount, count: topMerchantEntry[1].count } : null
+
+  const biggestTransaction = currentTx.length === 0 ? null : currentTx.reduce((max, tx) => (tx.amount > max.amount ? tx : max))
+
+  const prevPeriod = previousPeriod(period)
+  const previousTotal = prevPeriod ? sum(scoped.filter((tx) => matchesPeriod(tx.date, prevPeriod))) : null
+  const deltaVsPreviousPeriod =
+    previousTotal === null ? null : { amount: totalAmount - previousTotal, percent: previousTotal === 0 ? null : ((totalAmount - previousTotal) / previousTotal) * 100 }
+
+  return { totalAmount, transactionCount, avgAmount, topCategory, topMerchant, biggestTransaction, deltaVsPreviousPeriod }
 }
 
 /**
