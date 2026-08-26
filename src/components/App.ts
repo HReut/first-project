@@ -51,17 +51,17 @@ interface NavEntry {
 }
 
 const PRIMARY_VIEWS: NavEntry[] = [
-  { id: 'overview', label: 'Overview', shortLabel: 'Overview', icon: homeIconMarkup },
-  { id: 'transactions', label: 'Transactions', shortLabel: 'Transactions', icon: listIconMarkup },
-  { id: 'budgets', label: 'Budgets', shortLabel: 'Budgets', icon: targetIconMarkup },
-  { id: 'savings', label: 'Savings', shortLabel: 'Savings', icon: coinsIconMarkup },
-  { id: 'analytics', label: 'Analytics', shortLabel: 'Analytics', icon: chartIconMarkup },
+  { id: 'overview', label: 'סקירה כללית', shortLabel: 'סקירה', icon: homeIconMarkup },
+  { id: 'transactions', label: 'תנועות', shortLabel: 'תנועות', icon: listIconMarkup },
+  { id: 'budgets', label: 'תקציבים', shortLabel: 'תקציבים', icon: targetIconMarkup },
+  { id: 'savings', label: 'חיסכון', shortLabel: 'חיסכון', icon: coinsIconMarkup },
+  { id: 'analytics', label: 'אנליטיקה', shortLabel: 'אנליטיקה', icon: chartIconMarkup },
 ]
 
 const MANAGEMENT_VIEWS: NavEntry[] = [
-  { id: 'history', label: 'History', shortLabel: 'History', icon: historyIconMarkup },
-  { id: 'settings', label: 'Settings & Automations', shortLabel: 'Settings', icon: gearIconMarkup },
-  { id: 'help', label: 'Help Center', shortLabel: 'Help', icon: helpIconMarkup },
+  { id: 'history', label: 'היסטוריה', shortLabel: 'היסטוריה', icon: historyIconMarkup },
+  { id: 'settings', label: 'הגדרות ואוטומציות', shortLabel: 'הגדרות', icon: gearIconMarkup },
+  { id: 'help', label: 'מרכז עזרה', shortLabel: 'עזרה', icon: helpIconMarkup },
 ]
 
 const ALL_VIEWS = [...PRIMARY_VIEWS, ...MANAGEMENT_VIEWS]
@@ -104,12 +104,12 @@ function computeNotifications(state: AppState): NotificationItem[] {
 
   const pendingCount = state.transactions.filter((tx) => tx.status === 'pending').length
   if (pendingCount > 0) {
-    items.push({ text: `${pendingCount} transaction${pendingCount === 1 ? '' : 's'} need${pendingCount === 1 ? 's' : ''} review`, view: 'transactions' })
+    items.push({ text: `${pendingCount} תנועות ממתינות לבדיקה`, view: 'transactions' })
   }
 
   for (const { category, spent, limit } of topBudgetedCategories(state.transactions, state.categories, state.budgetLimitOverrides)) {
     if (budgetStatus(spent, limit) === 'critical') {
-      items.push({ text: `${category.icon} ${category.name} is over budget (${formatCurrency(spent)} of ${formatCurrency(limit ?? 0)})`, view: 'budgets' })
+      items.push({ text: `${category.icon} ${category.name} חרגה מהתקציב (${formatCurrency(spent)} מתוך ${formatCurrency(limit ?? 0)})`, view: 'budgets' })
     }
   }
 
@@ -168,7 +168,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         return generateDueRecurringTransactions()
       })
       .catch((err: unknown) => {
-        store.setState({ status: 'error', error: err instanceof Error ? err.message : 'Failed to load your household data.' })
+        store.setState({ status: 'error', error: err instanceof Error ? err.message : 'טעינת נתוני משק הבית נכשלה.' })
       })
   }
 
@@ -197,10 +197,10 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   root.innerHTML = `
     <div class="app-shell">
       <aside class="sidebar${isSidebarCollapsed() ? ' sidebar--collapsed' : ''}">
-        <button type="button" class="sidebar-edge-toggle" id="sidebar-edge-toggle" aria-label="${isSidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'}">
-          <span aria-hidden="true">${isSidebarCollapsed() ? '›' : '‹'}</span>
+        <button type="button" class="sidebar-edge-toggle" id="sidebar-edge-toggle" aria-label="${isSidebarCollapsed() ? 'הרחבת סרגל הצד' : 'כיווץ סרגל הצד'}">
+          <span aria-hidden="true">${isSidebarCollapsed() ? '‹' : '›'}</span>
         </button>
-        <div class="sidebar__brand js-logo-home" role="button" tabindex="0" aria-label="Go to Overview">
+        <div class="sidebar__brand js-logo-home" role="button" tabindex="0" aria-label="מעבר לסקירה הכללית">
           <span class="sidebar__mark" aria-hidden="true">${catLogoMarkup()}</span>
           <div class="sidebar__wordmark">
             <span class="sidebar__name">Opa!</span>
@@ -208,21 +208,21 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           </div>
         </div>
         <div class="sidebar__actions">
-          <button type="button" class="btn btn--primary btn--block" id="new-transaction-btn">${plusIconMarkup()}<span>New Transaction</span></button>
-          <button type="button" class="btn btn--block" id="import-btn" title="CSV and Excel (.xlsx) supported — PDF is not">${uploadIconMarkup()}<span>Import CSV/XLSX</span></button>
+          <button type="button" class="btn btn--primary btn--block" id="new-transaction-btn">${plusIconMarkup()}<span>תנועה חדשה</span></button>
+          <button type="button" class="btn btn--block" id="import-btn" title="נתמכים קובצי CSV ואקסל (.xlsx) — PDF אינו נתמך">${uploadIconMarkup()}<span>ייבוא CSV/XLSX</span></button>
         </div>
-        <nav class="sidebar__nav" aria-label="Primary">
+        <nav class="sidebar__nav" aria-label="ניווט ראשי">
           ${PRIMARY_VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}
         </nav>
-        <p class="sidebar__section-label">Management</p>
-        <nav class="sidebar__nav" aria-label="Management">
+        <p class="sidebar__section-label">ניהול</p>
+        <nav class="sidebar__nav" aria-label="ניהול">
           ${MANAGEMENT_VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}
         </nav>
         <div class="sidebar__footer">
           ${
             userEmail
               ? `<span class="sidebar__email">${userEmail}</span>
-                 <button type="button" class="btn btn--sm js-sign-out">Sign out</button>`
+                 <button type="button" class="btn btn--sm js-sign-out">התנתקות</button>`
               : ''
           }
         </div>
@@ -230,21 +230,21 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       <div class="main-col">
         <header class="topbar">
           <div class="topbar__inner">
-            <div class="topbar__brand js-logo-home" role="button" tabindex="0" aria-label="Go to Overview">
+            <div class="topbar__brand js-logo-home" role="button" tabindex="0" aria-label="מעבר לסקירה הכללית">
               <span class="topbar__mark" aria-hidden="true">${catLogoMarkup()}</span>
               <div class="topbar__wordmark">
                 <span class="topbar__name">Opa! Tulik</span>
-                <span class="topbar__subtitle">Smart Household Finance</span>
+                <span class="topbar__subtitle">ניהול פיננסי חכם למשק הבית</span>
               </div>
             </div>
             <div class="topbar__account">
-              <button type="button" class="theme-toggle js-theme-toggle" aria-label="Switch color theme">
+              <button type="button" class="theme-toggle js-theme-toggle" aria-label="החלפת ערכת נושא">
                 <span class="theme-toggle__icon" aria-hidden="true">${themeToggleIcon()}</span>
               </button>
               ${
                 userEmail
                   ? `<span class="topbar__email">${userEmail}</span>
-                     <button type="button" class="btn btn--sm js-sign-out">Sign out</button>`
+                     <button type="button" class="btn btn--sm js-sign-out">התנתקות</button>`
                   : ''
               }
             </div>
@@ -253,18 +253,18 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         <header class="app-topbar">
           <label class="app-topbar__search">
             <span aria-hidden="true">${searchIconMarkup()}</span>
-            <input type="search" id="global-search" placeholder="Search transactions, tags, or accounts…" aria-label="Search transactions, tags, or accounts">
+            <input type="search" id="global-search" placeholder="חיפוש תנועות, תגיות או חשבונות…" aria-label="חיפוש תנועות, תגיות או חשבונות">
           </label>
           <div class="app-topbar__meta">
-            <span class="app-topbar__synced">Last synced: <span id="last-synced-label">just now</span></span>
-            <button type="button" class="icon-btn" id="refresh-btn" aria-label="Refresh data">${refreshIconMarkup()}</button>
+            <span class="app-topbar__synced">עודכן לאחרונה: <span id="last-synced-label">הרגע</span></span>
+            <button type="button" class="icon-btn" id="refresh-btn" aria-label="רענון נתונים">${refreshIconMarkup()}</button>
             <div class="notif-wrap">
-              <button type="button" class="icon-btn" id="notif-btn" aria-label="Notifications">
+              <button type="button" class="icon-btn" id="notif-btn" aria-label="התראות">
                 ${bellIconMarkup()}
                 <span class="notif-badge" id="notif-badge" hidden></span>
               </button>
               <div class="notif-panel" id="notif-panel" hidden>
-                <p class="notif-panel__header">Notifications</p>
+                <p class="notif-panel__header">התראות</p>
                 <div class="notif-panel__list" id="notif-list"></div>
               </div>
             </div>
@@ -272,7 +272,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           </div>
         </header>
         <main id="main">
-          <p class="view-loading" id="view-loading">Loading your household data…</p>
+          <p class="view-loading" id="view-loading">טוען את נתוני משק הבית…</p>
           <p class="view-error" id="view-error" hidden></p>
           <section id="view-overview" hidden></section>
           <section id="view-transactions" hidden></section>
@@ -285,7 +285,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         </main>
       </div>
     </div>
-    <nav class="bottom-nav" aria-label="Primary (mobile)">
+    <nav class="bottom-nav" aria-label="ניווט ראשי (נייד)">
       ${PRIMARY_VIEWS.map((v) => `<button type="button" class="bottom-nav__link" data-view="${v.id}">${v.icon()}<span>${v.shortLabel}</span></button>`).join('')}
     </nav>
   `
@@ -324,7 +324,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
    * away. Scoped to Settings only; other pages navigate immediately. */
   function navigate(view: View): void {
     if (store.getState().view === 'settings' && view !== 'settings' && settingsHasUnsavedChanges?.()) {
-      confirmDialog('You have unsaved text on Settings that hasn’t been added yet. Leave anyway?', 'Leave').then((confirmed) => {
+      confirmDialog('יש לך שינויים בהגדרות שעדיין לא נשמרו. לצאת בכל זאת?', 'צא').then((confirmed) => {
         if (confirmed) goToView(view)
       })
       return
@@ -342,8 +342,8 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   edgeToggleBtn.addEventListener('click', () => {
     const collapsed = !sidebarEl.classList.contains('sidebar--collapsed')
     sidebarEl.classList.toggle('sidebar--collapsed', collapsed)
-    edgeToggleBtn.querySelector('span')!.textContent = collapsed ? '›' : '‹'
-    edgeToggleBtn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar')
+    edgeToggleBtn.querySelector('span')!.textContent = collapsed ? '‹' : '›'
+    edgeToggleBtn.setAttribute('aria-label', collapsed ? 'הרחבת סרגל הצד' : 'כיווץ סרגל הצד')
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
   })
 
@@ -401,7 +401,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     refreshBtn.disabled = true
     loadHouseholdData().finally(() => {
       refreshBtn.disabled = false
-      lastSyncedLabel.textContent = 'just now'
+      lastSyncedLabel.textContent = 'הרגע'
     })
   })
 
@@ -419,7 +419,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     notifBadge.textContent = String(items.length)
     notifList.innerHTML =
       items.length === 0
-        ? `<p class="notif-panel__empty">You're all caught up.</p>`
+        ? `<p class="notif-panel__empty">הכל מעודכן.</p>`
         : items.map((item, index) => `<button type="button" class="notif-item" data-notif-index="${index}">${item.text}</button>`).join('')
     notifList.dataset.views = JSON.stringify(items.map((item) => item.view))
   }
@@ -442,7 +442,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   store.subscribe((state) => {
     loadingEl.hidden = state.status !== 'loading'
     errorEl.hidden = state.status !== 'error'
-    if (state.status === 'error') errorEl.textContent = state.error ?? 'Something went wrong loading your data.'
+    if (state.status === 'error') errorEl.textContent = state.error ?? 'משהו השתבש בטעינת הנתונים.'
 
     if (state.status === 'ready' && !mounted) {
       mounted = true
@@ -454,9 +454,9 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       mountHistoryView(viewEls.history, store)
       mountSavingsView(viewEls.savings, store, currentPerson)
       mountPlaceholderView(viewEls.help, {
-        eyebrow: 'Management',
-        title: 'Help Center',
-        subtitle: 'Guides and answers for getting the most out of Opa! Tulik.',
+        eyebrow: 'ניהול',
+        title: 'מרכז עזרה',
+        subtitle: 'מדריכים ותשובות שיעזרו לך להפיק את המרב מ-Opa! Tulik.',
         icon: '💬',
       })
     }

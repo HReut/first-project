@@ -1,5 +1,17 @@
+import type { Person } from '../types.ts'
+
 const CURRENCY = 'ILS'
-const LOCALE = 'en-IL'
+const LOCALE = 'he-IL'
+
+const PERSON_LABEL: Record<Person, string> = { Reut: 'רעות', Keren: 'קרן' }
+
+/** Hebrew display name for a Person — the underlying 'Reut'/'Keren' values
+ * stay in English everywhere else (DB rows, CSS var names, dataset
+ * attributes) since changing them would mean a data migration. This is the
+ * one place that translates them for what a user actually reads. */
+export function personLabel(person: Person): string {
+  return PERSON_LABEL[person]
+}
 
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat(LOCALE, {

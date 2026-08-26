@@ -25,13 +25,13 @@ function renderAuthScreen(root: HTMLElement, opts: { title: string; message: str
   btn.addEventListener('click', () => {
     btn.disabled = true
     btn.classList.add('is-loading')
-    label.textContent = 'Signing in…'
+    label.textContent = 'מתחבר…'
     errorEl.hidden = true
     signInWithGoogle().catch(() => {
       btn.disabled = false
       btn.classList.remove('is-loading')
       label.textContent = opts.actionLabel
-      errorEl.textContent = "Couldn't sign in — please try again."
+      errorEl.textContent = 'ההתחברות נכשלה — נסה/י שוב.'
       errorEl.hidden = false
     })
   })
@@ -47,22 +47,22 @@ export function mountAuthGate(root: HTMLElement): void {
 
   function render(): void {
     if (state.kind === 'checking') {
-      root.innerHTML = `<p class="view-loading">Checking your session…</p>`
+      root.innerHTML = `<p class="view-loading">בודק את החיבור שלך…</p>`
       return
     }
     if (state.kind === 'signed-out') {
       renderAuthScreen(root, {
         title: 'Opa! Tulik',
-        message: 'Sign in with your household Google account to see your finances.',
-        actionLabel: 'Sign in with Google',
+        message: 'התחבר/י עם חשבון הגוגל של משק הבית כדי לראות את הכספים שלך.',
+        actionLabel: 'התחברות עם Google',
       })
       return
     }
     if (state.kind === 'denied') {
       renderAuthScreen(root, {
-        title: 'Access denied',
-        message: "This Google account isn't authorized for Opa! Tulik. Try a different account.",
-        actionLabel: 'Try a different account',
+        title: 'הגישה נדחתה',
+        message: 'חשבון הגוגל הזה אינו מורשה עבור Opa! Tulik. נסה/י חשבון אחר.',
+        actionLabel: 'נסה/י חשבון אחר',
         danger: true,
       })
       return
