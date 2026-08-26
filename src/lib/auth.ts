@@ -24,7 +24,14 @@ export async function signInWithGoogle(): Promise<void> {
   if (!supabase) throw new Error('Supabase is not configured.')
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin },
+    options: {
+      redirectTo: window.location.origin,
+      // Forces Google's account-picker screen every time, even if the
+      // browser already has a signed-in Google session — otherwise Google
+      // can silently reuse that session with no visible sign-in step,
+      // which reads as "did this even check who I am?" even though it did.
+      queryParams: { prompt: 'select_account' },
+    },
   })
   if (error) throw error
 }
