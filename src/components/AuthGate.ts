@@ -76,14 +76,21 @@ export function mountAuthGate(root: HTMLElement): void {
         awaitingSignOutEcho = false
         return
       }
+      if (state.kind === 'signed-out') return
       state = { kind: 'signed-out' }
     } else if (!isEmailAllowed(email)) {
+      if (state.kind === 'denied') return
       state = { kind: 'denied' }
       awaitingSignOutEcho = true
       signOut().catch(() => {
         awaitingSignOutEcho = false
       })
     } else {
+      // Supabase re-fires this on routine token refreshes — e.g. switching
+      // back to this browser tab — not just on an actual new sign-in. Skip
+      // re-rendering (which would remount the whole app and blow away any
+      // unsaved form input) when it's the same person already signed in.
+      if (state.kind === 'authenticated' && state.email === email) return
       state = { kind: 'authenticated', email }
     }
     render()
