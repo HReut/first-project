@@ -6,6 +6,7 @@ import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSe
 import { setAccountBalance } from '../../data/accountBalanceRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { showToast } from '../shared/Toast.ts'
+import { personLabel } from '../../utils/format.ts'
 import { confirmDialog } from '../shared/confirmDialog.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { effectiveTheme } from '../../lib/theme.ts'
@@ -36,20 +37,20 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
   root.innerHTML = `
     <section class="band band--hero">
       <div class="band__inner">
-        <p class="eyebrow">Household finance</p>
-        <h1>Settings &amp; Automations.</h1>
-        <p class="hero__subtitle">Manage categories and how invoices get auto-captured.</p>
+        <p class="eyebrow">כספי משק הבית</p>
+        <h1>הגדרות ואוטומציות.</h1>
+        <p class="hero__subtitle">ניהול קטגוריות ואופן לכידת החשבוניות האוטומטית.</p>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="Appearance">
-          <h2 class="settings-card__title">Appearance</h2>
-          <p class="settings-card__desc">Switch between light and dark mode. This applies everywhere in the app, on this device.</p>
-          <button type="button" class="theme-toggle js-theme-toggle" aria-label="Switch color theme">
+        <section class="settings-card" aria-label="מראה">
+          <h2 class="settings-card__title">מראה</h2>
+          <p class="settings-card__desc">מעבר בין מצב בהיר וכהה. זה חל על כל האפליקציה, במכשיר הזה.</p>
+          <button type="button" class="theme-toggle js-theme-toggle" aria-label="החלפת ערכת נושא">
             <span class="theme-toggle__icon" aria-hidden="true">${themeToggleIcon()}</span>
-            <span>Theme</span>
+            <span>ערכת נושא</span>
           </button>
         </section>
       </div>
@@ -57,16 +58,16 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="Shared account balance">
-          <h2 class="settings-card__title">Shared account balance</h2>
+        <section class="settings-card" aria-label="יתרת חשבון משותף">
+          <h2 class="settings-card__title">יתרת חשבון משותף</h2>
           <p class="settings-card__desc">
-            "Total Available" (Overview and Transactions) is this balance minus 'Shared' account spending
-            logged since the date below. Update it any time you check the real bank balance — each save
-            resets the starting point to today.
+            "סה"כ זמין" (בסקירה כללית ובתנועות) הוא היתרה הזו פחות הוצאות מהחשבון ה'משותף'
+            שנרשמו מהתאריך שלמטה. עדכן/י בכל פעם שאת/ה בודק/ת את היתרה בבנק בפועל — כל שמירה
+            מאפסת את נקודת ההתחלה להיום.
           </p>
           <div class="settings-list__row" id="account-balance-row">
-            <input type="number" class="budget-input" id="account-balance-input" placeholder="Current balance" min="0" step="1">
-            <button type="button" class="btn btn--primary btn--sm" id="account-balance-save">Save balance</button>
+            <input type="number" class="budget-input" id="account-balance-input" placeholder="יתרה נוכחית" min="0" step="1">
+            <button type="button" class="btn btn--primary btn--sm" id="account-balance-save">שמירת יתרה</button>
             <span class="settings-list__usage" id="account-balance-status"></span>
           </div>
         </section>
@@ -75,9 +76,9 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="Category manager">
-          <h2 class="settings-card__title">Categories</h2>
-          <p class="settings-card__desc">Colors and icons personalize badges, tiles, and charts across the app.</p>
+        <section class="settings-card" aria-label="ניהול קטגוריות">
+          <h2 class="settings-card__title">קטגוריות</h2>
+          <p class="settings-card__desc">צבעים ואייקונים מתאימים אישית תגים, אריחים וגרפים בכל האפליקציה.</p>
           <div class="settings-list" id="category-manager"></div>
         </section>
       </div>
@@ -85,12 +86,12 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="Connected email accounts">
-          <h2 class="settings-card__title">Email accounts <span class="soon-badge">Soon</span></h2>
+        <section class="settings-card" aria-label="חשבונות אימייל מחוברים">
+          <h2 class="settings-card__title">חשבונות אימייל <span class="soon-badge">בקרוב</span></h2>
           <p class="settings-card__desc">
-            The email address to watch for each person, and whether auto-capture is
-            switched on for it. This only gates a future email-parsing integration —
-            it doesn't connect to an inbox yet, so nothing here does anything until it does.
+            כתובת האימייל שיש לעקוב אחריה עבור כל אחד/ת, והאם הלכידה האוטומטית
+            פעילה עבורה. זה רק מכין תשתית לאינטגרציית פענוח אימייל עתידית —
+            עדיין אין חיבור לתיבת דואר, אז שום דבר כאן לא עושה כלום עד שיהיה.
           </p>
           <div class="settings-list" id="email-accounts"></div>
         </section>
@@ -99,12 +100,12 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="Email auto-sync rules">
-          <h2 class="settings-card__title">Auto-capture rules <span class="soon-badge">Soon</span></h2>
+        <section class="settings-card" aria-label="כללי סנכרון אימייל אוטומטי">
+          <h2 class="settings-card__title">כללי לכידה אוטומטית <span class="soon-badge">בקרוב</span></h2>
           <p class="settings-card__desc">
-            When an invoice from a matching sender/keyword arrives, it's pre-filled with these defaults and
-            dropped into the Review Center — once email auto-capture (above) is actually connected. For now
-            these rules are saved but nothing triggers them.
+            כשמגיעה חשבונית משולח/מילת מפתח תואמים, היא תתמלא מראש בברירות המחדל האלה ותיכנס
+            למרכז הבדיקה — ברגע שלכידת אימייל אוטומטית (למעלה) תהיה מחוברת בפועל. כרגע
+            הכללים נשמרים אך שום דבר לא מפעיל אותם.
           </p>
           <div class="settings-list" id="rule-builder"></div>
         </section>
@@ -126,25 +127,25 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     if (document.activeElement !== accountBalanceInput) {
       accountBalanceInput.value = balance ? String(balance.startingBalance) : ''
     }
-    accountBalanceStatusEl.textContent = balance ? `As of ${formatDateShort(balance.setAt)} — currently ${formatCurrency(balance.startingBalance)}` : 'Not set yet'
+    accountBalanceStatusEl.textContent = balance ? `נכון ל-${formatDateShort(balance.setAt)} — כרגע ${formatCurrency(balance.startingBalance)}` : 'עדיין לא הוגדר'
   }
 
   root.querySelector<HTMLButtonElement>('#account-balance-save')!.addEventListener('click', () => {
     const raw = accountBalanceInput.value.trim()
     const startingBalance = Number(raw)
     if (!raw || !Number.isFinite(startingBalance) || startingBalance < 0) {
-      showToast('Enter a valid balance first.')
+      showToast('הזן/י יתרה תקינה תחילה.')
       return
     }
     const today = new Date().toISOString().slice(0, 10)
     setAccountBalance({ startingBalance, setAt: today })
       .then((accountBalance) => {
         store.setState({ accountBalance })
-        showToast('Balance saved.', [], 2500)
+        showToast('היתרה נשמרה.', [], 2500)
         logActivity({
           entityType: 'account_balance',
           action: 'changed',
-          summary: `Set shared account balance to ${formatCurrency(startingBalance)}`,
+          summary: `יתרת החשבון המשותף הוגדרה ל${formatCurrency(startingBalance)}`,
           beforeData: null,
           performedBy: currentPerson,
         })
@@ -155,7 +156,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
           .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
       })
       .catch(() => {
-        showToast('Could not save — has migration 0007 been run?')
+        showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0007?')
       })
   })
 
@@ -171,11 +172,11 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
           const usage = usageCount.get(category.id) ?? 0
           return `
           <div class="settings-list__row" data-id="${category.id}">
-            <input type="color" class="color-input" value="${category.colorCode}" data-field="colorCode" title="Color">
-            <input type="text" class="icon-input" value="${category.icon}" data-field="icon" maxlength="4" title="Icon">
-            <input type="text" class="name-input" value="${category.name}" data-field="name" title="Name">
-            <span class="settings-list__usage">${usage} transaction${usage === 1 ? '' : 's'}</span>
-            <button type="button" class="btn btn--sm btn--danger" data-delete-category="${category.id}" ${usage > 0 ? 'disabled title="Reassign its transactions first"' : ''}>Delete</button>
+            <input type="color" class="color-input" value="${category.colorCode}" data-field="colorCode" title="צבע">
+            <input type="text" class="icon-input" value="${category.icon}" data-field="icon" maxlength="4" title="אייקון">
+            <input type="text" class="name-input" value="${category.name}" data-field="name" title="שם">
+            <span class="settings-list__usage">${usage} תנועות</span>
+            <button type="button" class="btn btn--sm btn--danger" data-delete-category="${category.id}" ${usage > 0 ? 'disabled title="יש לשייך את התנועות שלה קודם"' : ''}>מחיקה</button>
           </div>
         `
         })
@@ -183,8 +184,8 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       <div class="settings-list__row settings-list__row--add">
         <input type="color" class="color-input" id="new-category-color" value="#2a78d6">
         <input type="text" class="icon-input" id="new-category-icon" placeholder="🏷️" maxlength="4">
-        <input type="text" class="name-input" id="new-category-name" placeholder="New category name">
-        <button type="button" class="btn btn--primary btn--sm" id="add-category-btn">+ Add</button>
+        <input type="text" class="name-input" id="new-category-name" placeholder="שם קטגוריה חדשה">
+        <button type="button" class="btn btn--primary btn--sm" id="add-category-btn">+ הוספה</button>
       </div>
     `
   }
@@ -216,9 +217,9 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       .then((updated) => {
         const { categories } = store.getState()
         store.setState({ categories: categories.map((c) => (c.id === updated.id ? updated : c)) })
-        logCategory('updated', `Updated category ${updated.name} (${field})`)
+        logCategory('updated', `קטגוריה עודכנה: ${updated.name} (${field})`)
       })
-      .catch(() => showToast('Could not save that category change — try again.'))
+      .catch(() => showToast('לא ניתן היה לשמור את שינוי הקטגוריה — נסה/י שוב.'))
       .finally(() => categorySavesInFlight--)
   })
 
@@ -231,7 +232,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       if (!category) return
       const overrides = state.budgetLimitOverrides.filter((o) => o.categoryId === id)
 
-      confirmDialog(`Delete the "${category.name}" category? You can undo this from History.`, 'Delete').then((confirmed) => {
+      confirmDialog(`למחוק את הקטגוריה "${category.name}"? ניתן לבטל זאת מההיסטוריה.`, 'מחיקה').then((confirmed) => {
         if (!confirmed) return
         deleteCategory(id).then(() => {
           const { categories, budgetLimitOverrides } = store.getState()
@@ -240,7 +241,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
             budgetLimitOverrides: budgetLimitOverrides.filter((o) => o.categoryId !== id),
           })
           const before: CategoryDeletedBefore = { category, overrides }
-          logCategory('deleted', `Deleted category ${category.name}`, before)
+          logCategory('deleted', `קטגוריה נמחקה: ${category.name}`, before)
         })
       })
       return
@@ -260,7 +261,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       }).then((created) => {
         const { categories } = store.getState()
         store.setState({ categories: [...categories, created] })
-        logCategory('created', `Added category ${created.name}`)
+        logCategory('created', `קטגוריה נוספה: ${created.name}`)
       })
     }
   })
@@ -272,12 +273,12 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       const setting = accountSettings[person]
       return `
         <div class="settings-list__row" data-person="${person}">
-          <span class="settings-list__person">${person}</span>
+          <span class="settings-list__person">${personLabel(person)}</span>
           <input type="email" class="name-input" placeholder="${person.toLowerCase()}@example.com" value="${setting.email}" data-account-field="email">
           <label class="toggle">
             <input type="checkbox" data-account-field="autoCaptureEnabled" ${setting.autoCaptureEnabled ? 'checked' : ''}>
             <span class="toggle__track"><span class="toggle__thumb"></span></span>
-            <span class="toggle__label">Auto-capture</span>
+            <span class="toggle__label">לכידה אוטומטית</span>
           </label>
         </div>
       `
@@ -305,7 +306,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       PEOPLE.map((p) => accountSettings[p].email)
         .filter((email) => email)
         .map((email) => `<option value="${email}" ${email === selected ? 'selected' : ''}>${email}</option>`)
-        .join('') || `<option value="">No accounts configured yet</option>`
+        .join('') || `<option value="">עדיין לא הוגדרו חשבונות</option>`
 
     ruleBuilderEl.innerHTML = `
       ${state.emailRules
@@ -313,27 +314,27 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
           (rule) => `
         <div class="settings-list__row" data-id="${rule.id}">
           <select class="filter-select" data-rule-field="targetEmail">${emailOptions(rule.targetEmail)}</select>
-          <input type="text" class="name-input" value="${rule.merchantKeyword}" placeholder="Merchant keyword" data-rule-field="merchantKeyword">
+          <input type="text" class="name-input" value="${rule.merchantKeyword}" placeholder="מילת מפתח לבית עסק" data-rule-field="merchantKeyword">
           <select class="filter-select" data-rule-field="defaultCategoryId">${categoryOptions(rule.defaultCategoryId)}</select>
           <select class="filter-select" data-rule-field="defaultPerson">
-            ${PEOPLE.map((p) => `<option value="${p}" ${p === rule.defaultPerson ? 'selected' : ''}>${p}</option>`).join('')}
+            ${PEOPLE.map((p) => `<option value="${p}" ${p === rule.defaultPerson ? 'selected' : ''}>${personLabel(p)}</option>`).join('')}
           </select>
           <label class="toggle">
             <input type="checkbox" data-rule-field="isActive" ${rule.isActive ? 'checked' : ''}>
             <span class="toggle__track"><span class="toggle__thumb"></span></span>
-            <span class="toggle__label">Active</span>
+            <span class="toggle__label">פעיל</span>
           </label>
-          <button type="button" class="btn btn--sm btn--danger" data-delete-rule="${rule.id}">Delete</button>
+          <button type="button" class="btn btn--sm btn--danger" data-delete-rule="${rule.id}">מחיקה</button>
         </div>
       `,
         )
         .join('')}
       <div class="settings-list__row settings-list__row--add">
         <select class="filter-select" id="new-rule-email">${emailOptions('')}</select>
-        <input type="text" class="name-input" id="new-rule-keyword" placeholder="Merchant keyword">
+        <input type="text" class="name-input" id="new-rule-keyword" placeholder="מילת מפתח לבית עסק">
         <select class="filter-select" id="new-rule-category">${categoryOptions('')}</select>
-        <select class="filter-select" id="new-rule-person">${PEOPLE.map((p) => `<option value="${p}">${p}</option>`).join('')}</select>
-        <button type="button" class="btn btn--primary btn--sm" id="add-rule-btn">+ Add rule</button>
+        <select class="filter-select" id="new-rule-person">${PEOPLE.map((p) => `<option value="${p}">${personLabel(p)}</option>`).join('')}</select>
+        <button type="button" class="btn btn--primary btn--sm" id="add-rule-btn">+ הוספת כלל</button>
       </div>
     `
   }
@@ -356,7 +357,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-rule]')
     if (deleteBtn) {
       const id = deleteBtn.dataset.deleteRule!
-      confirmDialog('Delete this auto-capture rule?', 'Delete').then((confirmed) => {
+      confirmDialog('למחוק את כלל הלכידה האוטומטית הזה?', 'מחיקה').then((confirmed) => {
         if (!confirmed) return
         deleteEmailRule(id).then(() => {
           const { emailRules } = store.getState()
