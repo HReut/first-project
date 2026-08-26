@@ -23,6 +23,10 @@ function themeToggleIcon(): string {
 
 export function mountSettingsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): () => boolean {
   let accountSettings = loadEmailAccountSettings()
+  // True while an existing category's color/icon/name has been typed/picked
+  // but not yet committed (blurred) — so a nav click mid-edit still warns,
+  // same as the "add new" rows below.
+  let categoryFieldsDirty = false
 
   root.innerHTML = `
     <section class="band band--hero">
@@ -191,12 +195,17 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
   }
 
+  categoryManagerEl.addEventListener('input', (event) => {
+    if ((event.target as HTMLElement).closest<HTMLInputElement>('[data-field]')) categoryFieldsDirty = true
+  })
+
   categoryManagerEl.addEventListener('change', (event) => {
     const input = (event.target as HTMLElement).closest<HTMLInputElement>('[data-field]')
     if (!input) return
     const row = input.closest<HTMLElement>('.settings-list__row')!
     const id = row.dataset.id!
     const field = input.dataset.field!
+    categoryFieldsDirty = false
     updateCategory(id, { [field]: input.value }).then((updated) => {
       const { categories } = store.getState()
       store.setState({ categories: categories.map((c) => (c.id === updated.id ? updated : c)) })
@@ -379,16 +388,17 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
   renderEmailAccounts()
   renderRuleBuilder(store.getState())
 
-  /** Typed-but-not-yet-submitted text — the "add new" rows only save on an
-   * explicit button click (unlike existing-row edits, which auto-save on
-   * blur, so they're already safe by the time a nav click fires). Checked
-   * by App.ts before letting a sidebar/logo click navigate away. */
+  /** Typed-but-not-yet-committed edits: the "add new" rows only save on an
+   * explicit button click, and existing category fields only save on blur —
+   * both leave a window where a nav click would otherwise discard input
+   * silently. Checked by App.ts before letting a sidebar/logo click navigate
+   * away. */
   return function hasUnsavedChanges(): boolean {
     const newCategoryName = root.querySelector<HTMLInputElement>('#new-category-name')?.value.trim()
     const newRuleKeyword = root.querySelector<HTMLInputElement>('#new-rule-keyword')?.value.trim()
     const balanceInput = root.querySelector<HTMLInputElement>('#account-balance-input')
     const savedBalance = store.getState().accountBalance
     const balanceChanged = !!balanceInput && balanceInput.value.trim() !== (savedBalance ? String(savedBalance.startingBalance) : '')
-    return !!newCategoryName || !!newRuleKeyword || balanceChanged
+    return !!newCategoryName || !!newRuleKeyword || balanceChanged || categoryFieldsDirty
   }
 }
