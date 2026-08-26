@@ -251,6 +251,16 @@ p {
   padding: 8px 10px 22px;
 }
 
+.js-logo-home {
+  cursor: pointer;
+  border-radius: 10px;
+  transition: opacity 0.15s;
+}
+
+.js-logo-home:hover {
+  opacity: 0.8;
+}
+
 .sidebar__wordmark {
   display: flex;
   flex-direction: column;

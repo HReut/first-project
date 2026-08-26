@@ -199,7 +199,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         <button type="button" class="sidebar-edge-toggle" id="sidebar-edge-toggle" aria-label="${isSidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'}">
           <span aria-hidden="true">${isSidebarCollapsed() ? '›' : '‹'}</span>
         </button>
-        <div class="sidebar__brand">
+        <div class="sidebar__brand js-logo-home" role="button" tabindex="0" aria-label="Go to Overview">
           <span class="sidebar__mark" aria-hidden="true">${catLogoMarkup()}</span>
           <div class="sidebar__wordmark">
             <span class="sidebar__name">Opa!</span>
@@ -229,7 +229,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       <div class="main-col">
         <header class="topbar">
           <div class="topbar__inner">
-            <div class="topbar__brand">
+            <div class="topbar__brand js-logo-home" role="button" tabindex="0" aria-label="Go to Overview">
               <span class="topbar__mark" aria-hidden="true">${catLogoMarkup()}</span>
               <div class="topbar__wordmark">
                 <span class="topbar__name">Opa! Tulik</span>
@@ -340,6 +340,17 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     root.querySelectorAll<HTMLElement>('.theme-toggle__icon').forEach((el) => {
       el.innerHTML = icon
     })
+  })
+
+  root.addEventListener('click', (event) => {
+    if (!(event.target as HTMLElement).closest('.js-logo-home')) return
+    navigate('overview')
+  })
+  root.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    if (!(event.target as HTMLElement).closest('.js-logo-home')) return
+    event.preventDefault()
+    navigate('overview')
   })
 
   root.querySelectorAll<HTMLButtonElement>('.js-sign-out').forEach((btn) => {
