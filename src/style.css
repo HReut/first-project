@@ -2079,8 +2079,8 @@ p {
   -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b6375' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 14px center;
-  padding: 9px 32px 9px 16px;
+  background-position: left 14px center;
+  padding: 9px 16px 9px 32px;
   border-radius: 999px;
 }
 
@@ -2105,7 +2105,7 @@ p {
 .filter-select--sm {
   width: auto;
   font-size: 12px;
-  padding: 6px 26px 6px 10px;
+  padding: 6px 10px 6px 26px;
 }
 
 .filter-select:focus-visible,

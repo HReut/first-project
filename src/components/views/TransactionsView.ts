@@ -861,18 +861,18 @@ export class TransactionsView {
             <input type="date" class="filter-input" name="date" value="${existing?.date ?? today}" required>
           </label>
           <label class="filter-group">
+            <span class="filter-group__label">קטגוריה</span>
+            <select class="filter-select" name="categoryId" required>
+              ${categories.map((c) => `<option value="${c.id}" ${c.id === existing?.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
+            </select>
+          </label>
+          <label class="filter-group">
             <span class="filter-group__label">בית עסק (לא חובה)</span>
             <input type="text" class="filter-input" name="merchant" placeholder="לדוגמה: שופרסל" value="${existing?.merchant ?? ''}">
           </label>
           <label class="filter-group">
             <span class="filter-group__label">סכום</span>
             <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing?.amount ?? ''}" required>
-          </label>
-          <label class="filter-group">
-            <span class="filter-group__label">קטגוריה</span>
-            <select class="filter-select" name="categoryId" required>
-              ${categories.map((c) => `<option value="${c.id}" ${c.id === existing?.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
-            </select>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">חשבון</span>
