@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category, NewTransaction, Person } from '../../types.ts'
 import { buildImportPreview, buildImportPreviewFromTable, commitImportedRows, parseXlsx, type ParsedImportRow } from '../../data/importService.ts'
-import { listMappingRules } from '../../data/mappingRulesRepo.ts'
+import { listMappingRules, normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
 import { createCategory } from '../../data/categoriesRepo.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
@@ -124,7 +124,7 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
                   ${row.matchedRule ? '<span class="import-preview__rule-badge" title="מולא אוטומטית מכלל שמור">כלל</span>' : ''}
                   ${row.isPossibleDuplicate ? '<span class="import-preview__rule-badge import-preview__rule-badge--warn" title="אותו תאריך, בית עסק וסכום כמו תנועה קיימת">כפילות אפשרית</span>' : ''}
                 </td>
-                <td><input type="number" class="filter-input" data-field="amount" min="0" step="0.01" value="${row.amount ?? ''}"></td>
+                <td><input type="number" class="filter-input" data-field="amount" min="0" step="0.01" value="${row.amount !== null ? row.amount.toFixed(2) : ''}"></td>
                 <td>
                   <select class="filter-select" data-field="category">
                     <option value="" ${row.categoryId === null ? 'selected' : ''}>לא זוהה — ללא קטגוריה</option>
@@ -198,7 +198,24 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
     store.setState({ transactions: [...created, ...transactions] })
     modal.close()
     showToast(skipped > 0 ? `יובאו ${created.length} תנועות (${skipped} שורות לא מסומנות או חסרות דולגו).` : `יובאו ${created.length} תנועות.`)
+    rememberCategoryChoices(inputs)
   } catch {
     showToast('הייבוא נכשל — ייתכן שיש להריץ קודם את מיגרציה 0003.')
+  }
+}
+
+/** Remembers each merchant's category/person from this import — whether it
+ * was auto-filled by an existing rule or corrected in the preview grid —
+ * so the next statement for the same merchant comes in pre-categorized.
+ * Fire-and-forget: this is a nice-to-have on top of an import that already
+ * succeeded, not something worth blocking or erroring the import over. */
+function rememberCategoryChoices(inputs: NewTransaction[]): void {
+  const choiceByMerchant = new Map<string, { categoryId: string; person: Person }>()
+  for (const input of inputs) {
+    if (!input.merchant) continue
+    choiceByMerchant.set(normalizeMerchantKey(input.merchant), { categoryId: input.categoryId, person: input.person })
+  }
+  for (const [merchantKey, patch] of choiceByMerchant) {
+    upsertMappingRule(merchantKey, patch).catch(() => {})
   }
 }

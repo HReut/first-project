@@ -610,7 +610,7 @@ export class TransactionsView {
   private editTextCell(cell: HTMLElement, tx: Transaction, field: 'date' | 'merchant' | 'amount'): void {
     cell.classList.add('is-editing')
     const inputType = field === 'amount' ? 'number' : field === 'date' ? 'date' : 'text'
-    const currentValue = field === 'amount' ? String(tx.amount) : field === 'date' ? tx.date : tx.merchant
+    const currentValue = field === 'amount' ? tx.amount.toFixed(2) : field === 'date' ? tx.date : tx.merchant
     cell.innerHTML = `<input type="${inputType}" class="cell-input" value="${currentValue}" ${field === 'amount' ? 'min="0" step="0.01"' : ''}>`
     const input = cell.querySelector<HTMLInputElement>('.cell-input')!
     input.focus()
@@ -872,7 +872,7 @@ export class TransactionsView {
           </label>
           <label class="filter-group">
             <span class="filter-group__label">סכום</span>
-            <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing?.amount ?? ''}" required>
+            <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing ? existing.amount.toFixed(2) : ''}" required>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">חשבון</span>
