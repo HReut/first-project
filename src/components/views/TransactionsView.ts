@@ -1,8 +1,9 @@
 import type { Store } from '../../state/store.ts'
-import type { Account, ActivityAction, AppState, Category, NewTransaction, Person, Transaction, TransactionDeletedBefore, TransactionStatus } from '../../types.ts'
+import type { Account, ActivityAction, AppState, Category, Currency, NewTransaction, Person, Transaction, TransactionDeletedBefore, TransactionStatus } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel, personLabel } from '../../utils/format.ts'
 import { computeReviewedStatus, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
+import { toIls } from '../../utils/currency.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
@@ -31,6 +32,7 @@ type GroupBy = 'none' | 'category' | 'person' | 'month'
 const PEOPLE: Person[] = ['Reut', 'Keren']
 const STATUS_VALUES: TransactionStatus[] = ['pending', 'on_budget', 'exceeded']
 const ACCOUNT_VALUES: Account[] = ['shared', 'reut_personal', 'keren_personal']
+const CURRENCY_VALUES: Currency[] = ['ILS', 'USD']
 /** The person a personal account locks the transaction to — 'shared' has no
  * forced person, since either person may have physically paid it. */
 const PERSON_FOR_ACCOUNT: Partial<Record<Account, Person>> = { reut_personal: 'Reut', keren_personal: 'Keren' }
@@ -169,7 +171,7 @@ export class TransactionsView {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const rows = this.visibleRows(state)
 
-    const header = ['תאריך', 'בית עסק', 'קטגוריה', 'משלם/ת', 'חשבון', 'סטטוס', 'סכום']
+    const header = ['תאריך', 'בית עסק', 'קטגוריה', 'משלם/ת', 'חשבון', 'סטטוס', 'סכום', 'מטבע', 'סכום בש"ח']
     const lines = rows.map((tx) => [
       tx.date,
       tx.merchant,
@@ -177,6 +179,8 @@ export class TransactionsView {
       personLabel(tx.person),
       ACCOUNT_LABEL[tx.account],
       STATUS_LABEL[tx.status],
+      tx.originalAmount.toFixed(2),
+      tx.currency,
       tx.amount.toFixed(2),
     ])
     const csv = [header, ...lines].map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -610,7 +614,7 @@ export class TransactionsView {
   private editTextCell(cell: HTMLElement, tx: Transaction, field: 'date' | 'merchant' | 'amount'): void {
     cell.classList.add('is-editing')
     const inputType = field === 'amount' ? 'number' : field === 'date' ? 'date' : 'text'
-    const currentValue = field === 'amount' ? tx.amount.toFixed(2) : field === 'date' ? tx.date : tx.merchant
+    const currentValue = field === 'amount' ? tx.originalAmount.toFixed(2) : field === 'date' ? tx.date : tx.merchant
     cell.innerHTML = `<input type="${inputType}" class="cell-input" value="${currentValue}" ${field === 'amount' ? 'min="0" step="0.01"' : ''}>`
     const input = cell.querySelector<HTMLInputElement>('.cell-input')!
     input.focus()
@@ -626,7 +630,10 @@ export class TransactionsView {
           this.renderTable(this.#store.getState())
           return
         }
-        this.commitEdit(tx.id, { amount: value })
+        // Editing amount only changes the number, not the currency — the
+        // ILS-equivalent that totals/budgets sum is recomputed from it.
+        const ilsAmount = toIls(value, tx.currency, this.#store.getState().exchangeRate)
+        this.commitEdit(tx.id, { originalAmount: value, amount: ilsAmount })
       } else if (field === 'date') {
         if (!input.value) {
           this.renderTable(this.#store.getState())
@@ -826,7 +833,7 @@ export class TransactionsView {
 
     const message =
       deleted.length === 1
-        ? `למחוק את ${deleted[0].merchant || 'התנועה'} (${formatCurrency(deleted[0].amount)})? ניתן לבטל זאת מההיסטוריה.`
+        ? `למחוק את ${deleted[0].merchant || 'התנועה'} (${formatCurrency(deleted[0].originalAmount, deleted[0].currency)})? ניתן לבטל זאת מההיסטוריה.`
         : `למחוק ${deleted.length} תנועות (סה"כ ${formatCurrency(total)})? ניתן לבטל זאת מההיסטוריה.`
 
     confirmDialog(message, 'מחיקה').then((confirmed) => {
@@ -840,7 +847,7 @@ export class TransactionsView {
         this.logTx(
           deleted.length === 1 ? 'deleted' : 'bulk_deleted',
           deleted.length === 1
-            ? `נמחקה ${deleted[0].merchant || 'תנועה'} (${formatCurrency(deleted[0].amount)})`
+            ? `נמחקה ${deleted[0].merchant || 'תנועה'} (${formatCurrency(deleted[0].originalAmount, deleted[0].currency)})`
             : `נמחקו ${deleted.length} תנועות (סה"כ ${formatCurrency(total)})`,
           before,
         )
@@ -872,7 +879,13 @@ export class TransactionsView {
           </label>
           <label class="filter-group">
             <span class="filter-group__label">סכום</span>
-            <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing ? existing.amount.toFixed(2) : ''}" required>
+            <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing ? existing.originalAmount.toFixed(2) : ''}" required>
+          </label>
+          <label class="filter-group">
+            <span class="filter-group__label">מטבע</span>
+            <select class="filter-select" name="currency" required>
+              ${CURRENCY_VALUES.map((c) => `<option value="${c}" ${c === (existing?.currency ?? 'ILS') ? 'selected' : ''}>${c === 'ILS' ? '₪ שקל' : '$ דולר'}</option>`).join('')}
+            </select>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">חשבון</span>
@@ -914,13 +927,17 @@ export class TransactionsView {
       const data = new FormData(form)
       const categoryId = String(data.get('categoryId'))
       const account = data.get('account') as Account
+      const currency = data.get('currency') as Currency
+      const originalAmount = Number(data.get('amount'))
       const state = this.#store.getState()
       // A manually-typed transaction is considered reviewed the instant it's
       // entered — 'pending' is reserved for imported rows awaiting a look.
       const input: NewTransaction = {
         date: String(data.get('date')),
         merchant: String(data.get('merchant')).trim(),
-        amount: Number(data.get('amount')),
+        amount: toIls(originalAmount, currency, state.exchangeRate),
+        currency,
+        originalAmount,
         categoryId,
         account,
         person: PERSON_FOR_ACCOUNT[account] ?? (data.get('person') as Person),
@@ -934,9 +951,9 @@ export class TransactionsView {
         createTransaction(input).then((created) => {
           const { transactions } = this.#store.getState()
           this.#store.setState({ transactions: [created, ...transactions] })
-          this.logTx('created', `נוספה ${created.merchant || 'תנועה'} (${formatCurrency(created.amount)})`)
+          this.logTx('created', `נוספה ${created.merchant || 'תנועה'} (${formatCurrency(created.originalAmount, created.currency)})`)
           modal.close()
-          showToast(`✓ נוספה ${created.merchant || 'תנועה'} (${formatCurrency(created.amount)})`, [], 2500)
+          showToast(`✓ נוספה ${created.merchant || 'תנועה'} (${formatCurrency(created.originalAmount, created.currency)})`, [], 2500)
         })
       }
     })
@@ -1129,7 +1146,7 @@ export class TransactionsView {
         <td class="editable-cell" data-field="category" data-id="${tx.id}">${renderCategoryBadge(categoryById.get(tx.categoryId))}</td>
         <td class="editable-cell" data-field="person" data-id="${tx.id}">${renderPersonBadge(tx.person)}</td>
         <td class="editable-cell" data-field="account" data-id="${tx.id}">${renderAccountBadge(tx.account)}</td>
-        <td class="is-numeric editable-cell" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.amount)}</td>
+        <td class="is-numeric editable-cell" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.originalAmount, tx.currency)}</td>
         <td>${tx.status === 'pending' ? `<button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button>` : ''}</td>
       </tr>
     `
@@ -1142,7 +1159,7 @@ export class TransactionsView {
         <div class="tx-card__body">
           <div class="tx-card__top">
             ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
-            <span class="tx-card__amount">${formatCurrency(tx.amount)}</span>
+            <span class="tx-card__amount">${formatCurrency(tx.originalAmount, tx.currency)}</span>
           </div>
           <div class="tx-card__meta">
             ${renderCategoryBadge(categoryById.get(tx.categoryId))}

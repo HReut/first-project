@@ -1,6 +1,5 @@
-import type { Person } from '../types.ts'
+import type { Currency, Person } from '../types.ts'
 
-const CURRENCY = 'ILS'
 const LOCALE = 'he-IL'
 
 const PERSON_LABEL: Record<Person, string> = { Reut: 'רעות', Keren: 'קרן' }
@@ -13,10 +12,14 @@ export function personLabel(person: Person): string {
   return PERSON_LABEL[person]
 }
 
-export function formatCurrency(amount: number): string {
+/** Defaults to ILS since that's what `Transaction.amount` (the
+ * ILS-equivalent every total/budget/chart sums) is always denominated in —
+ * pass `currency` explicitly only when displaying a transaction's own
+ * originalAmount, which may be USD. */
+export function formatCurrency(amount: number, currency: Currency = 'ILS'): string {
   return new Intl.NumberFormat(LOCALE, {
     style: 'currency',
-    currency: CURRENCY,
+    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount)

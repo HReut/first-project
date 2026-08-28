@@ -259,7 +259,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
       },
       {
         label: 'התנועה הגדולה ביותר',
-        value: highlights.biggestTransaction ? formatCurrency(highlights.biggestTransaction.amount) : '—',
+        value: highlights.biggestTransaction ? formatCurrency(highlights.biggestTransaction.originalAmount, highlights.biggestTransaction.currency) : '—',
         sub: highlights.biggestTransaction ? `${highlights.biggestTransaction.merchant} · ${formatDateShort(highlights.biggestTransaction.date)}` : '',
       },
       { label: 'תנועות', value: String(highlights.transactionCount), sub: `ממוצע ${formatCurrency(highlights.avgAmount)}` },

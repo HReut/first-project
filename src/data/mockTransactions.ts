@@ -106,6 +106,7 @@ export function createMockTransactions(categories: Category[], referenceDate = n
         const resolvedPerson: Person = account === 'shared' ? person : account === 'reut_personal' ? 'Reut' : 'Keren'
 
         counter++
+        const amount = randomAmount(AMOUNT_RANGE[categoryName], rand)
         transactions.push({
           id: `tx-${counter}`,
           date: isoDate(date),
@@ -113,7 +114,9 @@ export function createMockTransactions(categories: Category[], referenceDate = n
           categoryId: categoryIdByName.get(categoryName)!,
           person: resolvedPerson,
           account,
-          amount: randomAmount(AMOUNT_RANGE[categoryName], rand),
+          amount,
+          currency: 'ILS',
+          originalAmount: amount,
           status,
           source: isEmailAuto ? 'email_auto' : 'manual',
         })

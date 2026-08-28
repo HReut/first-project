@@ -33,6 +33,8 @@ export function transactionForDueRule(rule: RecurringRule, monthKey: string): Ne
     date: `${monthKey}-${day}`,
     merchant: rule.merchant,
     amount: rule.amount,
+    currency: 'ILS',
+    originalAmount: rule.amount,
     categoryId: rule.categoryId,
     account: rule.account,
     person: rule.person,

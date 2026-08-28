@@ -9,6 +9,8 @@ function fromRow(row: TransactionRow): Transaction {
     date: row.date,
     merchant: row.merchant,
     amount: row.amount,
+    currency: row.currency,
+    originalAmount: row.original_amount,
     categoryId: row.category_id,
     person: row.person,
     account: row.account,
@@ -22,6 +24,8 @@ function toRow(input: Partial<NewTransaction>): Partial<Omit<TransactionRow, 'id
   if (input.date !== undefined) row.date = input.date
   if (input.merchant !== undefined) row.merchant = input.merchant
   if (input.amount !== undefined) row.amount = input.amount
+  if (input.currency !== undefined) row.currency = input.currency
+  if (input.originalAmount !== undefined) row.original_amount = input.originalAmount
   if (input.categoryId !== undefined) row.category_id = input.categoryId
   if (input.person !== undefined) row.person = input.person
   if (input.account !== undefined) row.account = input.account

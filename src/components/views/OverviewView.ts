@@ -425,7 +425,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
             <span class="review-row__date">${formatDateShort(tx.date)}</span>
             ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
             ${renderCategoryBadge(categoryById.get(tx.categoryId))}
-            <span class="review-row__amount">${formatCurrency(tx.amount)}</span>
+            <span class="review-row__amount">${formatCurrency(tx.originalAmount, tx.currency)}</span>
             <button type="button" class="btn btn--approve" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button>
           </div>
         `,
@@ -487,7 +487,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
       rows.push(`
         <div class="insights-row__item">
           <span class="insights-row__icon" aria-hidden="true">${categoryById.get(latestAutoTx.categoryId)?.icon ?? '🧾'}</span>
-          <span class="insights-row__text"><strong>${latestAutoTx.merchant}</strong> נלכד אוטומטית מתיבת הדואר שלך · ${formatCurrency(latestAutoTx.amount)} · ${formatDateShort(latestAutoTx.date)}</span>
+          <span class="insights-row__text"><strong>${latestAutoTx.merchant}</strong> נלכד אוטומטית מתיבת הדואר שלך · ${formatCurrency(latestAutoTx.originalAmount, latestAutoTx.currency)} · ${formatDateShort(latestAutoTx.date)}</span>
         </div>
       `)
     }
@@ -516,7 +516,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
         ${renderCategoryBadge(categoryById.get(tx.categoryId))}
         <span class="activity-row__person">${renderPersonBadge(tx.person)}</span>
-        <span class="activity-row__amount">${formatCurrency(tx.amount)}</span>
+        <span class="activity-row__amount">${formatCurrency(tx.originalAmount, tx.currency)}</span>
       </div>
     `,
       )

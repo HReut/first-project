@@ -1,4 +1,5 @@
 export type Person = 'Reut' | 'Keren'
+export type Currency = 'ILS' | 'USD'
 /** Which "pocket" a transaction was paid from. Personal accounts are still
  * household expenses paid individually — see computeSplitBalance() in
  * insights.ts for how each value affects the Reut/Keren settlement math. */
@@ -23,7 +24,17 @@ export interface Transaction {
   id: string
   date: string // ISO yyyy-mm-dd
   merchant: string
+  /** Always the ILS-equivalent — every total/budget/chart in the app sums
+   * this, converted (and frozen) at whatever exchange rate was in effect
+   * when the transaction was created/edited. Equals `originalAmount` when
+   * `currency` is 'ILS'. */
   amount: number
+  /** What currency the purchase actually happened in. */
+  currency: Currency
+  /** The amount in `currency` — what the Transactions table and cards show
+   * for this row, since that's what a person actually paid/saw on their
+   * card. Equals `amount` when `currency` is 'ILS'. */
+  originalAmount: number
   categoryId: string
   person: Person
   account: Account
@@ -107,6 +118,17 @@ export type NewBudgetLimitOverride = Omit<BudgetLimitOverride, 'id'>
  * computeTotalAvailable() in src/utils/insights.ts. */
 export interface AccountBalance {
   startingBalance: number
+  setAt: string // ISO yyyy-mm-dd
+}
+
+/** The household-set $→₪ rate used to convert a USD transaction's
+ * originalAmount into its ILS-equivalent amount at the moment it's
+ * created/edited — see Transaction.amount. Recalibrating this only affects
+ * transactions saved afterward; past ones keep whatever rate was in effect
+ * when they were entered, same "historical FX, not mark-to-market" logic
+ * real accounting uses. */
+export interface ExchangeRate {
+  usdToIls: number
   setAt: string // ISO yyyy-mm-dd
 }
 
@@ -224,6 +246,7 @@ export interface AppState {
   recurringRules: RecurringRule[]
   budgetLimitOverrides: BudgetLimitOverride[]
   accountBalance: AccountBalance | null
+  exchangeRate: ExchangeRate | null
   activityLog: ActivityLogEntry[]
   savingsGoals: SavingsGoal[]
   filters: Filters

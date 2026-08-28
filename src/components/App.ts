@@ -6,6 +6,7 @@ import { listEmailRules } from '../data/emailRulesRepo.ts'
 import { listMappingRules } from '../data/mappingRulesRepo.ts'
 import { listRecurringRules, updateRecurringRule } from '../data/recurringRulesRepo.ts'
 import { loadAccountBalance } from '../data/accountBalanceRepo.ts'
+import { loadExchangeRate } from '../data/exchangeRateRepo.ts'
 import { listBudgetLimitOverrides } from '../data/budgetLimitOverridesRepo.ts'
 import { listActivityLog } from '../data/activityLogRepo.ts'
 import { listSavingsGoals } from '../data/savingsGoalsRepo.ts'
@@ -130,6 +131,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     recurringRules: [],
     budgetLimitOverrides: [],
     accountBalance: null,
+    exchangeRate: null,
     activityLog: [],
     savingsGoals: [],
     filters: {
@@ -148,11 +150,12 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       listMappingRules(),
       listRecurringRules(),
       loadAccountBalance(),
+      loadExchangeRate(),
       listBudgetLimitOverrides(),
       listActivityLog(),
       listSavingsGoals(),
     ])
-      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, budgetLimitOverrides, activityLog, savingsGoals]) => {
+      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, exchangeRate, budgetLimitOverrides, activityLog, savingsGoals]) => {
         store.setState({
           categories,
           transactions,
@@ -160,6 +163,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           mappingRules,
           recurringRules,
           accountBalance,
+          exchangeRate,
           budgetLimitOverrides,
           activityLog,
           savingsGoals,

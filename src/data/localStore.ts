@@ -1,4 +1,4 @@
-import type { AccountBalance, ActivityLogEntry, BudgetLimitOverride, Category, EmailSyncRule, MappingRule, NewActivityLogEntry, RecurringRule, SavingsGoal, Transaction } from '../types.ts'
+import type { AccountBalance, ActivityLogEntry, BudgetLimitOverride, Category, EmailSyncRule, ExchangeRate, MappingRule, NewActivityLogEntry, RecurringRule, SavingsGoal, Transaction } from '../types.ts'
 import { SEED_CATEGORIES } from './mockCategories.ts'
 import { createMockTransactions } from './mockTransactions.ts'
 
@@ -13,6 +13,7 @@ const KEYS = {
   mappingRules: 'opa-tulik:mapping-rules',
   recurringRules: 'opa-tulik:recurring-rules',
   accountBalance: 'opa-tulik:account-balance',
+  exchangeRate: 'opa-tulik:exchange-rate',
   budgetLimitOverrides: 'opa-tulik:budget-limit-overrides',
   activityLog: 'opa-tulik:activity-log',
   savingsGoals: 'opa-tulik:savings-goals',
@@ -46,9 +47,9 @@ export function saveLocalCategories(categories: Category[]): void {
 export function loadLocalTransactions(categories: Category[]): Transaction[] {
   const existing = read<Transaction[]>(KEYS.transactions)
   if (existing) {
-    // Backfill for local data saved before the `account` field existed.
-    if (existing.some((tx) => !tx.account)) {
-      const migrated = existing.map((tx) => ({ ...tx, account: tx.account ?? 'shared' }))
+    // Backfill for local data saved before the `account`/`currency` fields existed.
+    if (existing.some((tx) => !tx.account || !tx.currency)) {
+      const migrated = existing.map((tx) => ({ ...tx, account: tx.account ?? 'shared', currency: tx.currency ?? 'ILS', originalAmount: tx.originalAmount ?? tx.amount }))
       write(KEYS.transactions, migrated)
       return migrated
     }
@@ -102,6 +103,14 @@ export function loadLocalAccountBalance(): AccountBalance | null {
 
 export function saveLocalAccountBalance(balance: AccountBalance): void {
   write(KEYS.accountBalance, balance)
+}
+
+export function loadLocalExchangeRate(): ExchangeRate | null {
+  return read<ExchangeRate>(KEYS.exchangeRate)
+}
+
+export function saveLocalExchangeRate(rate: ExchangeRate): void {
+  write(KEYS.exchangeRate, rate)
 }
 
 export function loadLocalBudgetLimitOverrides(): BudgetLimitOverride[] {

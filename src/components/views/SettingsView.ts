@@ -4,6 +4,7 @@ import { createCategory, deleteCategory, updateCategory } from '../../data/categ
 import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/emailRulesRepo.ts'
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
 import { setAccountBalance } from '../../data/accountBalanceRepo.ts'
+import { setExchangeRate } from '../../data/exchangeRateRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { showToast } from '../shared/Toast.ts'
 import { personLabel } from '../../utils/format.ts'
@@ -69,6 +70,24 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
             <input type="number" class="budget-input" id="account-balance-input" placeholder="יתרה נוכחית" min="0" step="1">
             <button type="button" class="btn btn--primary btn--sm" id="account-balance-save">שמירת יתרה</button>
             <span class="settings-list__usage" id="account-balance-status"></span>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="band__inner">
+        <section class="settings-card" aria-label="שער דולר">
+          <h2 class="settings-card__title">שער דולר</h2>
+          <p class="settings-card__desc">
+            תנועה שנרשמת בדולרים מומרת לשקלים לפי השער הזה ברגע השמירה שלה, לצורך תקציבים,
+            אנליזות וסה"כ זמין — עדכון השער כאן משפיע רק על תנועות חדשות; תנועות דולריות
+            שכבר נשמרו שומרות על השער שהיה בתוקף באותו רגע.
+          </p>
+          <div class="settings-list__row" id="exchange-rate-row">
+            <input type="number" class="budget-input" id="exchange-rate-input" placeholder="שער $ ל-₪" min="0" step="0.01">
+            <button type="button" class="btn btn--primary btn--sm" id="exchange-rate-save">שמירת שער</button>
+            <span class="settings-list__usage" id="exchange-rate-status"></span>
           </div>
         </section>
       </div>
@@ -157,6 +176,37 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       })
       .catch(() => {
         showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0007?')
+      })
+  })
+
+  // ---------- Exchange rate ----------
+
+  const exchangeRateInput = root.querySelector<HTMLInputElement>('#exchange-rate-input')!
+  const exchangeRateStatusEl = root.querySelector<HTMLElement>('#exchange-rate-status')!
+
+  function renderExchangeRate(state: AppState): void {
+    const rate = state.exchangeRate
+    if (document.activeElement !== exchangeRateInput) {
+      exchangeRateInput.value = rate ? String(rate.usdToIls) : ''
+    }
+    exchangeRateStatusEl.textContent = rate ? `נכון ל-${formatDateShort(rate.setAt)} — כרגע $1 = ${formatCurrency(rate.usdToIls)}` : 'עדיין לא הוגדר — תנועות בדולר יומרו 1:1 עד שיוגדר'
+  }
+
+  root.querySelector<HTMLButtonElement>('#exchange-rate-save')!.addEventListener('click', () => {
+    const raw = exchangeRateInput.value.trim()
+    const usdToIls = Number(raw)
+    if (!raw || !Number.isFinite(usdToIls) || usdToIls <= 0) {
+      showToast('הזן/י שער תקין תחילה.')
+      return
+    }
+    const today = new Date().toISOString().slice(0, 10)
+    setExchangeRate({ usdToIls, setAt: today })
+      .then((exchangeRate) => {
+        store.setState({ exchangeRate })
+        showToast('השער נשמר.', [], 2500)
+      })
+      .catch(() => {
+        showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0011?')
       })
   })
 
@@ -389,11 +439,13 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
   store.subscribe((state) => {
     renderAccountBalance(state)
+    renderExchangeRate(state)
     renderCategoryManager(state)
     renderRuleBuilder(state)
   })
 
   renderAccountBalance(store.getState())
+  renderExchangeRate(store.getState())
   renderCategoryManager(store.getState())
   renderEmailAccounts()
   renderRuleBuilder(store.getState())
@@ -409,6 +461,9 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     const balanceInput = root.querySelector<HTMLInputElement>('#account-balance-input')
     const savedBalance = store.getState().accountBalance
     const balanceChanged = !!balanceInput && balanceInput.value.trim() !== (savedBalance ? String(savedBalance.startingBalance) : '')
-    return !!newCategoryName || !!newRuleKeyword || balanceChanged || categoryFieldsDirty || categorySavesInFlight > 0
+    const rateInput = root.querySelector<HTMLInputElement>('#exchange-rate-input')
+    const savedRate = store.getState().exchangeRate
+    const rateChanged = !!rateInput && rateInput.value.trim() !== (savedRate ? String(savedRate.usdToIls) : '')
+    return !!newCategoryName || !!newRuleKeyword || balanceChanged || rateChanged || categoryFieldsDirty || categorySavesInFlight > 0
   }
 }
