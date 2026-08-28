@@ -258,7 +258,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         </div>
         <div class="hero-card__right">
           <div class="hero-card__right-header">
-            <span class="hero-card__right-title">התחשבנות</span>
+            <span class="hero-card__right-title">מאזן</span>
             <a class="card-link" href="#history">צפייה בפירוט ←</a>
           </div>
           ${
