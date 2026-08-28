@@ -6,7 +6,7 @@ import { createCategory } from '../../data/categoriesRepo.ts'
 import { computeReviewedStatus } from '../../utils/insights.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
-import { personLabel } from '../../utils/format.ts'
+import { formatCurrency, personLabel } from '../../utils/format.ts'
 
 const PEOPLE: Person[] = ['Reut', 'Keren']
 /** Must match the category's `name` in the database exactly (see the
@@ -58,6 +58,7 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
   const state = store.getState()
   const mappingRules = await listMappingRules()
   let rows: ParsedImportRow[]
+  let declaredTotal: number | null = null
   if (isCsv) {
     rows = buildImportPreview(await file.text(), state.categories, mappingRules, state.transactions)
   } else if (isXlsx) {
@@ -66,7 +67,9 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
     // pdfjs-dist is ~850KB — split into its own chunk so it only loads for
     // people who actually import a PDF, not on every page visit.
     const { parseCreditCardStatementPdf } = await import('../../data/pdfImportService.ts')
-    rows = buildImportPreviewFromTable(await parseCreditCardStatementPdf(file, state.categories), state.categories, mappingRules, state.transactions)
+    const parsed = await parseCreditCardStatementPdf(file, state.categories)
+    declaredTotal = parsed.declaredTotal
+    rows = buildImportPreviewFromTable(parsed.table, state.categories, mappingRules, state.transactions)
   }
 
   if (rows.length === 0) {
@@ -74,7 +77,7 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
     return
   }
 
-  openPreviewModal(rows, store, currentPerson)
+  openPreviewModal(rows, store, currentPerson, declaredTotal)
 }
 
 /** Finds (or lazily creates) the category imported rows fall back to when
@@ -90,9 +93,21 @@ async function ensureUncategorizedCategory(store: Store<AppState>): Promise<Cate
   return created
 }
 
-function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, currentPerson: Person): void {
+function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, currentPerson: Person, declaredTotal: number | null): void {
   const { categories } = store.getState()
   const duplicateCount = rows.filter((row) => row.isPossibleDuplicate).length
+
+  // Cross-checks the parser's own work against the statement's stated
+  // total, when one was found — a wrong/missing row is far easier to catch
+  // as "these two numbers don't match" than by eyeballing dozens of rows.
+  let reconciliationBanner = ''
+  if (declaredTotal !== null) {
+    const parsedTotal = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0)
+    const matches = Math.abs(parsedTotal - declaredTotal) < 0.05
+    reconciliationBanner = matches
+      ? `<p class="import-preview__reconciliation import-preview__reconciliation--ok">✓ הסכום שזוהה (${formatCurrency(parsedTotal)}) תואם לסיכום המצוין בדוח.</p>`
+      : `<p class="import-preview__reconciliation import-preview__reconciliation--warn">⚠ הסכום שזוהה (${formatCurrency(parsedTotal)}) שונה מהסיכום המצוין בדוח (${formatCurrency(declaredTotal)}) — ייתכן ששורות חסרות, כפולות או שגויות. בדוק/י כל שורה בעיון לפני האישור.</p>`
+  }
 
   const modal = new Modal(
     `
@@ -101,6 +116,7 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
         סקור/י ותקן/י כל דבר לפני הייבוא — אלה נשמרות רק לאחר אישור.
         ${duplicateCount > 0 ? `${duplicateCount} שורות נראות כאילו כבר קיימות בנתונים שלך, ומתחילות לא מסומנות.` : ''}
       </p>
+      ${reconciliationBanner}
       <div class="bulk-bar" id="import-bulk-bar" hidden>
         <span class="bulk-bar__count" id="import-bulk-count"></span>
         <select class="filter-select filter-select--sm" id="import-bulk-category">

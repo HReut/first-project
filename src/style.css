@@ -2710,6 +2710,24 @@ p {
   margin-bottom: 16px;
 }
 
+.import-preview__reconciliation {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.import-preview__reconciliation--ok {
+  color: var(--status-good);
+  background: color-mix(in srgb, var(--status-good) 12%, var(--surface));
+}
+
+.import-preview__reconciliation--warn {
+  color: var(--status-critical);
+  background: color-mix(in srgb, var(--status-critical) 12%, var(--surface));
+}
+
 .import-preview__table-wrap {
   max-height: 50vh;
   overflow: auto;
