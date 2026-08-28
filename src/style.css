@@ -2193,6 +2193,38 @@ p {
   margin-inline-end: auto;
 }
 
+/* ---------- Pending (unsaved) edits bar ---------- */
+
+.pending-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 45%, transparent);
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+}
+
+.pending-bar[hidden] {
+  display: none;
+}
+
+.pending-bar__count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-inline-end: auto;
+}
+
+tr.tx-row--pending td {
+  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
+}
+
+.tx-card.tx-card--pending {
+  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
+}
+
 /* ---------- Transactions table ---------- */
 
 .transactions {

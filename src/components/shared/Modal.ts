@@ -3,9 +3,14 @@
 export class Modal {
   #backdrop: HTMLDivElement
   #onClose?: () => void
+  #onBeforeClose?: () => boolean | Promise<boolean>
 
-  constructor(contentHtml: string, options: { onClose?: () => void; ariaLabel?: string } = {}) {
+  constructor(
+    contentHtml: string,
+    options: { onClose?: () => void; ariaLabel?: string; onBeforeClose?: () => boolean | Promise<boolean> } = {},
+  ) {
     this.#onClose = options.onClose
+    this.#onBeforeClose = options.onBeforeClose
 
     this.#backdrop = document.createElement('div')
     this.#backdrop.className = 'modal-backdrop'
@@ -16,21 +21,32 @@ export class Modal {
       </div>
     `
     this.#backdrop.addEventListener('click', (event) => {
-      if (event.target === this.#backdrop) this.close()
+      if (event.target === this.#backdrop) void this.requestClose()
     })
-    this.#backdrop.querySelector<HTMLButtonElement>('.modal__close')!.addEventListener('click', () => this.close())
+    this.#backdrop.querySelector<HTMLButtonElement>('.modal__close')!.addEventListener('click', () => void this.requestClose())
     document.addEventListener('keydown', this.#handleKeydown)
     document.body.appendChild(this.#backdrop)
   }
 
   #handleKeydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') this.close()
+    if (event.key === 'Escape') void this.requestClose()
   }
 
   get element(): HTMLElement {
     return this.#backdrop.querySelector<HTMLElement>('.modal')!
   }
 
+  /** Closing via Escape/backdrop/✕ — runs the onBeforeClose guard first
+   * (e.g. "you have unsaved edits, leave anyway?"), so those exits can't
+   * silently drop staged changes the way a plain close() would. */
+  async requestClose(): Promise<void> {
+    if (this.#onBeforeClose && !(await this.#onBeforeClose())) return
+    this.close()
+  }
+
+  /** Unconditional close, no guard — for callers that already know it's
+   * safe (e.g. right after a successful save, or a modal with no
+   * unsaved-changes concern). */
   close(): void {
     document.removeEventListener('keydown', this.#handleKeydown)
     this.#backdrop.remove()

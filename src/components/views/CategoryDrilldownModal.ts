@@ -30,6 +30,8 @@ export function openCategoryDrilldown(
     .transactions.filter((tx) => tx.categoryId === category.id && matchesPeriod(tx.date, period) && (personFilter === 'all' || tx.person === personFilter))
     .sort((a, b) => (a.date < b.date ? 1 : -1))
 
+  const pendingEdits = new Map<string, Partial<NewTransaction>>()
+
   const modal = new Modal(
     `
       <h2 class="modal__title">${category.icon} ${category.name} — ${periodLabel}</h2>
@@ -49,30 +51,59 @@ export function openCategoryDrilldown(
           <tbody id="drilldown-body"></tbody>
         </table>
       </div>
+      <div class="pending-bar" id="drilldown-pending-bar" hidden>
+        <span class="pending-bar__count" id="drilldown-pending-count"></span>
+        <button type="button" class="btn btn--sm" id="drilldown-discard-btn">ביטול שינויים</button>
+        <button type="button" class="btn btn--primary btn--sm" id="drilldown-save-btn">שמירת שינויים</button>
+      </div>
       <div class="modal__actions">
         <button type="button" class="btn" id="drilldown-close">סגירה</button>
       </div>
     `,
-    { ariaLabel: `${category.name} — תנועות` },
+    {
+      ariaLabel: `${category.name} — תנועות`,
+      onBeforeClose: async () => {
+        if (pendingEdits.size === 0) return true
+        return confirmDialog('יש שינויים שלא נשמרו בחלון זה. לצאת בכל זאת?', 'צא')
+      },
+    },
   )
   modal.element.classList.add('modal--import-preview')
 
   const summaryEl = modal.element.querySelector<HTMLElement>('#drilldown-summary')!
   const bodyEl = modal.element.querySelector<HTMLElement>('#drilldown-body')!
+  const pendingBarEl = modal.element.querySelector<HTMLElement>('#drilldown-pending-bar')!
+  const pendingCountEl = modal.element.querySelector<HTMLElement>('#drilldown-pending-count')!
+
+  function renderPendingBar(): void {
+    pendingBarEl.hidden = pendingEdits.size === 0
+    pendingCountEl.textContent = `${pendingEdits.size} שינויים לא שמורים`
+  }
+
+  /** Overlays unsaved staged edits over the real fetched rows, same
+   * "display what you typed without touching the store yet" pattern as
+   * TransactionsView's visibleRows() — a row stays in this list even after
+   * an edit would move it out of the category/period/person filter, until
+   * Save actually commits it. */
+  function overlaidRows(): typeof currentRows {
+    return currentRows.map((tx) => {
+      const pending = pendingEdits.get(tx.id)
+      return pending ? { ...tx, ...pending } : tx
+    })
+  }
 
   function renderRows(): void {
     const { categories } = store.getState()
     const categoryOptions = (selectedId: string) => categories.map((c) => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')
+    const rows = overlaidRows()
 
     summaryEl.textContent =
-      currentRows.length === 0
-        ? 'אין תנועות בקטגוריה זו לתקופה שנבחרה.'
-        : `${currentRows.length} תנועות · סה"כ ${formatCurrency(currentRows.reduce((sum, tx) => sum + tx.amount, 0))}`
+      rows.length === 0 ? 'אין תנועות בקטגוריה זו לתקופה שנבחרה.' : `${rows.length} תנועות · סה"כ ${formatCurrency(rows.reduce((sum, tx) => sum + tx.amount, 0))}`
 
-    bodyEl.innerHTML = currentRows
+    bodyEl.innerHTML = rows
       .map(
         (tx) => `
-      <tr data-id="${tx.id}">
+      <tr data-id="${tx.id}" class="${pendingEdits.has(tx.id) ? 'tx-row--pending' : ''}">
         <td><input type="date" class="filter-input" data-field="date" value="${tx.date}"></td>
         <td><input type="text" class="filter-input" data-field="merchant" value="${tx.merchant}" placeholder="בית עסק (לא חובה)"></td>
         <td><select class="filter-select" data-field="categoryId">${categoryOptions(tx.categoryId)}</select></td>
@@ -87,6 +118,7 @@ export function openCategoryDrilldown(
     `,
       )
       .join('')
+    renderPendingBar()
   }
 
   function logTx(action: 'updated' | 'deleted', summary: string, beforeData: unknown = null): void {
@@ -104,7 +136,7 @@ export function openCategoryDrilldown(
     const input = (event.target as HTMLElement).closest<HTMLElement>('[data-field]') as HTMLInputElement | HTMLSelectElement | null
     if (!input) return
     const id = input.closest<HTMLTableRowElement>('tr')!.dataset.id!
-    const tx = currentRows.find((t) => t.id === id)
+    const tx = overlaidRows().find((t) => t.id === id)
     if (!tx) return
     const field = input.dataset.field!
 
@@ -140,26 +172,49 @@ export function openCategoryDrilldown(
       return
     }
 
-    updateTransaction(id, patch).then((updated) => {
-      const { transactions } = store.getState()
-      store.setState({ transactions: transactions.map((t) => (t.id === updated.id ? updated : t)) })
-      logTx('updated', `עודכן ${updated.merchant || 'תנועה'} (${field})`)
+    pendingEdits.set(id, { ...pendingEdits.get(id), ...patch })
+    renderRows()
+  })
 
-      // Moved out of this category (or out of the person filter) — it no
-      // longer belongs in this list.
-      if (updated.categoryId !== category.id || (personFilter !== 'all' && updated.person !== personFilter)) {
-        currentRows = currentRows.filter((t) => t.id !== id)
-      } else {
-        currentRows = currentRows.map((t) => (t.id === id ? updated : t))
-      }
+  async function savePendingEdits(): Promise<void> {
+    const entries = [...pendingEdits]
+    if (entries.length === 0) return
+
+    try {
+      const updated = await Promise.all(entries.map(([id, patch]) => updateTransaction(id, patch)))
+      const updatedById = new Map(updated.map((tx) => [tx.id, tx]))
+      const { transactions } = store.getState()
+      store.setState({ transactions: transactions.map((t) => updatedById.get(t.id) ?? t) })
+      pendingEdits.clear()
+      showToast(entries.length === 1 ? 'השינוי נשמר.' : `${entries.length} שינויים נשמרו.`, [], 2000)
+      logTx('updated', entries.length === 1 ? `עודכנה תנועה ${updated[0]?.merchant || 'ללא שם'}` : `${entries.length} תנועות עודכנו`)
+
+      // Rows that moved out of this category (or out of the person filter)
+      // no longer belong in this list, now that the edit is actually saved.
+      currentRows = currentRows
+        .map((t) => updatedById.get(t.id) ?? t)
+        .filter((t) => t.categoryId === category.id && (personFilter === 'all' || t.person === personFilter))
       renderRows()
-    })
+    } catch {
+      showToast('שמירת השינויים נכשלה — נסה/י שוב.')
+    }
+  }
+
+  modal.element.querySelector<HTMLButtonElement>('#drilldown-save-btn')!.addEventListener('click', () => {
+    void savePendingEdits()
+  })
+  modal.element.querySelector<HTMLButtonElement>('#drilldown-discard-btn')!.addEventListener('click', () => {
+    pendingEdits.clear()
+    renderRows()
   })
 
   bodyEl.addEventListener('click', (event) => {
     const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-tx]')
     if (!deleteBtn) return
     const id = deleteBtn.dataset.deleteTx!
+    // Deliberately the real saved row, not the overlaid preview — an
+    // unsaved staged edit was never written to the database, so undo must
+    // restore what deleteTransactions() actually removes.
     const tx = currentRows.find((t) => t.id === id)
     if (!tx) return
 
@@ -170,11 +225,12 @@ export function openCategoryDrilldown(
         store.setState({ transactions: transactions.filter((t) => t.id !== id) })
         const before: TransactionDeletedBefore = { transactions: [tx] }
         logTx('deleted', `נמחקה ${tx.merchant || 'תנועה'} (${formatCurrency(tx.originalAmount, tx.currency)})`, before)
+        pendingEdits.delete(id)
         currentRows = currentRows.filter((t) => t.id !== id)
         renderRows()
       })
     })
   })
 
-  modal.element.querySelector<HTMLButtonElement>('#drilldown-close')!.addEventListener('click', () => modal.close())
+  modal.element.querySelector<HTMLButtonElement>('#drilldown-close')!.addEventListener('click', () => void modal.requestClose())
 }

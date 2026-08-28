@@ -309,6 +309,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   const navButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.sidebar__link, .bottom-nav__link'))
   let mounted = false
   let settingsHasUnsavedChanges: (() => boolean) | null = null
+  let transactionsHasUnsavedChanges: (() => boolean) | null = null
 
   function applyViewVisibility(state: AppState): void {
     navButtons.forEach((btn) => btn.classList.toggle('is-active', btn.dataset.view === state.view))
@@ -322,13 +323,20 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     store.setState({ view })
   }
 
-  /** Warns before leaving Settings if there's typed-but-unsaved text (an
-   * "add new" row that was never submitted) — everything else on Settings
-   * auto-saves on blur, so it's already safe by the time a click navigates
-   * away. Scoped to Settings only; other pages navigate immediately. */
+  /** Warns before leaving a view that has unsaved changes waiting on an
+   * explicit Save click — Settings (a typed-but-unsubmitted "add new" row;
+   * everything else there auto-saves on blur) and Transactions (staged
+   * inline-edit changes, which never touch real data until "שמירת שינויים"
+   * is clicked — see TransactionsView's pending-edits pattern). Every other
+   * page navigates immediately. */
   function navigate(view: View): void {
-    if (store.getState().view === 'settings' && view !== 'settings' && settingsHasUnsavedChanges?.()) {
-      confirmDialog('יש לך שינויים בהגדרות שעדיין לא נשמרו. לצאת בכל זאת?', 'צא').then((confirmed) => {
+    const currentView = store.getState().view
+    if (currentView === view) return
+    const guard = currentView === 'settings' ? settingsHasUnsavedChanges : currentView === 'transactions' ? transactionsHasUnsavedChanges : null
+    if (guard?.()) {
+      const message =
+        currentView === 'settings' ? 'יש לך שינויים בהגדרות שעדיין לא נשמרו. לצאת בכל זאת?' : 'יש לך שינויים בתנועות שעדיין לא נשמרו. לצאת בכל זאת?'
+      confirmDialog(message, 'צא').then((confirmed) => {
         if (confirmed) goToView(view)
       })
       return
@@ -451,7 +459,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     if (state.status === 'ready' && !mounted) {
       mounted = true
       mountOverviewView(viewEls.overview, store, currentPerson)
-      mountTransactionsView(viewEls.transactions, store, currentPerson)
+      transactionsHasUnsavedChanges = mountTransactionsView(viewEls.transactions, store, currentPerson)
       mountBudgetsView(viewEls.budgets, store, currentPerson)
       mountAnalyticsView(viewEls.analytics, store, currentPerson)
       settingsHasUnsavedChanges = mountSettingsView(viewEls.settings, store, currentPerson)

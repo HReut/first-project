@@ -106,6 +106,14 @@ export class TransactionsView {
   #groupBy: GroupBy = 'none'
   #collapsedGroups = new Set<string>()
   #hiddenColumns = new Set<SortColumn>()
+  /** Inline edits (any field, in the table or a card) wait here instead of
+   * saving immediately — money data deserves a deliberate "yes, save this"
+   * moment, not an accidental save from a stray blur. Merged over the real
+   * data for display in visibleRows() so edited cells show what you typed,
+   * without touching the real store (and therefore every other page's
+   * totals) until Save is actually clicked. The add/edit modal is exempt —
+   * its own explicit Save/Add button already *is* that deliberate moment. */
+  #pendingEdits = new Map<string, Partial<NewTransaction>>()
 
   constructor(container: HTMLElement, store: Store<AppState>, currentPerson: Person) {
     this.#container = container
@@ -114,6 +122,7 @@ export class TransactionsView {
     this.renderShell()
     this.wireToolbar()
     this.wireTable()
+    this.wirePendingBar()
     this.wireExport()
     this.wireImport()
     window.addEventListener('opa:new-transaction', () => this.openExpenseModal())
@@ -328,6 +337,11 @@ export class TransactionsView {
             <div class="sheet-backdrop" id="toolbar-backdrop" hidden></div>
 
             <div class="bulk-bar" id="bulk-bar" hidden></div>
+            <div class="pending-bar" id="pending-bar" hidden>
+              <span class="pending-bar__count" id="pending-count"></span>
+              <button type="button" class="btn btn--sm" id="pending-discard-btn">ביטול שינויים</button>
+              <button type="button" class="btn btn--primary btn--sm" id="pending-save-btn">שמירת שינויים</button>
+            </div>
 
             <div class="transactions__header">
               <span class="transactions__count" id="transactions-count"></span>
@@ -610,6 +624,56 @@ export class TransactionsView {
     })
   }
 
+  private wirePendingBar(): void {
+    this.#container.querySelector<HTMLButtonElement>('#pending-save-btn')!.addEventListener('click', () => {
+      void this.savePendingEdits()
+    })
+    this.#container.querySelector<HTMLButtonElement>('#pending-discard-btn')!.addEventListener('click', () => {
+      this.#pendingEdits.clear()
+      this.renderTable(this.#store.getState())
+    })
+  }
+
+  /** True while any inline edit hasn't been saved yet — checked by App.ts
+   * before letting a nav click leave Transactions, same guard Settings has
+   * for its own unsaved "add new" rows. */
+  hasUnsavedChanges(): boolean {
+    return this.#pendingEdits.size > 0
+  }
+
+  /** Stages a field edit instead of writing it — the opposite of
+   * commitEdit(), which is still used by the add/edit modal, whose own
+   * Save/Add button already is the deliberate "yes, save this" moment. */
+  private stageEdit(id: string, patch: Partial<NewTransaction>): void {
+    this.#pendingEdits.set(id, { ...this.#pendingEdits.get(id), ...patch })
+    this.renderTable(this.#store.getState())
+  }
+
+  private renderPendingBar(): void {
+    const bar = this.#container.querySelector<HTMLElement>('#pending-bar')!
+    const countEl = this.#container.querySelector<HTMLElement>('#pending-count')!
+    bar.hidden = this.#pendingEdits.size === 0
+    countEl.textContent = `${this.#pendingEdits.size} שינויים לא שמורים`
+  }
+
+  private async savePendingEdits(): Promise<void> {
+    const entries = [...this.#pendingEdits]
+    if (entries.length === 0) return
+
+    try {
+      const updated = await Promise.all(entries.map(([id, patch]) => updateTransaction(id, patch)))
+      const updatedById = new Map(updated.map((tx) => [tx.id, tx]))
+      const { transactions } = this.#store.getState()
+      this.#store.setState({ transactions: transactions.map((tx) => updatedById.get(tx.id) ?? tx) })
+      this.#pendingEdits.clear()
+      showToast(entries.length === 1 ? 'השינוי נשמר.' : `${entries.length} שינויים נשמרו.`, [], 2000)
+      this.logTx('updated', entries.length === 1 ? `עודכנה תנועה ${updated[0]?.merchant || 'ללא שם'}` : `${entries.length} תנועות עודכנו`)
+      this.renderTable(this.#store.getState())
+    } catch {
+      showToast('שמירת השינויים נכשלה — נסה/י שוב.')
+    }
+  }
+
   /** Merchant is the only field of these three that's allowed to be blank —
    * category matters more than naming the exact store, so an empty merchant
    * commits as-is instead of reverting like a required field would. */
@@ -636,7 +700,7 @@ export class TransactionsView {
         // the ILS-equivalent that totals/budgets sum is recomputed from it,
         // using the real historical rate for the transaction's own date.
         const { amount, usedFallback } = await resolveIlsAmount(value, tx.currency, tx.date, this.#store.getState().exchangeRate)
-        this.commitEdit(tx.id, { originalAmount: value, amount })
+        this.stageEdit(tx.id, { originalAmount: value, amount })
         if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
       } else if (field === 'date') {
         if (!input.value) {
@@ -645,13 +709,13 @@ export class TransactionsView {
         }
         if (tx.currency === 'USD') {
           const { amount, usedFallback } = await resolveIlsAmount(tx.originalAmount, tx.currency, input.value, this.#store.getState().exchangeRate)
-          this.commitEdit(tx.id, { date: input.value, amount })
+          this.stageEdit(tx.id, { date: input.value, amount })
           if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
         } else {
-          this.commitEdit(tx.id, { date: input.value })
+          this.stageEdit(tx.id, { date: input.value })
         }
       } else {
-        this.commitEdit(tx.id, { merchant: input.value.trim() })
+        this.stageEdit(tx.id, { merchant: input.value.trim() })
       }
     }
     const cancel = () => {
@@ -681,10 +745,8 @@ export class TransactionsView {
     let settled = false
     select.addEventListener('change', () => {
       settled = true
-      this.commitEdit(tx.id, { categoryId: select.value })
+      this.stageEdit(tx.id, { categoryId: select.value })
       this.promptSaveMappingRule(tx, 'category', select.value)
-      const categoryName = categories.find((c) => c.id === select.value)?.name ?? 'ללא קטגוריה'
-      showToast(`הקטגוריה עודכנה ל${categoryName}`, [], 2000)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -715,7 +777,7 @@ export class TransactionsView {
     select.addEventListener('change', () => {
       settled = true
       const nextPerson = select.value as Person
-      this.commitEdit(tx.id, { person: nextPerson })
+      this.stageEdit(tx.id, { person: nextPerson })
       this.promptSaveMappingRule(tx, 'person', nextPerson)
     })
     select.addEventListener('blur', () => {
@@ -744,8 +806,7 @@ export class TransactionsView {
       settled = true
       const account = select.value as Account
       const forcedPerson = PERSON_FOR_ACCOUNT[account]
-      this.commitEdit(tx.id, forcedPerson ? { account, person: forcedPerson } : { account })
-      showToast(`החשבון עודכן ל${ACCOUNT_LABEL[account]}`, [], 2000)
+      this.stageEdit(tx.id, forcedPerson ? { account, person: forcedPerson } : { account })
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -772,8 +833,7 @@ export class TransactionsView {
     select.addEventListener('change', () => {
       settled = true
       const status = select.value as TransactionStatus
-      this.commitEdit(tx.id, { status })
-      showToast(`הסטטוס עודכן ל${STATUS_LABEL[status]}`, [], 2000)
+      this.stageEdit(tx.id, { status })
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -857,13 +917,8 @@ export class TransactionsView {
 
   private bulkRecategorize(categoryId: string): void {
     const ids = [...this.#selection]
-    const categoryName = this.#store.getState().categories.find((c) => c.id === categoryId)?.name ?? 'ללא קטגוריה'
-    Promise.all(ids.map((id) => updateTransaction(id, { categoryId }))).then((updated) => {
-      const byId = new Map(updated.map((tx) => [tx.id, tx]))
-      const { transactions } = this.#store.getState()
-      this.#store.setState({ transactions: transactions.map((tx) => byId.get(tx.id) ?? tx) })
-      this.logTx('bulk_recategorized', `${ids.length} תנועות שויכו מחדש ל${categoryName}`)
-    })
+    for (const id of ids) this.#pendingEdits.set(id, { ...this.#pendingEdits.get(id), categoryId })
+    this.renderTable(this.#store.getState())
   }
 
   private bulkDelete(): void {
@@ -1035,9 +1090,18 @@ export class TransactionsView {
 
   // ---------- Rendering ----------
 
+  /** Merges unsaved pending edits over the real data before filtering/
+   * sorting/displaying — so an edited cell shows what you typed everywhere
+   * (row, card, group totals, footer sum, CSV export) without those edits
+   * having reached the store (and therefore every other page's totals)
+   * until Save is actually clicked. */
   private visibleRows(state: AppState): Transaction[] {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
-    const filtered = filterTransactions(state.transactions, state.filters)
+    const overlaid = state.transactions.map((tx) => {
+      const pending = this.#pendingEdits.get(tx.id)
+      return pending ? { ...tx, ...pending } : tx
+    })
+    const filtered = filterTransactions(overlaid, state.filters)
     return sortTransactions(filtered, this.#sort, categoryById)
   }
 
@@ -1100,6 +1164,7 @@ export class TransactionsView {
     }
 
     this.renderBulkBar(state.categories)
+    this.renderPendingBar()
     this.renderFooterSummary(rows)
   }
 
@@ -1215,8 +1280,9 @@ export class TransactionsView {
   }
 
   private renderRow(tx: Transaction, categoryById: Map<string, Category>): string {
+    const pendingClass = this.#pendingEdits.has(tx.id) ? ' tx-row--pending' : ''
     return `
-      <tr data-id="${tx.id}">
+      <tr data-id="${tx.id}" class="${pendingClass.trim()}">
         <td class="select-cell"><input type="checkbox" class="row-select" data-id="${tx.id}" ${this.#selection.has(tx.id) ? 'checked' : ''}></td>
         <td class="editable-cell" data-field="date" data-id="${tx.id}">${formatDateShort(tx.date)}</td>
         <td class="editable-cell" data-field="merchant" data-id="${tx.id}">
@@ -1234,8 +1300,9 @@ export class TransactionsView {
   }
 
   private renderCard(tx: Transaction, categoryById: Map<string, Category>): string {
+    const pendingClass = this.#pendingEdits.has(tx.id) ? ' tx-card--pending' : ''
     return `
-      <article class="tx-card" data-id="${tx.id}">
+      <article class="tx-card${pendingClass}" data-id="${tx.id}">
         <input type="checkbox" class="row-select tx-card__select" data-id="${tx.id}" aria-label="בחירת תנועה" ${this.#selection.has(tx.id) ? 'checked' : ''}>
         <div class="tx-card__body">
           <div class="tx-card__top">
@@ -1280,6 +1347,7 @@ export class TransactionsView {
   }
 }
 
-export function mountTransactionsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
-  new TransactionsView(root, store, currentPerson)
+export function mountTransactionsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): () => boolean {
+  const view = new TransactionsView(root, store, currentPerson)
+  return () => view.hasUnsavedChanges()
 }
