@@ -1206,6 +1206,28 @@ p {
   background: var(--accent-bg);
 }
 
+.reminder-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+}
+
+.reminder-banner__icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.reminder-banner__text {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
 /* ---------- Shared card surface for the new Overview panels ---------- */
 
 .panel-card {

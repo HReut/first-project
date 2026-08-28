@@ -1,5 +1,5 @@
 import type { Store } from '../../state/store.ts'
-import type { Account, AppState, Category, Person, Transaction } from '../../types.ts'
+import type { Account, AppState, BudgetLimitOverride, Category, Person, Transaction } from '../../types.ts'
 import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveSettledAfter } from '../../utils/activity.ts'
 import { formatCurrency, formatDateShort, personLabel } from '../../utils/format.ts'
@@ -15,17 +15,20 @@ const BUDGET_PROGRESS_LIMIT = 3
 const EXPENSE_LIST_LIMIT = 6
 const TREND_MONTHS = 4
 
-interface Improvement {
-  category: Category
-  deltaPercent: number
-  savedAmount: number
+interface Tip {
+  icon: string
+  html: string
+  /** How notable this is, so the most worth-mentioning tip(s) win the
+   * limited slots in the insights row when several apply at once. */
+  significance: number
 }
 
-/** Category with the biggest month-over-month spend decrease, for the
- * "Smart Insight" card — real, computed from actual transactions (unlike
- * the placeholder figures above). Null when nothing improved or there's
- * not enough history yet. */
-function computeBiggestImprovement(transactions: Transaction[], categories: Category[]): Improvement | null {
+const CATEGORY_DELTA_THRESHOLD = 10 // % swing before a category move is worth mentioning at all
+
+/** Every category with a big enough month-over-month swing — a drop reads
+ * as good news (money saved), a jump as a heads-up. Real, computed from
+ * actual transactions, not canned copy. */
+function computeCategoryDeltaTips(transactions: Transaction[], categories: Category[]): Tip[] {
   const thisMonth = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' })
   const lastMonthDate = new Date()
   lastMonthDate.setMonth(lastMonthDate.getMonth() - 1)
@@ -33,19 +36,61 @@ function computeBiggestImprovement(transactions: Transaction[], categories: Cate
   const lastByCategory = new Map(lastMonth.map((entry) => [entry.categoryId, entry.amount]))
   const categoryById = new Map(categories.map((category) => [category.id, category]))
 
-  let best: Improvement | null = null
+  const tips: Tip[] = []
   for (const entry of thisMonth) {
     const prev = lastByCategory.get(entry.categoryId) ?? 0
     if (prev <= 0) continue
     const deltaPercent = ((entry.amount - prev) / prev) * 100
-    if (deltaPercent >= 0) continue
+    if (Math.abs(deltaPercent) < CATEGORY_DELTA_THRESHOLD) continue
     const category = categoryById.get(entry.categoryId)
     if (!category) continue
-    if (!best || deltaPercent < best.deltaPercent) {
-      best = { category, deltaPercent, savedAmount: prev - entry.amount }
+
+    if (deltaPercent < 0) {
+      const saved = prev - entry.amount
+      tips.push({
+        icon: '💡',
+        html: `ההוצאה על ${category.name} <strong class="is-good">נמוכה ב-${Math.round(Math.abs(deltaPercent))}%</strong> מהחודש שעבר — את/ה בדרך לחסוך עוד ${formatCurrency(saved)}.`,
+        significance: Math.abs(deltaPercent),
+      })
+    } else {
+      const extra = entry.amount - prev
+      tips.push({
+        icon: '📈',
+        html: `ההוצאה על ${category.name} <strong class="is-bad">עלתה ב-${Math.round(deltaPercent)}%</strong> מהחודש שעבר — ${formatCurrency(extra)} יותר.`,
+        significance: Math.abs(deltaPercent),
+      })
     }
   }
-  return best
+  return tips
+}
+
+/** How the household's total spend compares to its total budgeted limits
+ * this month — only categories that actually have a limit set count toward
+ * either side. Null when nothing's budgeted, or the pace isn't notable
+ * either way (comfortably mid-range). */
+function computeBudgetPaceTip(transactions: Transaction[], categories: Category[], budgetLimitOverrides: BudgetLimitOverride[]): Tip | null {
+  const budgeted = topBudgetedCategories(transactions, categories, budgetLimitOverrides)
+  if (budgeted.length === 0) return null
+  const spent = budgeted.reduce((sum, row) => sum + row.spent, 0)
+  const limit = budgeted.reduce((sum, row) => sum + (row.limit ?? 0), 0)
+  if (limit <= 0) return null
+  const percent = (spent / limit) * 100
+
+  if (percent >= 100) {
+    return {
+      icon: '🚨',
+      html: `ההוצאות בקטגוריות עם תקציב <strong class="is-bad">חורגות ב-${formatCurrency(spent - limit)}</strong> מהמגבלה הכוללת שהוגדרה החודש.`,
+      significance: percent,
+    }
+  }
+  if (percent <= 70) {
+    return {
+      icon: '🎯',
+      html: `את/ה ב-${Math.round(percent)}% מהתקציב הכולל לקטגוריות עם מגבלה החודש — <strong class="is-good">מרווח נשימה של ${formatCurrency(limit - spent)}</strong> עד סוף החודש.`,
+      significance: 100 - percent,
+    }
+  }
+  return null
 }
 
 interface SpendTrend {
@@ -99,6 +144,17 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
       </div>
     </section>
 
+    <section class="band" id="reminder-band" hidden>
+      <div class="band__inner">
+        <div class="reminder-banner" id="reminder-banner">
+          <span class="reminder-banner__icon" aria-hidden="true">📝</span>
+          <span class="reminder-banner__text">עדיין לא נרשמו הוצאות החודש — זמן לעדכן!</span>
+          <button type="button" class="btn btn--primary btn--sm" id="reminder-add-btn">הוספת תנועה</button>
+          <button type="button" class="icon-btn" id="reminder-dismiss-btn" aria-label="סגירת התזכורת">✕</button>
+        </div>
+      </div>
+    </section>
+
     <section class="band">
       <div class="band__inner">
         <div class="status-banner panel-card" id="status-banner"></div>
@@ -147,6 +203,19 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   const insightsBandEl = root.querySelector<HTMLElement>('#insights-band')!
   const insightsRowEl = root.querySelector<HTMLElement>('#insights-row')!
   const activityEl = root.querySelector<HTMLElement>('#activity-list')!
+  const reminderBandEl = root.querySelector<HTMLElement>('#reminder-band')!
+
+  // Session-only — reappears next visit if the household still hasn't
+  // logged anything for the month, since dismissing without adding data
+  // shouldn't make the gap invisible.
+  let reminderDismissed = false
+  root.querySelector<HTMLButtonElement>('#reminder-dismiss-btn')!.addEventListener('click', () => {
+    reminderDismissed = true
+    render(store.getState())
+  })
+  root.querySelector<HTMLButtonElement>('#reminder-add-btn')!.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('opa:new-transaction'))
+  })
 
   // Shared = the household view (all transactions). Private = just what
   // currentPerson paid from their own personal-account pocket. Total
@@ -210,12 +279,25 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   })
 
   function render(state: AppState): void {
+    renderReminder(state)
     renderStatusBanner(state)
     renderMonthlyExpenses(state)
     renderReviewCenter(state)
     renderBudgetSummary(state)
     renderInsightsRow(state)
     renderActivity(state)
+  }
+
+  /** "Remind us each month to log our expenses" — the household's own ask.
+   * Fires once nothing's been logged for the current calendar month and
+   * we're a few days in (skips day 1-4, since nobody's "behind" yet that
+   * early) — not tied to the shared/private toggle, since either person
+   * not logging anything is worth a nudge. */
+  function renderReminder(state: AppState): void {
+    const now = new Date()
+    const currentMonth = now.toISOString().slice(0, 7)
+    const hasLoggedThisMonth = state.transactions.some((tx) => tx.date.startsWith(currentMonth))
+    reminderBandEl.hidden = reminderDismissed || hasLoggedThisMonth || now.getDate() < 5
   }
 
   function renderStatusBanner(state: AppState): void {
@@ -473,14 +555,23 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     `
   }
 
-  /** Invoice Sync and Smart Insight collapse into a single row and vanish
+  const MAX_TIPS = 2
+
+  /** Invoice Sync and the tips collapse into a single row and vanish
    * entirely (not just show an empty state) when neither has anything to say —
-   * two near-empty cards read as more clutter than help. */
+   * near-empty cards read as more clutter than help. Tips are ranked by
+   * how notable they are (biggest swing, furthest off budget pace) so the
+   * most worth-mentioning ones win when several apply at once — real
+   * variety month to month as the data itself changes, not randomized. */
   function renderInsightsRow(state: AppState): void {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const scoped = scopedTransactions(state)
     const latestAutoTx = [...scoped].filter((tx) => tx.source === 'email_auto').sort((a, b) => (a.date < b.date ? 1 : -1))[0]
-    const insight = computeBiggestImprovement(scoped, state.categories)
+
+    const budgetPaceTip = computeBudgetPaceTip(scoped, state.categories, state.budgetLimitOverrides)
+    const tips = [...computeCategoryDeltaTips(scoped, state.categories), ...(budgetPaceTip ? [budgetPaceTip] : [])]
+      .sort((a, b) => b.significance - a.significance)
+      .slice(0, MAX_TIPS)
 
     const rows: string[] = []
     if (latestAutoTx) {
@@ -491,11 +582,11 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         </div>
       `)
     }
-    if (insight) {
+    for (const tip of tips) {
       rows.push(`
         <div class="insights-row__item">
-          <span class="insights-row__icon" aria-hidden="true">💡</span>
-          <span class="insights-row__text">ההוצאה על ${insight.category.name} <strong class="is-good">נמוכה ב-${Math.round(Math.abs(insight.deltaPercent))}%</strong> מהחודש שעבר — את/ה בדרך לחסוך עוד ${formatCurrency(insight.savedAmount)}.</span>
+          <span class="insights-row__icon" aria-hidden="true">${tip.icon}</span>
+          <span class="insights-row__text">${tip.html}</span>
         </div>
       `)
     }
