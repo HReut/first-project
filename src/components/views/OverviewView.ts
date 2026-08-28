@@ -423,7 +423,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
             (tx) => `
           <div class="review-row">
             <span class="review-row__date">${formatDateShort(tx.date)}</span>
-            ${renderMerchantCell(tx)}
+            ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
             ${renderCategoryBadge(categoryById.get(tx.categoryId))}
             <span class="review-row__amount">${formatCurrency(tx.amount)}</span>
             <button type="button" class="btn btn--approve" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button>
@@ -513,7 +513,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         (tx) => `
       <div class="activity-row">
         <span class="activity-row__date">${formatDateShort(tx.date)}</span>
-        ${renderMerchantCell(tx)}
+        ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
         ${renderCategoryBadge(categoryById.get(tx.categoryId))}
         <span class="activity-row__person">${renderPersonBadge(tx.person)}</span>
         <span class="activity-row__amount">${formatCurrency(tx.amount)}</span>

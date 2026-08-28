@@ -166,7 +166,7 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
     const categoryId = rowEl.querySelector<HTMLSelectElement>('[data-field="category"]')!.value || uncategorized.id
     const person = rowEl.querySelector<HTMLSelectElement>('[data-field="person"]')!.value as Person
 
-    if (!date || !merchant || !Number.isFinite(amount) || amount <= 0) {
+    if (!date || !Number.isFinite(amount) || amount <= 0) {
       skipped++
       continue
     }
@@ -176,7 +176,7 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
   }
 
   if (inputs.length === 0) {
-    showToast('אין שורות תקינות לייבוא — בדוק/י את עמודות התאריך, בית העסק והסכום.')
+    showToast('אין שורות תקינות לייבוא — בדוק/י את עמודות התאריך והסכום.')
     return
   }
 

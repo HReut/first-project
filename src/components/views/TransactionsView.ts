@@ -573,7 +573,7 @@ export class TransactionsView {
       if (cell) {
         if (cell.classList.contains('is-editing')) return
         const id = cell.dataset.id!
-        const field = cell.dataset.field as 'merchant' | 'amount' | 'category' | 'person' | 'account' | 'status'
+        const field = cell.dataset.field as 'date' | 'merchant' | 'amount' | 'category' | 'person' | 'account' | 'status'
         const tx = this.#store.getState().transactions.find((t) => t.id === id)
         if (!tx) return
 
@@ -604,11 +604,14 @@ export class TransactionsView {
     })
   }
 
-  private editTextCell(cell: HTMLElement, tx: Transaction, field: 'merchant' | 'amount'): void {
+  /** Merchant is the only field of these three that's allowed to be blank —
+   * category matters more than naming the exact store, so an empty merchant
+   * commits as-is instead of reverting like a required field would. */
+  private editTextCell(cell: HTMLElement, tx: Transaction, field: 'date' | 'merchant' | 'amount'): void {
     cell.classList.add('is-editing')
-    const isAmount = field === 'amount'
-    const currentValue = isAmount ? String(tx.amount) : tx.merchant
-    cell.innerHTML = `<input type="${isAmount ? 'number' : 'text'}" class="cell-input" value="${currentValue}" ${isAmount ? 'min="0" step="0.01"' : ''}>`
+    const inputType = field === 'amount' ? 'number' : field === 'date' ? 'date' : 'text'
+    const currentValue = field === 'amount' ? String(tx.amount) : field === 'date' ? tx.date : tx.merchant
+    cell.innerHTML = `<input type="${inputType}" class="cell-input" value="${currentValue}" ${field === 'amount' ? 'min="0" step="0.01"' : ''}>`
     const input = cell.querySelector<HTMLInputElement>('.cell-input')!
     input.focus()
     input.select()
@@ -617,16 +620,22 @@ export class TransactionsView {
     const commit = () => {
       if (settled) return
       settled = true
-      const value = isAmount ? Number(input.value) : input.value.trim()
-      if (isAmount && (Number.isNaN(value) || (value as number) < 0)) {
-        this.renderTable(this.#store.getState())
-        return
+      if (field === 'amount') {
+        const value = Number(input.value)
+        if (Number.isNaN(value) || value < 0) {
+          this.renderTable(this.#store.getState())
+          return
+        }
+        this.commitEdit(tx.id, { amount: value })
+      } else if (field === 'date') {
+        if (!input.value) {
+          this.renderTable(this.#store.getState())
+          return
+        }
+        this.commitEdit(tx.id, { date: input.value })
+      } else {
+        this.commitEdit(tx.id, { merchant: input.value.trim() })
       }
-      if (!isAmount && !value) {
-        this.renderTable(this.#store.getState())
-        return
-      }
-      this.commitEdit(tx.id, isAmount ? { amount: value as number } : { merchant: value as string })
     }
     const cancel = () => {
       if (settled) return
@@ -732,6 +741,8 @@ export class TransactionsView {
    * this merchant, so future CSV imports auto-fill it. Self-dismissing toast
    * — no blocking modal, since this is a nice-to-have not a required step. */
   private promptSaveMappingRule(tx: Transaction, field: 'category' | 'person', value: string): void {
+    // No merchant to key a future-import rule off of — nothing to offer.
+    if (!tx.merchant) return
     const merchantKey = normalizeMerchantKey(tx.merchant)
     const fieldLabel = field === 'category' ? 'הקטגוריה' : 'מי שילם/ה'
     showToast(`לזכור את ${fieldLabel} הזו עבור "${tx.merchant}" בייבואים עתידיים?`, [
@@ -766,7 +777,7 @@ export class TransactionsView {
     updateTransaction(id, patch).then((updated) => {
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => (tx.id === id ? updated : tx)) })
-      this.logTx('updated', `עודכן ${updated.merchant} (${Object.keys(patch).join(', ')})`)
+      this.logTx('updated', `עודכן ${updated.merchant || 'תנועה'} (${Object.keys(patch).join(', ')})`)
     })
   }
 
@@ -815,7 +826,7 @@ export class TransactionsView {
 
     const message =
       deleted.length === 1
-        ? `למחוק את ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})? ניתן לבטל זאת מההיסטוריה.`
+        ? `למחוק את ${deleted[0].merchant || 'התנועה'} (${formatCurrency(deleted[0].amount)})? ניתן לבטל זאת מההיסטוריה.`
         : `למחוק ${deleted.length} תנועות (סה"כ ${formatCurrency(total)})? ניתן לבטל זאת מההיסטוריה.`
 
     confirmDialog(message, 'מחיקה').then((confirmed) => {
@@ -829,7 +840,7 @@ export class TransactionsView {
         this.logTx(
           deleted.length === 1 ? 'deleted' : 'bulk_deleted',
           deleted.length === 1
-            ? `נמחקה ${deleted[0].merchant} (${formatCurrency(deleted[0].amount)})`
+            ? `נמחקה ${deleted[0].merchant || 'תנועה'} (${formatCurrency(deleted[0].amount)})`
             : `נמחקו ${deleted.length} תנועות (סה"כ ${formatCurrency(total)})`,
           before,
         )
@@ -850,8 +861,8 @@ export class TransactionsView {
             <input type="date" class="filter-input" name="date" value="${existing?.date ?? today}" required>
           </label>
           <label class="filter-group">
-            <span class="filter-group__label">בית עסק</span>
-            <input type="text" class="filter-input" name="merchant" placeholder="לדוגמה: שופרסל" value="${existing?.merchant ?? ''}" required>
+            <span class="filter-group__label">בית עסק (לא חובה)</span>
+            <input type="text" class="filter-input" name="merchant" placeholder="לדוגמה: שופרסל" value="${existing?.merchant ?? ''}">
           </label>
           <label class="filter-group">
             <span class="filter-group__label">סכום</span>
@@ -923,9 +934,9 @@ export class TransactionsView {
         createTransaction(input).then((created) => {
           const { transactions } = this.#store.getState()
           this.#store.setState({ transactions: [created, ...transactions] })
-          this.logTx('created', `נוספה ${created.merchant} (${formatCurrency(created.amount)})`)
+          this.logTx('created', `נוספה ${created.merchant || 'תנועה'} (${formatCurrency(created.amount)})`)
           modal.close()
-          showToast(`✓ נוספה ${created.merchant} (${formatCurrency(created.amount)})`, [], 2500)
+          showToast(`✓ נוספה ${created.merchant || 'תנועה'} (${formatCurrency(created.amount)})`, [], 2500)
         })
       }
     })
@@ -1109,9 +1120,9 @@ export class TransactionsView {
     return `
       <tr data-id="${tx.id}">
         <td class="select-cell"><input type="checkbox" class="row-select" data-id="${tx.id}" ${this.#selection.has(tx.id) ? 'checked' : ''}></td>
-        <td>${formatDateShort(tx.date)}</td>
+        <td class="editable-cell" data-field="date" data-id="${tx.id}">${formatDateShort(tx.date)}</td>
         <td class="editable-cell" data-field="merchant" data-id="${tx.id}">
-          ${renderMerchantCell(tx)}
+          ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
           <span class="editable-cell editable-cell--status" data-field="status" data-id="${tx.id}">${renderStatusBadge(tx.status)}</span>
           ${renderWaitingBadge(tx)}
         </td>
@@ -1130,7 +1141,7 @@ export class TransactionsView {
         <input type="checkbox" class="row-select tx-card__select" data-id="${tx.id}" aria-label="בחירת תנועה" ${this.#selection.has(tx.id) ? 'checked' : ''}>
         <div class="tx-card__body">
           <div class="tx-card__top">
-            ${renderMerchantCell(tx)}
+            ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
             <span class="tx-card__amount">${formatCurrency(tx.amount)}</span>
           </div>
           <div class="tx-card__meta">

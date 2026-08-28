@@ -4,10 +4,14 @@ import { personLabel } from '../../utils/format.ts'
 /** Small read-only cell renderers shared by the Overview review/activity
  * lists and the Transactions table's non-editing display state. */
 
-export function renderMerchantCell(tx: Transaction): string {
+/** Merchant is optional — categorizing where the money went matters more
+ * than naming the specific store. When it's blank, fall back to the
+ * category's icon+name so the row still reads as something. */
+export function renderMerchantCell(tx: Transaction, category?: Category): string {
+  const label = tx.merchant || (category ? `${category.icon} ${category.name}` : '')
   return `
     <span class="merchant-cell">
-      ${tx.merchant}
+      ${label}
       ${
         tx.source === 'email_auto'
           ? `<span class="email-badge" title="נלכד אוטומטית מאימייל">
