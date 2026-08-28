@@ -1,12 +1,13 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category, Filters, NewTransaction, Person, TransactionDeletedBefore } from '../../types.ts'
 import { matchesPeriod } from '../../utils/filters.ts'
-import { toIls } from '../../utils/currency.ts'
+import { resolveIlsAmount } from '../../utils/currency.ts'
 import { formatCurrency, personLabel } from '../../utils/format.ts'
 import { deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { Modal } from '../shared/Modal.ts'
 import { confirmDialog } from '../shared/confirmDialog.ts'
+import { showToast } from '../shared/Toast.ts'
 
 const PEOPLE: Person[] = ['Reut', 'Keren']
 
@@ -99,7 +100,7 @@ export function openCategoryDrilldown(
 
   renderRows()
 
-  bodyEl.addEventListener('change', (event) => {
+  bodyEl.addEventListener('change', async (event) => {
     const input = (event.target as HTMLElement).closest<HTMLElement>('[data-field]') as HTMLInputElement | HTMLSelectElement | null
     if (!input) return
     const id = input.closest<HTMLTableRowElement>('tr')!.dataset.id!
@@ -114,13 +115,21 @@ export function openCategoryDrilldown(
         renderRows()
         return
       }
-      patch = { originalAmount: value, amount: toIls(value, tx.currency, store.getState().exchangeRate) }
+      const { amount, usedFallback } = await resolveIlsAmount(value, tx.currency, tx.date, store.getState().exchangeRate)
+      patch = { originalAmount: value, amount }
+      if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
     } else if (field === 'date') {
       if (!input.value) {
         renderRows()
         return
       }
-      patch = { date: input.value }
+      if (tx.currency === 'USD') {
+        const { amount, usedFallback } = await resolveIlsAmount(tx.originalAmount, tx.currency, input.value, store.getState().exchangeRate)
+        patch = { date: input.value, amount }
+        if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
+      } else {
+        patch = { date: input.value }
+      }
     } else if (field === 'merchant') {
       patch = { merchant: input.value.trim() }
     } else if (field === 'categoryId') {

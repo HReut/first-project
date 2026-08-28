@@ -3,7 +3,8 @@ import type { Account, ActivityAction, AppState, Category, Currency, NewTransact
 import { filterTransactions } from '../../utils/filters.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel, personLabel } from '../../utils/format.ts'
 import { computeReviewedStatus, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
-import { toIls } from '../../utils/currency.ts'
+import { resolveIlsAmount } from '../../utils/currency.ts'
+import { fetchHistoricalUsdToIls } from '../../data/exchangeRateApi.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
@@ -619,7 +620,7 @@ export class TransactionsView {
     input.select()
 
     let settled = false
-    const commit = () => {
+    const commit = async () => {
       if (settled) return
       settled = true
       if (field === 'amount') {
@@ -628,16 +629,24 @@ export class TransactionsView {
           this.renderTable(this.#store.getState())
           return
         }
-        // Editing amount only changes the number, not the currency — the
-        // ILS-equivalent that totals/budgets sum is recomputed from it.
-        const ilsAmount = toIls(value, tx.currency, this.#store.getState().exchangeRate)
-        this.commitEdit(tx.id, { originalAmount: value, amount: ilsAmount })
+        // Editing amount only changes the number, not the currency/date —
+        // the ILS-equivalent that totals/budgets sum is recomputed from it,
+        // using the real historical rate for the transaction's own date.
+        const { amount, usedFallback } = await resolveIlsAmount(value, tx.currency, tx.date, this.#store.getState().exchangeRate)
+        this.commitEdit(tx.id, { originalAmount: value, amount })
+        if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
       } else if (field === 'date') {
         if (!input.value) {
           this.renderTable(this.#store.getState())
           return
         }
-        this.commitEdit(tx.id, { date: input.value })
+        if (tx.currency === 'USD') {
+          const { amount, usedFallback } = await resolveIlsAmount(tx.originalAmount, tx.currency, input.value, this.#store.getState().exchangeRate)
+          this.commitEdit(tx.id, { date: input.value, amount })
+          if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
+        } else {
+          this.commitEdit(tx.id, { date: input.value })
+        }
       } else {
         this.commitEdit(tx.id, { merchant: input.value.trim() })
       }
@@ -916,6 +925,7 @@ export class TransactionsView {
             <select class="filter-select" name="currency" required>
               ${CURRENCY_VALUES.map((c) => `<option value="${c}" ${c === (existing?.currency ?? 'ILS') ? 'selected' : ''}>${c === 'ILS' ? '₪ שקל' : '$ דולר'}</option>`).join('')}
             </select>
+            <span class="filter-group__hint" id="rate-preview" hidden></span>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">חשבון</span>
@@ -950,22 +960,53 @@ export class TransactionsView {
     syncPersonToAccount()
     accountSelect.addEventListener('change', syncPersonToAccount)
 
+    // Shows the real historical rate that'll actually be used for a USD
+    // entry, before submitting — so it's not a black box.
+    const currencySelect = modal.element.querySelector<HTMLSelectElement>('select[name="currency"]')!
+    const dateInput = modal.element.querySelector<HTMLInputElement>('input[name="date"]')!
+    const ratePreviewEl = modal.element.querySelector<HTMLElement>('#rate-preview')!
+    let ratePreviewToken = 0
+    const updateRatePreview = () => {
+      if (currencySelect.value !== 'USD' || !dateInput.value) {
+        ratePreviewEl.hidden = true
+        return
+      }
+      const token = ++ratePreviewToken
+      ratePreviewEl.hidden = false
+      ratePreviewEl.textContent = 'טוען שער…'
+      fetchHistoricalUsdToIls(dateInput.value).then((rate) => {
+        if (token !== ratePreviewToken) return // a newer request superseded this one
+        ratePreviewEl.textContent = rate !== null ? `1$ = ${formatCurrency(rate)} בתאריך זה` : 'לא נמצא שער לתאריך זה — ישמש שער הגיבוי'
+      })
+    }
+    updateRatePreview()
+    currencySelect.addEventListener('change', updateRatePreview)
+    dateInput.addEventListener('change', updateRatePreview)
+
     modal.element.querySelector<HTMLButtonElement>('#modal-cancel')!.addEventListener('click', () => modal.close())
-    modal.element.querySelector<HTMLFormElement>('#add-expense-form')!.addEventListener('submit', (event) => {
+    modal.element.querySelector<HTMLFormElement>('#add-expense-form')!.addEventListener('submit', async (event) => {
       event.preventDefault()
       const form = event.currentTarget as HTMLFormElement
+      const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]')!
       const data = new FormData(form)
       const categoryId = String(data.get('categoryId'))
       const account = data.get('account') as Account
       const currency = data.get('currency') as Currency
       const originalAmount = Number(data.get('amount'))
+      const date = String(data.get('date'))
       const state = this.#store.getState()
+
+      submitBtn.disabled = true
+      const { amount, usedFallback } = await resolveIlsAmount(originalAmount, currency, date, state.exchangeRate)
+      submitBtn.disabled = false
+      if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
+
       // A manually-typed transaction is considered reviewed the instant it's
       // entered — 'pending' is reserved for imported rows awaiting a look.
       const input: NewTransaction = {
-        date: String(data.get('date')),
+        date,
         merchant: String(data.get('merchant')).trim(),
-        amount: toIls(originalAmount, currency, state.exchangeRate),
+        amount,
         currency,
         originalAmount,
         categoryId,

@@ -78,11 +78,11 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     <section class="band">
       <div class="band__inner">
         <section class="settings-card" aria-label="שער דולר">
-          <h2 class="settings-card__title">שער דולר</h2>
+          <h2 class="settings-card__title">שער דולר (גיבוי)</h2>
           <p class="settings-card__desc">
-            תנועה שנרשמת בדולרים מומרת לשקלים לפי השער הזה ברגע השמירה שלה, לצורך תקציבים,
-            אנליזות וסה"כ זמין — עדכון השער כאן משפיע רק על תנועות חדשות; תנועות דולריות
-            שכבר נשמרו שומרות על השער שהיה בתוקף באותו רגע.
+            תנועה שנרשמת בדולרים מומרת לשקלים לפי השער ההיסטורי האמיתי של אותו תאריך, שנשלף
+            אוטומטית — השער שמוגדר כאן משמש רק כגיבוי, במקרים שבהם השליפה האוטומטית נכשלת
+            (למשל אין חיבור לאינטרנט). עדכון השער כאן משפיע רק על תנועות חדשות שנשמרות בזמן תקלה.
           </p>
           <div class="settings-list__row" id="exchange-rate-row">
             <input type="number" class="budget-input" id="exchange-rate-input" placeholder="שער $ ל-₪" min="0" step="0.01">
