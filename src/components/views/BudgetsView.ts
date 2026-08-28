@@ -219,52 +219,66 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       return rule.lastGeneratedMonth === currentMonth ? 'נוצרה החודש' : 'עדיין לא נוצרה החודש'
     }
 
+    const fieldLabel = (label: string, control: string): string =>
+      `<label class="recurring-card__field"><span class="recurring-card__field-label">${label}</span>${control}</label>`
+
     recurringManagerEl.innerHTML = `
       ${state.recurringRules
         .map(
           (rule) => `
-        <div class="settings-list__row" data-id="${rule.id}">
-          <input type="text" class="name-input" value="${rule.merchant}" placeholder="שם החשבון" data-rule-field="merchant">
-          <input type="number" class="budget-input" value="${rule.amount}" min="0" step="1" title="סכום" data-rule-field="amount">
-          <select class="filter-select" data-rule-field="categoryId">${categoryOptions(rule.categoryId)}</select>
-          <select class="filter-select" data-rule-field="account">${accountOptions(rule.account)}</select>
-          <span class="settings-list__inline-field">
-            <span>כל</span>
-            <input type="number" class="icon-input" value="${rule.intervalMonths}" min="1" max="24" title="כל N חודשים" data-rule-field="intervalMonths">
-            <span>חוד׳ · יום</span>
-            <input type="number" class="icon-input" value="${rule.dayOfMonth}" min="1" max="28" title="יום בחודש" data-rule-field="dayOfMonth">
-          </span>
-          <span class="settings-list__inline-field">
-            <span>תשלומים</span>
-            <input type="number" class="icon-input" value="${rule.totalOccurrences ?? ''}" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים" data-rule-field="totalOccurrences">
-          </span>
-          <span class="settings-list__usage">${statusText(rule)}</span>
-          <label class="toggle">
-            <input type="checkbox" data-rule-field="isActive" ${rule.isActive ? 'checked' : ''}>
-            <span class="toggle__track"><span class="toggle__thumb"></span></span>
-            <span class="toggle__label">פעיל</span>
-          </label>
-          <button type="button" class="btn btn--sm btn--danger" data-delete-recurring="${rule.id}">מחיקה</button>
+        <div class="recurring-card" data-id="${rule.id}">
+          <div class="recurring-card__top">
+            <input type="text" class="name-input recurring-card__name" value="${rule.merchant}" placeholder="שם החשבון" data-rule-field="merchant">
+            <input type="number" class="budget-input recurring-card__amount" value="${rule.amount}" min="0" step="1" title="סכום" data-rule-field="amount">
+            <button type="button" class="btn btn--sm btn--danger" data-delete-recurring="${rule.id}">מחיקה</button>
+          </div>
+          <div class="recurring-card__row">
+            ${fieldLabel('קטגוריה', `<select class="filter-select" data-rule-field="categoryId">${categoryOptions(rule.categoryId)}</select>`)}
+            ${fieldLabel('חשבון', `<select class="filter-select" data-rule-field="account">${accountOptions(rule.account)}</select>`)}
+          </div>
+          <div class="recurring-card__row">
+            ${fieldLabel(
+              'כל כמה חודשים',
+              `<input type="number" class="icon-input" value="${rule.intervalMonths}" min="1" max="24" data-rule-field="intervalMonths">`,
+            )}
+            ${fieldLabel('יום בחודש', `<input type="number" class="icon-input" value="${rule.dayOfMonth}" min="1" max="28" data-rule-field="dayOfMonth">`)}
+            ${fieldLabel(
+              'תשלומים (ריק = מתמשך)',
+              `<input type="number" class="icon-input" value="${rule.totalOccurrences ?? ''}" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים" data-rule-field="totalOccurrences">`,
+            )}
+          </div>
+          <div class="recurring-card__bottom">
+            <span class="settings-list__usage">${statusText(rule)}</span>
+            <label class="toggle">
+              <input type="checkbox" data-rule-field="isActive" ${rule.isActive ? 'checked' : ''}>
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              <span class="toggle__label">פעיל</span>
+            </label>
+          </div>
         </div>
       `,
         )
         .join('')}
-      <div class="settings-list__row settings-list__row--add">
-        <input type="text" class="name-input" id="new-recurring-merchant" placeholder="שם החשבון (למשל: שכר דירה, או ספה)">
-        <input type="number" class="budget-input" id="new-recurring-amount" placeholder="סכום לתשלום" min="0" step="1">
-        <select class="filter-select" id="new-recurring-category">${categoryOptions('')}</select>
-        <select class="filter-select" id="new-recurring-account">${accountOptions('shared')}</select>
-        <span class="settings-list__inline-field">
-          <span>כל</span>
-          <input type="number" class="icon-input" id="new-recurring-interval" value="1" min="1" max="24" title="כל N חודשים">
-          <span>חוד׳ · יום</span>
-          <input type="number" class="icon-input" id="new-recurring-day" value="1" min="1" max="28" title="יום בחודש">
-        </span>
-        <span class="settings-list__inline-field">
-          <span>תשלומים</span>
-          <input type="number" class="icon-input" id="new-recurring-installments" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים">
-        </span>
-        <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ הוספה</button>
+      <div class="recurring-card recurring-card--add">
+        <div class="recurring-card__top">
+          <input type="text" class="name-input recurring-card__name" id="new-recurring-merchant" placeholder="שם החשבון (למשל: שכר דירה, או ספה)">
+          <input type="number" class="budget-input recurring-card__amount" id="new-recurring-amount" placeholder="סכום לתשלום" min="0" step="1">
+        </div>
+        <div class="recurring-card__row">
+          ${fieldLabel('קטגוריה', `<select class="filter-select" id="new-recurring-category">${categoryOptions('')}</select>`)}
+          ${fieldLabel('חשבון', `<select class="filter-select" id="new-recurring-account">${accountOptions('shared')}</select>`)}
+        </div>
+        <div class="recurring-card__row">
+          ${fieldLabel('כל כמה חודשים', `<input type="number" class="icon-input" id="new-recurring-interval" value="1" min="1" max="24">`)}
+          ${fieldLabel('יום בחודש', `<input type="number" class="icon-input" id="new-recurring-day" value="1" min="1" max="28">`)}
+          ${fieldLabel(
+            'תשלומים (ריק = מתמשך)',
+            `<input type="number" class="icon-input" id="new-recurring-installments" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים">`,
+          )}
+        </div>
+        <div class="recurring-card__bottom">
+          <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ הוספת הוצאה קבועה</button>
+        </div>
       </div>
     `
   }
@@ -283,7 +297,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
   recurringManagerEl.addEventListener('change', (event) => {
     const input = (event.target as HTMLElement).closest<HTMLElement>('[data-rule-field]') as HTMLInputElement | HTMLSelectElement | null
     if (!input) return
-    const row = input.closest<HTMLElement>('.settings-list__row')!
+    const row = input.closest<HTMLElement>('.recurring-card')!
     const id = row.dataset.id
     if (!id) return
     const field = input.dataset.ruleField as keyof NewRecurringRule

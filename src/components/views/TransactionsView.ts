@@ -584,9 +584,7 @@ export class TransactionsView {
         if (field === 'person') {
           // A personal account pins the person — editing it directly would desync the two.
           if (tx.account !== 'shared') return
-          const nextPerson = tx.person === 'Reut' ? 'Keren' : 'Reut'
-          this.commitEdit(id, { person: nextPerson })
-          this.promptSaveMappingRule(tx, 'person', nextPerson)
+          this.editPersonCell(cell, tx)
         } else if (field === 'account') {
           this.editAccountCell(cell, tx)
         } else if (field === 'category') {
@@ -675,6 +673,38 @@ export class TransactionsView {
       this.promptSaveMappingRule(tx, 'category', select.value)
       const categoryName = categories.find((c) => c.id === select.value)?.name ?? 'ללא קטגוריה'
       showToast(`הקטגוריה עודכנה ל${categoryName}`, [], 2000)
+    })
+    select.addEventListener('blur', () => {
+      if (!settled) this.renderTable(this.#store.getState())
+    })
+    select.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        settled = true
+        this.renderTable(this.#store.getState())
+      }
+    })
+  }
+
+  /** Matches every other editable cell's click-into-a-dropdown pattern —
+   * used to be a silent click-to-flip toggle, which was the only cell in
+   * the table that didn't visibly show it was editable or what the other
+   * option was. */
+  private editPersonCell(cell: HTMLElement, tx: Transaction): void {
+    cell.classList.add('is-editing')
+    cell.innerHTML = `
+      <select class="cell-input">
+        ${PEOPLE.map((p) => `<option value="${p}" ${p === tx.person ? 'selected' : ''}>${personLabel(p)}</option>`).join('')}
+      </select>
+    `
+    const select = cell.querySelector<HTMLSelectElement>('.cell-input')!
+    select.focus()
+
+    let settled = false
+    select.addEventListener('change', () => {
+      settled = true
+      const nextPerson = select.value as Person
+      this.commitEdit(tx.id, { person: nextPerson })
+      this.promptSaveMappingRule(tx, 'person', nextPerson)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())

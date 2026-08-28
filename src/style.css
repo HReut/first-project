@@ -1316,8 +1316,9 @@ p {
 .hero-card__right {
   flex: 1;
   min-width: 0;
-  padding-inline-start: 32px;
-  border-inline-start: 1px solid var(--border);
+  padding: 20px 24px;
+  background: var(--bg);
+  border-radius: var(--radius-md);
 }
 
 @media (max-width: 720px) {
@@ -1327,10 +1328,7 @@ p {
   }
 
   .hero-card__right {
-    padding-inline-start: 0;
-    padding-top: 20px;
-    border-inline-start: none;
-    border-top: 1px solid var(--border);
+    padding: 18px 20px;
   }
 }
 
@@ -2613,6 +2611,10 @@ p {
   flex-shrink: 0;
 }
 
+.category-dot--warning {
+  background: var(--status-warning);
+}
+
 .person-badge {
   display: inline-flex;
   align-items: center;
@@ -2829,6 +2831,18 @@ p {
   box-shadow: var(--shadow-card);
 }
 
+/* Not-yet-functional sections (behind a "Soon" badge) — flatter and
+ * quieter than an active setting, so the page reads "these don't do
+ * anything yet" at a glance, not just via the small badge text. */
+.settings-card--muted {
+  background: var(--bg);
+  box-shadow: none;
+}
+
+.settings-card--muted .settings-card__title {
+  color: var(--text);
+}
+
 .settings-card__title {
   font-size: 20px;
   letter-spacing: -0.2px;
@@ -2944,6 +2958,78 @@ p {
   width: 44px;
 }
 
+/* ---------- Recurring & installment expense cards ---------- */
+
+.recurring-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.recurring-card--add {
+  border: 1px dashed var(--border);
+  background: transparent;
+}
+
+.recurring-card__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.recurring-card__name {
+  flex: 2;
+  min-width: 160px;
+}
+
+.recurring-card__amount {
+  flex: 0 0 130px;
+}
+
+.recurring-card__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.recurring-card__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 130px;
+}
+
+.recurring-card__field-label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.recurring-card__field .icon-input,
+.recurring-card__field .filter-select {
+  width: 100%;
+}
+
+.recurring-card__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.recurring-card--add .recurring-card__bottom {
+  justify-content: flex-end;
+  border-top: none;
+  padding-top: 0;
+}
+
 /* ---------- Charts ---------- */
 
 .chart-card {
@@ -2974,6 +3060,12 @@ p {
 .chart-empty {
   font-size: 14px;
   color: var(--text);
+}
+
+.chart-card__note {
+  font-size: 13px;
+  color: var(--text);
+  margin: -14px 0 16px;
 }
 
 .highlight-grid {

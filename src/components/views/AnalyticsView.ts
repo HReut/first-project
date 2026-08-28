@@ -153,6 +153,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
       <div class="band__inner">
         <div class="chart-card">
           <h2 class="chart-card__title">${MONTHLY_SERIES_LENGTH} החודשים האחרונים</h2>
+          <p class="chart-card__note">תמיד ${MONTHLY_SERIES_LENGTH} החודשים האחרונים בפועל — לא מושפע מהסינון למעלה.</p>
           <div class="column-chart" id="monthly-chart"></div>
         </div>
       </div>

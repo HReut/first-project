@@ -105,7 +105,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="חשבונות אימייל מחוברים">
+        <section class="settings-card settings-card--muted" aria-label="חשבונות אימייל מחוברים">
           <h2 class="settings-card__title">חשבונות אימייל <span class="soon-badge">בקרוב</span></h2>
           <p class="settings-card__desc">
             כתובת האימייל שיש לעקוב אחריה עבור כל אחד/ת, והאם הלכידה האוטומטית
@@ -119,7 +119,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="כללי סנכרון אימייל אוטומטי">
+        <section class="settings-card settings-card--muted" aria-label="כללי סנכרון אימייל אוטומטי">
           <h2 class="settings-card__title">כללי לכידה אוטומטית <span class="soon-badge">בקרוב</span></h2>
           <p class="settings-card__desc">
             כשמגיעה חשבונית משולח/מילת מפתח תואמים, היא תתמלא מראש בברירות המחדל האלה ותיכנס
