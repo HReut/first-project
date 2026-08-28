@@ -2682,6 +2682,7 @@ p {
 }
 
 .modal {
+  position: relative;
   width: 100%;
   max-width: 420px;
   max-height: 90vh;
@@ -2692,10 +2693,35 @@ p {
   box-shadow: var(--shadow);
 }
 
+.modal__close {
+  position: absolute;
+  top: 16px;
+  inset-inline-end: 16px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text);
+  background: var(--bg);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.modal__close:hover {
+  background: var(--border);
+  color: var(--text-h);
+}
+
 .modal__title {
   font-size: 20px;
   letter-spacing: -0.2px;
   margin-bottom: 18px;
+  padding-inline-end: 36px;
 }
 
 .modal__form {

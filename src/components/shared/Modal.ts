@@ -11,12 +11,14 @@ export class Modal {
     this.#backdrop.className = 'modal-backdrop'
     this.#backdrop.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true"${options.ariaLabel ? ` aria-label="${options.ariaLabel}"` : ''}>
+        <button type="button" class="modal__close" aria-label="סגירה">✕</button>
         ${contentHtml}
       </div>
     `
     this.#backdrop.addEventListener('click', (event) => {
       if (event.target === this.#backdrop) this.close()
     })
+    this.#backdrop.querySelector<HTMLButtonElement>('.modal__close')!.addEventListener('click', () => this.close())
     document.addEventListener('keydown', this.#handleKeydown)
     document.body.appendChild(this.#backdrop)
   }
