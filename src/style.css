@@ -2736,8 +2736,15 @@ p {
 
 .import-preview__table .filter-input,
 .import-preview__table .filter-select {
-  padding: 6px 8px;
   min-width: 100px;
+}
+
+.import-preview__table .filter-input {
+  padding: 6px 8px;
+}
+
+.import-preview__table .filter-select {
+  padding: 6px 8px 6px 26px;
 }
 
 .import-preview__rule-badge {

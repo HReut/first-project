@@ -127,7 +127,7 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
                 <td><input type="number" class="filter-input" data-field="amount" min="0" step="0.01" value="${row.amount !== null ? row.amount.toFixed(2) : ''}"></td>
                 <td>
                   <select class="filter-select" data-field="category">
-                    <option value="" ${row.categoryId === null ? 'selected' : ''}>לא זוהה — ללא קטגוריה</option>
+                    <option value="" ${row.categoryId === null ? 'selected' : ''}>🟠 לא זוהה — ללא קטגוריה</option>
                     ${categories.map((c) => `<option value="${c.id}" ${c.id === row.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
                   </select>
                 </td>
