@@ -157,13 +157,13 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <div class="status-banner panel-card" id="status-banner"></div>
+        <div class="monthly-expenses-card panel-card" id="monthly-expenses"></div>
       </div>
     </section>
 
     <section class="band">
       <div class="band__inner">
-        <div class="monthly-expenses-card panel-card" id="monthly-expenses"></div>
+        <div class="status-banner panel-card" id="status-banner"></div>
       </div>
     </section>
 
