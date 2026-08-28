@@ -19,7 +19,7 @@ function getFileInput(onFile: (file: File) => void): HTMLInputElement {
   if (!fileInput) {
     fileInput = document.createElement('input')
     fileInput.type = 'file'
-    fileInput.accept = '.csv,.xlsx,.xls'
+    fileInput.accept = '.csv,.xlsx,.xls,.pdf'
     fileInput.hidden = true
     document.body.appendChild(fileInput)
   }
@@ -31,9 +31,12 @@ function getFileInput(onFile: (file: File) => void): HTMLInputElement {
   return fileInput
 }
 
-/** Entry point wired to the sidebar's "Import CSV/XLSX" button (via the
- * opa:import-transactions event). PDF isn't supported — table extraction
- * from arbitrary PDF statements is too unreliable to trust silently. */
+/** Entry point wired to the sidebar's "Import CSV/XLSX/PDF" button (via the
+ * opa:import-transactions event). PDF support is a heuristic parser tuned
+ * to Israeli credit-card statement layouts (see pdfImportService.ts) — it's
+ * a best-effort first pass, not a guaranteed-correct extraction, which is
+ * why it (like every import source) always lands on the reviewable preview
+ * grid rather than writing straight to the database. */
 export function openImportFlow(store: Store<AppState>, currentPerson: Person): void {
   const input = getFileInput((file) => {
     handleFile(file, store, currentPerson).catch(() => showToast('לא ניתן היה לקרוא את הקובץ.'))
@@ -45,19 +48,28 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
   const name = file.name.toLowerCase()
   const isCsv = name.endsWith('.csv')
   const isXlsx = name.endsWith('.xlsx') || name.endsWith('.xls')
-  if (!isCsv && !isXlsx) {
-    showToast('ייבוא PDF אינו נתמך — יש לייצא כ-CSV או אקסל במקום.')
+  const isPdf = name.endsWith('.pdf')
+  if (!isCsv && !isXlsx && !isPdf) {
+    showToast('סוג קובץ לא נתמך — ניתן לייבא CSV, אקסל או PDF.')
     return
   }
 
   const state = store.getState()
   const mappingRules = await listMappingRules()
-  const rows = isCsv
-    ? buildImportPreview(await file.text(), state.categories, mappingRules, state.transactions)
-    : buildImportPreviewFromTable(await parseXlsx(file), state.categories, mappingRules, state.transactions)
+  let rows: ParsedImportRow[]
+  if (isCsv) {
+    rows = buildImportPreview(await file.text(), state.categories, mappingRules, state.transactions)
+  } else if (isXlsx) {
+    rows = buildImportPreviewFromTable(await parseXlsx(file), state.categories, mappingRules, state.transactions)
+  } else {
+    // pdfjs-dist is ~850KB — split into its own chunk so it only loads for
+    // people who actually import a PDF, not on every page visit.
+    const { parseCreditCardStatementPdf } = await import('../../data/pdfImportService.ts')
+    rows = buildImportPreviewFromTable(await parseCreditCardStatementPdf(file), state.categories, mappingRules, state.transactions)
+  }
 
   if (rows.length === 0) {
-    showToast('לא נמצאו שורות נתונים בקובץ הזה.')
+    showToast(isPdf ? 'לא זוהו תנועות בקובץ ה-PDF — ודא/י שזה דוח עסקות רגיל.' : 'לא נמצאו שורות נתונים בקובץ הזה.')
     return
   }
 

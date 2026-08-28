@@ -209,7 +209,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
         </div>
         <div class="sidebar__actions">
           <button type="button" class="btn btn--primary btn--block" id="new-transaction-btn">${plusIconMarkup()}<span>תנועה חדשה</span></button>
-          <button type="button" class="btn btn--block" id="import-btn" title="נתמכים קובצי CSV ואקסל (.xlsx) — PDF אינו נתמך">${uploadIconMarkup()}<span>ייבוא CSV/XLSX</span></button>
+          <button type="button" class="btn btn--block" id="import-btn" title="נתמכים קובצי CSV, אקסל (.xlsx) ודוחות עסקות PDF">${uploadIconMarkup()}<span>ייבוא CSV/XLSX/PDF</span></button>
         </div>
         <nav class="sidebar__nav" aria-label="ניווט ראשי">
           ${PRIMARY_VIEWS.map((v) => `<button type="button" class="sidebar__link" data-view="${v.id}">${v.icon()}<span>${v.label}</span></button>`).join('')}
