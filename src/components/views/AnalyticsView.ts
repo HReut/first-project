@@ -3,6 +3,7 @@ import type { AppState, Category, Filters, Person, Transaction } from '../../typ
 import { computeAnalyticsHighlights, computeCategoryBreakdown } from '../../utils/insights.ts'
 import { formatCurrency, formatDateShort, formatPercent, personLabel } from '../../utils/format.ts'
 import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
+import { openCategoryDrilldown } from './CategoryDrilldownModal.ts'
 
 const MONTHLY_SERIES_LENGTH = 6
 const PEOPLE: Person[] = ['Reut', 'Keren']
@@ -55,7 +56,7 @@ function computePersonBreakdown(transactions: Transaction[], categories: Categor
     .filter((row) => row.reut > 0 || row.keren > 0)
 }
 
-export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): void {
+export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
   let period: PeriodPreset | 'custom' = 'this-month'
   let categoryId = 'all'
   let person: Person | 'all' = 'all'
@@ -183,6 +184,19 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
   const personEl = root.querySelector<HTMLElement>('#person-chart')!
   const personTitleEl = root.querySelector<HTMLElement>('#person-chart-title')!
 
+  distributionEl.addEventListener('click', (event) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>('[data-category-id]')
+    if (row) openDrilldown(row.dataset.categoryId!)
+  })
+  personEl.addEventListener('click', (event) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>('[data-category-id]')
+    if (row) openDrilldown(row.dataset.categoryId!)
+  })
+  highlightsGridEl.addEventListener('click', (event) => {
+    const card = (event.target as HTMLElement).closest<HTMLElement>('[data-category-id]')
+    if (card) openDrilldown(card.dataset.categoryId!)
+  })
+
   const periodSelect = root.querySelector<HTMLSelectElement>('#analytics-period-select')!
   const customRangeEl = root.querySelector<HTMLElement>('#analytics-custom-range')!
   const rangeStartInput = root.querySelector<HTMLInputElement>('#analytics-range-start')!
@@ -196,6 +210,12 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     renderDistribution(state)
     renderMonthly(state)
     renderPersonChart(state)
+  }
+
+  function openDrilldown(categoryId: string): void {
+    const category = store.getState().categories.find((c) => c.id === categoryId)
+    if (!category) return
+    openCategoryDrilldown(store, currentPerson, category, resolvedPeriod(), periodLabel(), person)
   }
 
   periodSelect.value = period
@@ -247,29 +267,32 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
         : `<span class="${delta.amount <= 0 ? 'is-good' : 'is-bad'}">${delta.amount <= 0 ? '↓' : '↑'} ${delta.percent === null ? formatCurrency(Math.abs(delta.amount)) : formatPercent(Math.abs(delta.percent))}</span> לעומת התקופה הקודמת`
 
     const cards = [
-      { label: 'סה"כ הוצאה', value: formatCurrency(highlights.totalAmount), sub: deltaSub },
+      { label: 'סה"כ הוצאה', value: formatCurrency(highlights.totalAmount), sub: deltaSub, categoryId: null as string | null },
       {
         label: 'קטגוריה מובילה',
         value: highlights.topCategory ? `${highlights.topCategory.category.icon} ${highlights.topCategory.category.name}` : '—',
         sub: highlights.topCategory ? formatCurrency(highlights.topCategory.amount) : '',
+        categoryId: highlights.topCategory?.category.id ?? null,
       },
       {
         label: 'בית העסק המוביל',
         value: highlights.topMerchant?.merchant ?? '—',
         sub: highlights.topMerchant ? `${formatCurrency(highlights.topMerchant.amount)} ב-${highlights.topMerchant.count} תנועות` : '',
+        categoryId: null,
       },
       {
         label: 'התנועה הגדולה ביותר',
         value: highlights.biggestTransaction ? formatCurrency(highlights.biggestTransaction.originalAmount, highlights.biggestTransaction.currency) : '—',
         sub: highlights.biggestTransaction ? `${highlights.biggestTransaction.merchant} · ${formatDateShort(highlights.biggestTransaction.date)}` : '',
+        categoryId: null,
       },
-      { label: 'תנועות', value: String(highlights.transactionCount), sub: `ממוצע ${formatCurrency(highlights.avgAmount)}` },
+      { label: 'תנועות', value: String(highlights.transactionCount), sub: `ממוצע ${formatCurrency(highlights.avgAmount)}`, categoryId: null },
     ]
 
     highlightsGridEl.innerHTML = cards
       .map(
         (card) => `
-        <div class="highlight-card">
+        <div class="highlight-card${card.categoryId ? ' highlight-card--clickable' : ''}" ${card.categoryId ? `data-category-id="${card.categoryId}" title="לחיצה לפירוט"` : ''}>
           <span class="highlight-card__label">${card.label}</span>
           <span class="highlight-card__value">${card.value}</span>
           ${card.sub ? `<span class="highlight-card__sub">${card.sub}</span>` : ''}
@@ -297,7 +320,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
         if (!category) return ''
         const width = (entry.amount / max) * 100
         return `
-          <div class="hbar-row" title="${category.name}: ${formatCurrency(entry.amount)}">
+          <div class="hbar-row hbar-row--clickable" data-category-id="${category.id}" title="${category.name}: ${formatCurrency(entry.amount)} — לחיצה לפירוט">
             <span class="hbar-row__label">${category.icon} ${category.name}</span>
             <span class="hbar-row__track">
               <span class="hbar-row__fill" style="width: ${width}%; background: ${category.colorCode}"></span>
@@ -346,7 +369,7 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>): v
     personEl.innerHTML = rows
       .map(
         (row) => `
-      <div class="grouped-bar-row">
+      <div class="grouped-bar-row grouped-bar-row--clickable" data-category-id="${row.category.id}" title="לחיצה לפירוט">
         <span class="grouped-bar-row__label">${row.category.icon} ${row.category.name}</span>
         <span class="grouped-bar-row__bars">
           <span class="mini-bar" title="${personLabel('Reut')}: ${formatCurrency(row.reut)}">

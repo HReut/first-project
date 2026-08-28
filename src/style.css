@@ -3081,6 +3081,16 @@ p {
   background: var(--bg);
   border-radius: var(--radius-md);
   padding: 16px 18px;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.highlight-card--clickable {
+  cursor: pointer;
+}
+
+.highlight-card--clickable:hover {
+  box-shadow: var(--shadow-card);
+  transform: translateY(-1px);
 }
 
 .highlight-card__label {
@@ -3171,6 +3181,10 @@ p {
   background: var(--bg);
 }
 
+.hbar-row--clickable {
+  cursor: pointer;
+}
+
 .hbar-row__label {
   font-size: 13px;
   color: var(--text-h);
@@ -3254,6 +3268,17 @@ p {
   grid-template-columns: 160px 1fr;
   align-items: center;
   gap: 12px;
+  border-radius: 8px;
+  padding: 4px 6px;
+  transition: background 0.15s;
+}
+
+.grouped-bar-row--clickable {
+  cursor: pointer;
+}
+
+.grouped-bar-row--clickable:hover {
+  background: var(--bg);
 }
 
 .grouped-bar-row__label {

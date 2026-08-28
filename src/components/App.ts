@@ -453,7 +453,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       mountOverviewView(viewEls.overview, store, currentPerson)
       mountTransactionsView(viewEls.transactions, store, currentPerson)
       mountBudgetsView(viewEls.budgets, store, currentPerson)
-      mountAnalyticsView(viewEls.analytics, store)
+      mountAnalyticsView(viewEls.analytics, store, currentPerson)
       settingsHasUnsavedChanges = mountSettingsView(viewEls.settings, store, currentPerson)
       mountHistoryView(viewEls.history, store)
       mountSavingsView(viewEls.savings, store, currentPerson)
