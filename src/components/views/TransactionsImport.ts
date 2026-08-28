@@ -100,11 +100,22 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
         סקור/י ותקן/י כל דבר לפני הייבוא — אלה נשמרות רק לאחר אישור.
         ${duplicateCount > 0 ? `${duplicateCount} שורות נראות כאילו כבר קיימות בנתונים שלך, ומתחילות לא מסומנות.` : ''}
       </p>
+      <div class="bulk-bar" id="import-bulk-bar" hidden>
+        <span class="bulk-bar__count" id="import-bulk-count"></span>
+        <select class="filter-select filter-select--sm" id="import-bulk-category">
+          <option value="">הגדרת קטגוריה לנבחרים…</option>
+          ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
+        </select>
+        <select class="filter-select filter-select--sm" id="import-bulk-person">
+          <option value="">הגדרת מי שילם/ה לנבחרים…</option>
+          ${PEOPLE.map((p) => `<option value="${p}">${personLabel(p)}</option>`).join('')}
+        </select>
+      </div>
       <div class="import-preview__table-wrap">
         <table class="import-preview__table">
           <thead>
             <tr>
-              <th></th>
+              <th><input type="checkbox" id="import-select-all" aria-label="בחירת הכול"></th>
               <th>תאריך</th>
               <th>בית עסק</th>
               <th>סכום</th>
@@ -156,6 +167,63 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
   modal.element.querySelector<HTMLButtonElement>('#import-confirm')!.addEventListener('click', () => {
     void submitImport(modal, store, currentPerson)
   })
+
+  wireBulkSelection(modal)
+}
+
+/** Batch imports (a full statement) can be dozens of rows — selecting a
+ * bunch of them and setting one category/person in one go is much faster
+ * than fixing each row individually. Reuses the "include" checkbox as the
+ * selection mechanism: a row you wouldn't include isn't one you'd want to
+ * bulk-edit either. Purely a DOM-level convenience — nothing commits until
+ * "ייבוא נבחרים", same as any other edit in this grid. */
+function wireBulkSelection(modal: Modal): void {
+  const selectAll = modal.element.querySelector<HTMLInputElement>('#import-select-all')!
+  const bulkBar = modal.element.querySelector<HTMLElement>('#import-bulk-bar')!
+  const bulkCountEl = modal.element.querySelector<HTMLElement>('#import-bulk-count')!
+  const bulkCategorySelect = modal.element.querySelector<HTMLSelectElement>('#import-bulk-category')!
+  const bulkPersonSelect = modal.element.querySelector<HTMLSelectElement>('#import-bulk-person')!
+  const rowCheckboxes = () => Array.from(modal.element.querySelectorAll<HTMLInputElement>('tbody [data-field="include"]'))
+
+  function syncBulkBar(): void {
+    const checked = rowCheckboxes().filter((cb) => cb.checked)
+    bulkBar.hidden = checked.length < 2
+    bulkCountEl.textContent = `${checked.length} נבחרו`
+    const all = rowCheckboxes()
+    selectAll.checked = all.length > 0 && all.every((cb) => cb.checked)
+    selectAll.indeterminate = checked.length > 0 && checked.length < all.length
+  }
+
+  selectAll.addEventListener('change', () => {
+    rowCheckboxes().forEach((cb) => (cb.checked = selectAll.checked))
+    syncBulkBar()
+  })
+
+  modal.element.querySelector<HTMLElement>('tbody')!.addEventListener('change', (event) => {
+    if ((event.target as HTMLElement).closest('[data-field="include"]')) syncBulkBar()
+  })
+
+  bulkCategorySelect.addEventListener('change', () => {
+    if (!bulkCategorySelect.value) return
+    for (const cb of rowCheckboxes()) {
+      if (!cb.checked) continue
+      const select = cb.closest('tr')!.querySelector<HTMLSelectElement>('[data-field="category"]')!
+      select.value = bulkCategorySelect.value
+    }
+    bulkCategorySelect.value = ''
+  })
+
+  bulkPersonSelect.addEventListener('change', () => {
+    if (!bulkPersonSelect.value) return
+    for (const cb of rowCheckboxes()) {
+      if (!cb.checked) continue
+      const select = cb.closest('tr')!.querySelector<HTMLSelectElement>('[data-field="person"]')!
+      select.value = bulkPersonSelect.value
+    }
+    bulkPersonSelect.value = ''
+  })
+
+  syncBulkBar()
 }
 
 async function submitImport(modal: Modal, store: Store<AppState>, currentPerson: Person): Promise<void> {

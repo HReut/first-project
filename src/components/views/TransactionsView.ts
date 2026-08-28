@@ -1078,8 +1078,15 @@ export class TransactionsView {
     table.dataset.hideColumns = Array.from(this.#hiddenColumns).join(' ')
 
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" class="transactions__empty">אין תנועות התואמות לסינון הזה.</td></tr>`
-      cardsContainer.innerHTML = `<p class="transactions__empty">אין תנועות התואמות לסינון הזה.</p>`
+      // Data most often "goes missing" because the Period filter (defaults
+      // to this month) is hiding it, not because it doesn't exist — say so
+      // explicitly instead of leaving that to guesswork.
+      const emptyMessage =
+        state.transactions.length > 0
+          ? 'אין תנועות התואמות לסינון הזה — נסה/י להרחיב את התקופה (למשל ל"כל הזמנים") או לנקות סינונים אחרים.'
+          : 'עדיין אין תנועות — הוסף/י תנועה או ייבא/י קובץ.'
+      tbody.innerHTML = `<tr><td colspan="8" class="transactions__empty">${emptyMessage}</td></tr>`
+      cardsContainer.innerHTML = `<p class="transactions__empty">${emptyMessage}</p>`
     } else if (this.#groupBy !== 'none') {
       const groups = this.buildGroups(rows, categoryById)
       tbody.innerHTML = groups.map((g) => this.renderGroupRows(g, categoryById)).join('')
