@@ -3,6 +3,7 @@ import type { AppState, Category, NewTransaction, Person } from '../../types.ts'
 import { buildImportPreview, buildImportPreviewFromTable, commitImportedRows, parseXlsx, type ParsedImportRow } from '../../data/importService.ts'
 import { listMappingRules, normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
 import { createCategory } from '../../data/categoriesRepo.ts'
+import { computeReviewedStatus } from '../../utils/insights.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
 import { personLabel } from '../../utils/format.ts'
@@ -228,6 +229,7 @@ function wireBulkSelection(modal: Modal): void {
 
 async function submitImport(modal: Modal, store: Store<AppState>, currentPerson: Person): Promise<void> {
   const uncategorized = await ensureUncategorizedCategory(store)
+  const state = store.getState()
 
   const rowsEl = Array.from(modal.element.querySelectorAll<HTMLTableRowElement>('tbody tr'))
   const inputs: NewTransaction[] = []
@@ -252,6 +254,8 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
     }
     // Imported rows have no way to know which pocket paid — default to shared,
     // same as a manual entry the user hasn't touched the Account field on.
+    // Reviewing already happened in this preview grid before confirming —
+    // 'pending' would just mean re-reviewing the same row a second time.
     inputs.push({
       date,
       merchant,
@@ -261,7 +265,7 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
       categoryId,
       person: person || currentPerson,
       account: 'shared',
-      status: 'pending',
+      status: computeReviewedStatus(state.transactions, state.categories, categoryId, state.budgetLimitOverrides),
       source: 'import',
     })
   }

@@ -47,9 +47,15 @@ export function saveLocalCategories(categories: Category[]): void {
 export function loadLocalTransactions(categories: Category[]): Transaction[] {
   const existing = read<Transaction[]>(KEYS.transactions)
   if (existing) {
-    // Backfill for local data saved before the `account`/`currency` fields existed.
-    if (existing.some((tx) => !tx.account || !tx.currency)) {
-      const migrated = existing.map((tx) => ({ ...tx, account: tx.account ?? 'shared', currency: tx.currency ?? 'ILS', originalAmount: tx.originalAmount ?? tx.amount }))
+    // Backfill for local data saved before the `account`/`currency`/`createdAt` fields existed.
+    if (existing.some((tx) => !tx.account || !tx.currency || !tx.createdAt)) {
+      const migrated = existing.map((tx) => ({
+        ...tx,
+        account: tx.account ?? 'shared',
+        currency: tx.currency ?? 'ILS',
+        originalAmount: tx.originalAmount ?? tx.amount,
+        createdAt: tx.createdAt ?? new Date(tx.date).toISOString(),
+      }))
       write(KEYS.transactions, migrated)
       return migrated
     }

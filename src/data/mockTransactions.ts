@@ -119,6 +119,7 @@ export function createMockTransactions(categories: Category[], referenceDate = n
           originalAmount: amount,
           status,
           source: isEmailAuto ? 'email_auto' : 'manual',
+          createdAt: isoDate(date),
         })
       }
     }

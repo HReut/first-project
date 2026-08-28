@@ -16,6 +16,7 @@ function fromRow(row: TransactionRow): Transaction {
     account: row.account,
     status: row.status,
     source: row.source,
+    createdAt: row.created_at,
   }
 }
 
@@ -50,7 +51,7 @@ export async function createTransaction(input: NewTransaction): Promise<Transact
     return fromRow(data as TransactionRow)
   }
   const transactions = loadLocalTransactions(loadLocalCategories())
-  const created: Transaction = { ...input, id: crypto.randomUUID() }
+  const created: Transaction = { ...input, id: crypto.randomUUID(), createdAt: new Date().toISOString() }
   saveLocalTransactions([created, ...transactions])
   return created
 }
@@ -66,7 +67,7 @@ export async function createTransactions(inputs: NewTransaction[]): Promise<Tran
     return (data as TransactionRow[]).map(fromRow)
   }
   const transactions = loadLocalTransactions(loadLocalCategories())
-  const created: Transaction[] = inputs.map((input) => ({ ...input, id: crypto.randomUUID() }))
+  const created: Transaction[] = inputs.map((input) => ({ ...input, id: crypto.randomUUID(), createdAt: new Date().toISOString() }))
   saveLocalTransactions([...created, ...transactions])
   return created
 }

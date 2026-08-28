@@ -27,7 +27,7 @@ import { openImportFlow } from './TransactionsImport.ts'
 
 const BUDGET_CARD_LIMIT = 3
 
-type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'account' | 'amount'
+type SortColumn = 'date' | 'merchant' | 'category' | 'person' | 'account' | 'amount' | 'createdAt'
 type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'this-year' | 'all' | 'custom'
 type GroupBy = 'none' | 'category' | 'person' | 'month'
 const PEOPLE: Person[] = ['Reut', 'Keren']
@@ -90,6 +90,8 @@ function sortTransactions(rows: Transaction[], sort: { column: SortColumn; direc
         return ACCOUNT_LABEL[a.account].localeCompare(ACCOUNT_LABEL[b.account]) * dir
       case 'amount':
         return (a.amount - b.amount) * dir
+      case 'createdAt':
+        return a.createdAt < b.createdAt ? -dir : a.createdAt > b.createdAt ? dir : 0
     }
   })
 }
@@ -245,6 +247,7 @@ export class TransactionsView {
                   <option value="category">קטגוריה</option>
                   <option value="person">משלם/ת</option>
                   <option value="amount">סכום</option>
+                  <option value="createdAt">נוספו לאחרונה</option>
                 </select>
               </label>
               <button type="button" class="icon-btn" id="sort-direction-btn" aria-label="החלפת כיוון המיון"></button>

@@ -40,9 +40,14 @@ export interface Transaction {
   account: Account
   status: TransactionStatus
   source: TransactionSource
+  /** When this row was actually saved to the household's data — not the
+   * transaction's own `date`. Lets "recently added" sort by when it was
+   * entered/imported rather than when the purchase happened, useful right
+   * after a big import to see what just came in. Server-generated. */
+  createdAt: string
 }
 
-export type NewTransaction = Omit<Transaction, 'id'>
+export type NewTransaction = Omit<Transaction, 'id' | 'createdAt'>
 
 export interface EmailSyncRule {
   id: string

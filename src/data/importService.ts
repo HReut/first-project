@@ -182,8 +182,13 @@ export function buildImportPreviewFromTable(
   const columnMapping = detectColumnMapping(headerRow)
   const categoryByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c]))
   const ruleByMerchant = new Map(mappingRules.map((rule) => [rule.merchantKey, rule]))
-  // date+amount+normalized-merchant -> already in the household's data.
-  const existingKeys = new Set(existingTransactions.map((tx) => `${tx.date}|${tx.amount}|${normalizeMerchantKey(tx.merchant)}`))
+  // date+amount+normalized-merchant -> already in the household's data — and
+  // added to as rows are processed below, so two identical-looking rows
+  // *within this same file* also flag each other, not just rows that match
+  // something already saved. Covers re-importing the same statement (or an
+  // overlapping range from a second export) in one go, not just across
+  // separate import sessions.
+  const seenKeys = new Set(existingTransactions.map((tx) => `${tx.date}|${tx.amount}|${normalizeMerchantKey(tx.merchant)}`))
 
   return dataRows.map((cells) => {
     const merchant = (columnMapping.merchant !== undefined ? cells[columnMapping.merchant] : '')?.trim() ?? ''
@@ -200,6 +205,10 @@ export function buildImportPreviewFromTable(
     const date = columnMapping.date !== undefined ? parseDate(cells[columnMapping.date]) : null
     const amount = columnMapping.amount !== undefined ? parseAmount(cells[columnMapping.amount]) : null
 
+    const key = date !== null && amount !== null && merchant !== '' ? `${date}|${amount}|${normalizeMerchantKey(merchant)}` : null
+    const isPossibleDuplicate = key !== null && seenKeys.has(key)
+    if (key !== null) seenKeys.add(key)
+
     return {
       date,
       merchant,
@@ -207,7 +216,7 @@ export function buildImportPreviewFromTable(
       categoryId,
       person,
       matchedRule: !categoryFromFile && !personFromFile && !!rule,
-      isPossibleDuplicate: date !== null && amount !== null && merchant !== '' && existingKeys.has(`${date}|${amount}|${normalizeMerchantKey(merchant)}`),
+      isPossibleDuplicate,
     }
   })
 }
