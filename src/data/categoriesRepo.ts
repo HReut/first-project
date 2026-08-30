@@ -1,7 +1,10 @@
 import { supabase } from '../lib/supabaseClient.ts'
-import type { Category, NewCategory } from '../types.ts'
+import type { Store } from '../state/store.ts'
+import type { AppState, Category, NewCategory } from '../types.ts'
 import type { CategoryRow } from '../types/database.ts'
 import { loadLocalCategories, saveLocalCategories } from './localStore.ts'
+
+export const UNCATEGORIZED_NAME = 'ללא קטגוריה'
 
 function fromRow(row: CategoryRow): Category {
   return { id: row.id, name: row.name, colorCode: row.color_code, icon: row.icon, monthlyBudgetLimit: row.monthly_budget_limit }
@@ -70,4 +73,19 @@ export async function deleteCategory(id: string): Promise<void> {
     return
   }
   saveLocalCategories(loadLocalCategories().filter((category) => category.id !== id))
+}
+
+/** Finds (or lazily creates) the category a row falls back to when nothing
+ * detects/picks one — category_id is not null in the schema, so there must
+ * be somewhere real to point at. Self-healing: works whether or not the
+ * 0003 migration's seed insert has been run yet. Shared by CSV/PDF import
+ * (TransactionsImport.ts) and leaving a recurring rule's category
+ * unset (BudgetsView.ts). */
+export async function ensureUncategorizedCategory(store: Store<AppState>): Promise<Category> {
+  const existing = store.getState().categories.find((c) => c.name.toLowerCase() === UNCATEGORIZED_NAME.toLowerCase())
+  if (existing) return existing
+
+  const created = await createCategory({ name: UNCATEGORIZED_NAME, colorCode: '#9ca3af', icon: '❔', monthlyBudgetLimit: null })
+  store.setState({ categories: [...store.getState().categories, created] })
+  return created
 }

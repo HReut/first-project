@@ -1,18 +1,14 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, Category, NewTransaction, Person } from '../../types.ts'
+import type { AppState, NewTransaction, Person } from '../../types.ts'
 import { buildImportPreview, buildImportPreviewFromTable, commitImportedRows, parseXlsx, type ParsedImportRow } from '../../data/importService.ts'
 import { listMappingRules, normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
-import { createCategory } from '../../data/categoriesRepo.ts'
+import { ensureUncategorizedCategory } from '../../data/categoriesRepo.ts'
 import { computeReviewedStatus } from '../../utils/insights.ts'
 import { Modal } from '../shared/Modal.ts'
 import { showToast } from '../shared/Toast.ts'
 import { formatCurrency, personLabel } from '../../utils/format.ts'
 
 const PEOPLE: Person[] = ['Reut', 'Keren']
-/** Must match the category's `name` in the database exactly (see the
- * category-rename SQL run alongside the Hebrew localization) — this is how
- * an existing "Uncategorized" row is found instead of creating a duplicate. */
-const UNCATEGORIZED_NAME = 'ללא קטגוריה'
 
 let fileInput: HTMLInputElement | null = null
 
@@ -78,19 +74,6 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
   }
 
   openPreviewModal(rows, store, currentPerson, declaredTotal)
-}
-
-/** Finds (or lazily creates) the category imported rows fall back to when
- * nothing detects one — category_id is not null in the schema, so there
- * must be somewhere real to point at. Self-healing: works whether or not
- * the 0003 migration's seed insert has been run yet. */
-async function ensureUncategorizedCategory(store: Store<AppState>): Promise<Category> {
-  const existing = store.getState().categories.find((c) => c.name.toLowerCase() === UNCATEGORIZED_NAME.toLowerCase())
-  if (existing) return existing
-
-  const created = await createCategory({ name: UNCATEGORIZED_NAME, colorCode: '#9ca3af', icon: '❔', monthlyBudgetLimit: null })
-  store.setState({ categories: [...store.getState().categories, created] })
-  return created
 }
 
 function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, currentPerson: Person, declaredTotal: number | null): void {

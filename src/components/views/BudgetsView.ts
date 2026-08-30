@@ -4,7 +4,7 @@ import { computeCategoryBreakdown, resolveBudgetLimitForMonth, resolveBudgetLimi
 import { formatCurrency } from '../../utils/format.ts'
 import { budgetStatus } from '../../utils/budget.ts'
 import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
-import { updateCategory } from '../../data/categoriesRepo.ts'
+import { ensureUncategorizedCategory, updateCategory } from '../../data/categoriesRepo.ts'
 import { createBudgetLimitOverride, deleteBudgetLimitOverridesForCategory } from '../../data/budgetLimitOverridesRepo.ts'
 import { createRecurringRule, deleteRecurringRule, updateRecurringRule } from '../../data/recurringRulesRepo.ts'
 import { generateDueRecurringTransactions } from '../../data/generateRecurringTransactions.ts'
@@ -324,7 +324,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
           <input type="number" class="budget-input recurring-card__amount" id="new-recurring-amount" placeholder="סכום לתשלום" min="0" step="1">
         </div>
         <div class="recurring-card__row">
-          ${fieldLabel('קטגוריה', `<select class="filter-select" id="new-recurring-category">${categoryOptions('')}</select>`)}
+          ${fieldLabel('קטגוריה', `<select class="filter-select" id="new-recurring-category"><option value="">❔ ללא קטגוריה</option>${categoryOptions('')}</select>`)}
           ${fieldLabel('חשבון', `<select class="filter-select" id="new-recurring-account">${accountOptions('shared')}</select>`)}
         </div>
         <div class="recurring-card__row">
@@ -475,30 +475,38 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
 
       const merchant = merchantInput.value.trim()
       const amount = Number(amountInput.value)
-      if (!merchant || !Number.isFinite(amount) || amount <= 0 || !categorySelect.value) return
+      if (!merchant || !Number.isFinite(amount) || amount <= 0) {
+        showToast('הזן/י שם, סכום וקטגוריה תחילה.')
+        return
+      }
       const account = accountSelect.value as Account
 
-      createRecurringRule({
-        merchant,
-        amount,
-        categoryId: categorySelect.value,
-        account,
-        person: PERSON_FOR_ACCOUNT[account] ?? 'Reut',
-        intervalMonths: Math.max(1, Number(intervalInput.value) || 1),
-        anchorMonth: `${anchorYearSelect.value}-${anchorMonthSelect.value.padStart(2, '0')}`,
-        dayOfMonth: Math.min(28, Math.max(1, Number(dayInput.value) || 1)),
-        totalOccurrences: installmentsInput.value.trim() === '' ? null : Math.max(1, Number(installmentsInput.value)),
-        isActive: true,
-      }).then((created) => {
-        const { recurringRules } = store.getState()
-        store.setState({ recurringRules: [...recurringRules, created] })
-        logRecurring('created', `נוסף כלל חוזר: ${created.merchant} (${formatCurrency(created.amount)})`)
-        // A backdated start month backfills every missed month right away,
-        // instead of waiting for the next app load to catch up one at a time.
-        void generateDueRecurringTransactions(store).then(() => {
+      void (async () => {
+        try {
+          const categoryId = categorySelect.value || (await ensureUncategorizedCategory(store)).id
+          const created = await createRecurringRule({
+            merchant,
+            amount,
+            categoryId,
+            account,
+            person: PERSON_FOR_ACCOUNT[account] ?? 'Reut',
+            intervalMonths: Math.max(1, Number(intervalInput.value) || 1),
+            anchorMonth: `${anchorYearSelect.value}-${anchorMonthSelect.value.padStart(2, '0')}`,
+            dayOfMonth: Math.min(28, Math.max(1, Number(dayInput.value) || 1)),
+            totalOccurrences: installmentsInput.value.trim() === '' ? null : Math.max(1, Number(installmentsInput.value)),
+            isActive: true,
+          })
+          const { recurringRules } = store.getState()
+          store.setState({ recurringRules: [...recurringRules, created] })
+          logRecurring('created', `נוסף כלל חוזר: ${created.merchant} (${formatCurrency(created.amount)})`)
+          // A backdated start month backfills every missed month right away,
+          // instead of waiting for the next app load to catch up one at a time.
+          await generateDueRecurringTransactions(store)
           if (created.anchorMonth < currentMonthKey()) showToast('התנועות שהוחמצו נוצרו אוטומטית — ניתן לבדוק אותן בעמוד התנועות.', [], 3000)
-        })
-      })
+        } catch {
+          showToast('לא ניתן היה להוסיף את ההוצאה הקבועה — נסה/י שוב.')
+        }
+      })()
     }
   })
 
