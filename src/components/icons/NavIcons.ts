@@ -93,22 +93,6 @@ export function shieldCheckIconMarkup(): string {
   `.trim()
 }
 
-export function helpIconMarkup(): string {
-  return `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8" />
-      <path
-        d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.2c-.9.4-1 .9-1 1.7"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-      />
-      <circle cx="12" cy="16.6" r="1.05" fill="currentColor" />
-    </svg>
-  `.trim()
-}
-
 export function searchIconMarkup(): string {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">

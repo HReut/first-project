@@ -1,5 +1,9 @@
 import type { Currency, ExchangeRate } from '../types.ts'
-import { fetchHistoricalUsdToIls } from '../data/exchangeRateApi.ts'
+import { fetchHistoricalRateToIls } from '../data/exchangeRateApi.ts'
+
+function fallbackRateFor(currency: 'USD' | 'EUR', exchangeRate: ExchangeRate | null): number | null {
+  return currency === 'USD' ? (exchangeRate?.usdToIls ?? null) : (exchangeRate?.eurToIls ?? null)
+}
 
 /** Converts an amount in `currency` into its ILS-equivalent using the
  * household's manually-set rate — the fallback path when the live
@@ -8,7 +12,7 @@ import { fetchHistoricalUsdToIls } from '../data/exchangeRateApi.ts'
  * blocking the save entirely. */
 export function toIls(amount: number, currency: Currency, exchangeRate: ExchangeRate | null): number {
   if (currency === 'ILS') return amount
-  return amount * (exchangeRate?.usdToIls ?? 1)
+  return amount * (fallbackRateFor(currency, exchangeRate) ?? 1)
 }
 
 export interface IlsConversionResult {
@@ -19,16 +23,16 @@ export interface IlsConversionResult {
   usedFallback: boolean
 }
 
-/** The primary conversion path: looks up the real historical USD->ILS rate
- * for the transaction's own date, so the ILS-equivalent reflects what the
- * rate actually was that day rather than whatever the household's manual
- * Settings rate happens to be set to right now. Only falls back to that
- * manual rate (then 1:1) when the live lookup fails — offline, API down,
- * or a date the source has no data for. */
+/** The primary conversion path: looks up the real historical USD/EUR->ILS
+ * rate for the transaction's own date, so the ILS-equivalent reflects what
+ * the rate actually was that day rather than whatever the household's
+ * manual Settings rate happens to be set to right now. Only falls back to
+ * that manual rate (then 1:1) when the live lookup fails — offline, API
+ * down, or a date the source has no data for. */
 export async function resolveIlsAmount(originalAmount: number, currency: Currency, date: string, fallbackRate: ExchangeRate | null): Promise<IlsConversionResult> {
   if (currency === 'ILS') return { amount: originalAmount, usedFallback: false }
 
-  const historicalRate = await fetchHistoricalUsdToIls(date)
+  const historicalRate = await fetchHistoricalRateToIls(currency, date)
   if (historicalRate !== null) return { amount: originalAmount * historicalRate, usedFallback: false }
 
   return { amount: toIls(originalAmount, currency, fallbackRate), usedFallback: true }

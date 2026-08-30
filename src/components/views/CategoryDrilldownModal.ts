@@ -112,7 +112,7 @@ export function openCategoryDrilldown(
             ${PEOPLE.map((p) => `<option value="${p}" ${p === tx.person ? 'selected' : ''}>${personLabel(p)}</option>`).join('')}
           </select>
         </td>
-        <td><input type="number" class="filter-input" data-field="amount" min="0" step="0.01" value="${tx.originalAmount.toFixed(2)}"></td>
+        <td><input type="number" class="filter-input${tx.originalAmount < 0 ? ' is-credit' : ''}" data-field="amount" step="0.01" value="${tx.originalAmount.toFixed(2)}"></td>
         <td><button type="button" class="btn btn--sm btn--danger" data-delete-tx="${tx.id}">מחיקה</button></td>
       </tr>
     `,
@@ -143,7 +143,8 @@ export function openCategoryDrilldown(
     let patch: Partial<NewTransaction>
     if (field === 'amount') {
       const value = Number(input.value)
-      if (Number.isNaN(value) || value < 0) {
+      // Negative is valid — a real refund/credit row, not an error.
+      if (Number.isNaN(value) || value === 0) {
         renderRows()
         return
       }
@@ -155,7 +156,7 @@ export function openCategoryDrilldown(
         renderRows()
         return
       }
-      if (tx.currency === 'USD') {
+      if (tx.currency !== 'ILS') {
         const { amount, usedFallback } = await resolveIlsAmount(tx.originalAmount, tx.currency, input.value, store.getState().exchangeRate)
         patch = { date: input.value, amount }
         if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')

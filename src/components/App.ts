@@ -24,7 +24,6 @@ import {
   chartIconMarkup,
   coinsIconMarkup,
   gearIconMarkup,
-  helpIconMarkup,
   historyIconMarkup,
   homeIconMarkup,
   listIconMarkup,
@@ -42,7 +41,6 @@ import { mountAnalyticsView } from './views/AnalyticsView.ts'
 import { mountSettingsView } from './views/SettingsView.ts'
 import { mountHistoryView } from './views/HistoryView.ts'
 import { mountSavingsView } from './views/SavingsView.ts'
-import { mountPlaceholderView } from './views/PlaceholderView.ts'
 
 interface NavEntry {
   id: View
@@ -54,15 +52,14 @@ interface NavEntry {
 const PRIMARY_VIEWS: NavEntry[] = [
   { id: 'overview', label: 'סקירה כללית', shortLabel: 'סקירה', icon: homeIconMarkup },
   { id: 'transactions', label: 'תנועות', shortLabel: 'תנועות', icon: listIconMarkup },
+  { id: 'analytics', label: 'אנליזות', shortLabel: 'אנליזות', icon: chartIconMarkup },
   { id: 'budgets', label: 'תקציבים', shortLabel: 'תקציבים', icon: targetIconMarkup },
   { id: 'savings', label: 'חסכונות', shortLabel: 'חסכונות', icon: coinsIconMarkup },
-  { id: 'analytics', label: 'אנליזות', shortLabel: 'אנליזות', icon: chartIconMarkup },
 ]
 
 const MANAGEMENT_VIEWS: NavEntry[] = [
   { id: 'history', label: 'היסטוריה', shortLabel: 'היסטוריה', icon: historyIconMarkup },
   { id: 'settings', label: 'הגדרות ואוטומציות', shortLabel: 'הגדרות', icon: gearIconMarkup },
-  { id: 'help', label: 'מרכז עזרה', shortLabel: 'עזרה', icon: helpIconMarkup },
 ]
 
 const ALL_VIEWS = [...PRIMARY_VIEWS, ...MANAGEMENT_VIEWS]
@@ -285,7 +282,6 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           <section id="view-analytics" hidden></section>
           <section id="view-history" hidden></section>
           <section id="view-settings" hidden></section>
-          <section id="view-help" hidden></section>
         </main>
       </div>
     </div>
@@ -304,7 +300,6 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     analytics: root.querySelector<HTMLElement>('#view-analytics')!,
     history: root.querySelector<HTMLElement>('#view-history')!,
     settings: root.querySelector<HTMLElement>('#view-settings')!,
-    help: root.querySelector<HTMLElement>('#view-help')!,
   }
   const navButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.sidebar__link, .bottom-nav__link'))
   let mounted = false
@@ -465,12 +460,6 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       settingsHasUnsavedChanges = mountSettingsView(viewEls.settings, store, currentPerson)
       mountHistoryView(viewEls.history, store)
       mountSavingsView(viewEls.savings, store, currentPerson)
-      mountPlaceholderView(viewEls.help, {
-        eyebrow: 'ניהול',
-        title: 'מרכז עזרה',
-        subtitle: 'מדריכים ותשובות שיעזרו לך להפיק את המרב מ-Opa! Tulik.',
-        icon: '💬',
-      })
     }
 
     applyViewVisibility(state)

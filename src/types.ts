@@ -1,5 +1,5 @@
 export type Person = 'Reut' | 'Keren'
-export type Currency = 'ILS' | 'USD'
+export type Currency = 'ILS' | 'USD' | 'EUR'
 /** Which "pocket" a transaction was paid from. Personal accounts are still
  * household expenses paid individually — see computeSplitBalance() in
  * insights.ts for how each value affects the Reut/Keren settlement math. */
@@ -126,14 +126,17 @@ export interface AccountBalance {
   setAt: string // ISO yyyy-mm-dd
 }
 
-/** The household-set $→₪ rate used to convert a USD transaction's
- * originalAmount into its ILS-equivalent amount at the moment it's
- * created/edited — see Transaction.amount. Recalibrating this only affects
- * transactions saved afterward; past ones keep whatever rate was in effect
- * when they were entered, same "historical FX, not mark-to-market" logic
- * real accounting uses. */
+/** The household-set fallback rates (₪ per $ and ₪ per €) used to convert a
+ * USD/EUR transaction's originalAmount into its ILS-equivalent amount when
+ * the live historical lookup fails — see resolveIlsAmount() in
+ * src/utils/currency.ts. Recalibrating this only affects transactions saved
+ * afterward; past ones keep whatever rate was in effect when they were
+ * entered, same "historical FX, not mark-to-market" logic real accounting
+ * uses. Either rate can be null if that currency's fallback was never set —
+ * setting one doesn't require setting the other. */
 export interface ExchangeRate {
-  usdToIls: number
+  usdToIls: number | null
+  eurToIls: number | null
   setAt: string // ISO yyyy-mm-dd
 }
 
@@ -236,7 +239,7 @@ export interface Filters {
   search: string
 }
 
-export type View = 'overview' | 'transactions' | 'budgets' | 'savings' | 'analytics' | 'history' | 'settings' | 'help'
+export type View = 'overview' | 'transactions' | 'budgets' | 'savings' | 'analytics' | 'history' | 'settings'
 
 export type LoadStatus = 'loading' | 'ready' | 'error'
 

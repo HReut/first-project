@@ -15,7 +15,7 @@ export function personLabel(person: Person): string {
 /** Defaults to ILS since that's what `Transaction.amount` (the
  * ILS-equivalent every total/budget/chart sums) is always denominated in —
  * pass `currency` explicitly only when displaying a transaction's own
- * originalAmount, which may be USD. */
+ * originalAmount, which may be USD or EUR. */
 export function formatCurrency(amount: number, currency: Currency = 'ILS'): string {
   return new Intl.NumberFormat(LOCALE, {
     style: 'currency',

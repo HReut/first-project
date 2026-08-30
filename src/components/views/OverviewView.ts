@@ -1,16 +1,14 @@
 import type { Store } from '../../state/store.ts'
 import type { Account, AppState, BudgetLimitOverride, Category, Person, Transaction } from '../../types.ts'
-import { computeCategoryBreakdown, computeReviewedStatus, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
+import { computeCategoryBreakdown, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveSettledAfter } from '../../utils/activity.ts'
 import { formatCurrency, formatDateShort, personLabel } from '../../utils/format.ts'
-import { updateTransaction } from '../../data/transactionsRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
 import { showToast } from '../shared/Toast.ts'
 
 const RECENT_ACTIVITY_LIMIT = 5
-const REVIEW_CENTER_LIMIT = 6
 const BUDGET_PROGRESS_LIMIT = 3
 const EXPENSE_LIST_LIMIT = 6
 const TREND_MONTHS = 4
@@ -169,12 +167,6 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <div class="review-center" id="review-center" aria-label="בבדיקה"></div>
-      </div>
-    </section>
-
-    <section class="band">
-      <div class="band__inner">
         <div class="budget-summary" id="budget-summary" aria-label="התקדמות תקציב חודשי"></div>
       </div>
     </section>
@@ -197,7 +189,6 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   `
 
   const statusBannerEl = root.querySelector<HTMLElement>('#status-banner')!
-  const reviewEl = root.querySelector<HTMLElement>('#review-center')!
   const budgetEl = root.querySelector<HTMLElement>('#budget-summary')!
   const monthlyExpensesEl = root.querySelector<HTMLElement>('#monthly-expenses')!
   const insightsBandEl = root.querySelector<HTMLElement>('#insights-band')!
@@ -260,29 +251,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
       })
   })
 
-  reviewEl.addEventListener('click', (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mark-reviewed-id]')
-    if (!button) return
-    const id = button.dataset.markReviewedId!
-    const state = store.getState()
-    const tx = state.transactions.find((t) => t.id === id)
-    if (!tx) return
-    button.disabled = true
-    updateTransaction(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId, state.budgetLimitOverrides) })
-      .then((updated) => {
-        const { transactions } = store.getState()
-        store.setState({ transactions: transactions.map((t) => (t.id === id ? updated : t)) })
-      })
-      .catch(() => {
-        button.disabled = false
-      })
-  })
-
   function render(state: AppState): void {
     renderReminder(state)
     renderStatusBanner(state)
     renderMonthlyExpenses(state)
-    renderReviewCenter(state)
     renderBudgetSummary(state)
     renderInsightsRow(state)
     renderActivity(state)
@@ -369,7 +341,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
       </div>
     `
 
-    if (total === 0) {
+    if (total <= 0) {
       monthlyExpensesEl.innerHTML = `${header}<p class="chart-empty">לא נרשמו הוצאות החודש עדיין.</p>`
       return
     }
@@ -389,7 +361,10 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     // rotated -90deg (in CSS) so offset 0 sits at 12 o'clock.
     let cumulative = 0
     const arcs = slices.map((slice) => {
-      const percent = (slice.amount / total) * 100
+      // Clamped at 0 — a category with net refunds this month has a
+      // negative amount, which can't be drawn as a negative-size arc; its
+      // legend row still shows the real (negative) amount below.
+      const percent = Math.max(0, (slice.amount / total) * 100)
       const arc = { ...slice, percent, offset: -cumulative }
       cumulative += percent
       return arc
@@ -466,55 +441,6 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         row?.classList.remove('is-active')
       })
     })
-  }
-
-  function renderReviewCenter(state: AppState): void {
-    const categoryById = new Map(state.categories.map((category) => [category.id, category]))
-    const pending = scopedTransactions(state)
-      .filter((tx) => tx.status === 'pending')
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
-
-    reviewEl.classList.toggle('review-center--compact', pending.length === 0)
-
-    if (pending.length === 0) {
-      reviewEl.innerHTML = `
-        <div class="review-center__header">
-          <h2 class="review-center__title">מרכז בדיקה</h2>
-          <a class="card-link" href="#transactions">צפייה בהכול ←</a>
-        </div>
-        <div class="review-center__empty-state">
-          <span class="review-center__empty-check" aria-hidden="true">✓</span>
-          <span>הכול מעודכן — אין דבר שממתין לך.</span>
-        </div>
-      `
-      return
-    }
-
-    const visible = pending.slice(0, REVIEW_CENTER_LIMIT)
-    reviewEl.innerHTML = `
-      <div class="review-center__header">
-        <h2 class="review-center__title">מרכז בדיקה</h2>
-        <div class="review-center__header-right">
-          <span class="review-center__count">${pending.length} ממתינות לאישור</span>
-          <a class="card-link" href="#transactions">צפייה בהכול ←</a>
-        </div>
-      </div>
-      <div class="review-center__rows">
-        ${visible
-          .map(
-            (tx) => `
-          <div class="review-row">
-            <span class="review-row__date">${formatDateShort(tx.date)}</span>
-            ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
-            ${renderCategoryBadge(categoryById.get(tx.categoryId))}
-            <span class="review-row__amount">${formatCurrency(tx.originalAmount, tx.currency)}</span>
-            <button type="button" class="btn btn--approve" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button>
-          </div>
-        `,
-          )
-          .join('')}
-      </div>
-    `
   }
 
   function renderBudgetSummary(state: AppState): void {

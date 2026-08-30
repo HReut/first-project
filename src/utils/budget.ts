@@ -12,5 +12,8 @@ export function budgetStatus(spent: number, limit: number | null): BudgetStatus 
 
 export function budgetPercent(spent: number, limit: number | null): number {
   if (limit === null || limit <= 0) return 0
-  return Math.min(100, (spent / limit) * 100)
+  // Clamped at 0 too — a category with net refunds this month (more
+  // credited back than spent) has negative `spent`, which shouldn't render
+  // as a negative-width progress bar.
+  return Math.max(0, Math.min(100, (spent / limit) * 100))
 }

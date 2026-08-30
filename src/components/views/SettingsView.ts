@@ -77,17 +77,22 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="שער דולר">
-          <h2 class="settings-card__title">שער דולר (גיבוי)</h2>
+        <section class="settings-card" aria-label="שערי גיבוי">
+          <h2 class="settings-card__title">שערי גיבוי (דולר / יורו)</h2>
           <p class="settings-card__desc">
-            תנועה שנרשמת בדולרים מומרת לשקלים לפי השער ההיסטורי האמיתי של אותו תאריך, שנשלף
-            אוטומטית — השער שמוגדר כאן משמש רק כגיבוי, במקרים שבהם השליפה האוטומטית נכשלת
-            (למשל אין חיבור לאינטרנט). עדכון השער כאן משפיע רק על תנועות חדשות שנשמרות בזמן תקלה.
+            תנועה שנרשמת בדולרים או ביורו מומרת לשקלים לפי השער ההיסטורי האמיתי של אותו תאריך,
+            שנשלף אוטומטית — השערים כאן משמשים רק כגיבוי, במקרים שבהם השליפה האוטומטית נכשלת
+            (למשל אין חיבור לאינטרנט). עדכון שער כאן משפיע רק על תנועות חדשות שנשמרות בזמן תקלה.
           </p>
-          <div class="settings-list__row" id="exchange-rate-row">
-            <input type="number" class="budget-input" id="exchange-rate-input" placeholder="שער $ ל-₪" min="0" step="0.01">
-            <button type="button" class="btn btn--primary btn--sm" id="exchange-rate-save">שמירת שער</button>
-            <span class="settings-list__usage" id="exchange-rate-status"></span>
+          <div class="settings-list__row" id="exchange-rate-row-usd">
+            <input type="number" class="budget-input" id="exchange-rate-input-usd" placeholder="שער $ ל-₪" min="0" step="0.01">
+            <button type="button" class="btn btn--primary btn--sm" id="exchange-rate-save-usd">שמירת שער $</button>
+            <span class="settings-list__usage" id="exchange-rate-status-usd"></span>
+          </div>
+          <div class="settings-list__row" id="exchange-rate-row-eur">
+            <input type="number" class="budget-input" id="exchange-rate-input-eur" placeholder="שער € ל-₪" min="0" step="0.01">
+            <button type="button" class="btn btn--primary btn--sm" id="exchange-rate-save-eur">שמירת שער €</button>
+            <span class="settings-list__usage" id="exchange-rate-status-eur"></span>
           </div>
         </section>
       </div>
@@ -179,36 +184,52 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       })
   })
 
-  // ---------- Exchange rate ----------
+  // ---------- Exchange rates (USD + EUR) ----------
 
-  const exchangeRateInput = root.querySelector<HTMLInputElement>('#exchange-rate-input')!
-  const exchangeRateStatusEl = root.querySelector<HTMLElement>('#exchange-rate-status')!
+  const exchangeRateInputUsd = root.querySelector<HTMLInputElement>('#exchange-rate-input-usd')!
+  const exchangeRateStatusUsdEl = root.querySelector<HTMLElement>('#exchange-rate-status-usd')!
+  const exchangeRateInputEur = root.querySelector<HTMLInputElement>('#exchange-rate-input-eur')!
+  const exchangeRateStatusEurEl = root.querySelector<HTMLElement>('#exchange-rate-status-eur')!
 
   function renderExchangeRate(state: AppState): void {
     const rate = state.exchangeRate
-    if (document.activeElement !== exchangeRateInput) {
-      exchangeRateInput.value = rate ? String(rate.usdToIls) : ''
+    if (document.activeElement !== exchangeRateInputUsd) {
+      exchangeRateInputUsd.value = rate?.usdToIls ? String(rate.usdToIls) : ''
     }
-    exchangeRateStatusEl.textContent = rate ? `נכון ל-${formatDateShort(rate.setAt)} — כרגע $1 = ${formatCurrency(rate.usdToIls)}` : 'עדיין לא הוגדר — תנועות בדולר יומרו 1:1 עד שיוגדר'
+    exchangeRateStatusUsdEl.textContent =
+      rate?.usdToIls ? `נכון ל-${formatDateShort(rate.setAt)} — כרגע $1 = ${formatCurrency(rate.usdToIls)}` : 'עדיין לא הוגדר — תנועות בדולר יומרו 1:1 עד שיוגדר'
+
+    if (document.activeElement !== exchangeRateInputEur) {
+      exchangeRateInputEur.value = rate?.eurToIls ? String(rate.eurToIls) : ''
+    }
+    exchangeRateStatusEurEl.textContent =
+      rate?.eurToIls ? `נכון ל-${formatDateShort(rate.setAt)} — כרגע €1 = ${formatCurrency(rate.eurToIls)}` : 'עדיין לא הוגדר — תנועות ביורו יומרו 1:1 עד שיוגדר'
   }
 
-  root.querySelector<HTMLButtonElement>('#exchange-rate-save')!.addEventListener('click', () => {
-    const raw = exchangeRateInput.value.trim()
-    const usdToIls = Number(raw)
-    if (!raw || !Number.isFinite(usdToIls) || usdToIls <= 0) {
+  /** Saving one currency's rate carries the other currency's current value
+   * forward unchanged — see setExchangeRate()'s doc comment for why. */
+  function saveExchangeRate(currency: 'usd' | 'eur', input: HTMLInputElement): void {
+    const raw = input.value.trim()
+    const value = Number(raw)
+    if (!raw || !Number.isFinite(value) || value <= 0) {
       showToast('הזן/י שער תקין תחילה.')
       return
     }
     const today = new Date().toISOString().slice(0, 10)
-    setExchangeRate({ usdToIls, setAt: today })
+    const current = store.getState().exchangeRate
+    const next = currency === 'usd' ? { usdToIls: value, eurToIls: current?.eurToIls ?? null } : { usdToIls: current?.usdToIls ?? null, eurToIls: value }
+    setExchangeRate({ ...next, setAt: today })
       .then((exchangeRate) => {
         store.setState({ exchangeRate })
         showToast('השער נשמר.', [], 2500)
       })
       .catch(() => {
-        showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0011?')
+        showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0012?')
       })
-  })
+  }
+
+  root.querySelector<HTMLButtonElement>('#exchange-rate-save-usd')!.addEventListener('click', () => saveExchangeRate('usd', exchangeRateInputUsd))
+  root.querySelector<HTMLButtonElement>('#exchange-rate-save-eur')!.addEventListener('click', () => saveExchangeRate('eur', exchangeRateInputEur))
 
   // ---------- Category manager ----------
 
@@ -461,9 +482,11 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     const balanceInput = root.querySelector<HTMLInputElement>('#account-balance-input')
     const savedBalance = store.getState().accountBalance
     const balanceChanged = !!balanceInput && balanceInput.value.trim() !== (savedBalance ? String(savedBalance.startingBalance) : '')
-    const rateInput = root.querySelector<HTMLInputElement>('#exchange-rate-input')
     const savedRate = store.getState().exchangeRate
-    const rateChanged = !!rateInput && rateInput.value.trim() !== (savedRate ? String(savedRate.usdToIls) : '')
-    return !!newCategoryName || !!newRuleKeyword || balanceChanged || rateChanged || categoryFieldsDirty || categorySavesInFlight > 0
+    const rateInputUsd = root.querySelector<HTMLInputElement>('#exchange-rate-input-usd')
+    const rateUsdChanged = !!rateInputUsd && rateInputUsd.value.trim() !== (savedRate?.usdToIls ? String(savedRate.usdToIls) : '')
+    const rateInputEur = root.querySelector<HTMLInputElement>('#exchange-rate-input-eur')
+    const rateEurChanged = !!rateInputEur && rateInputEur.value.trim() !== (savedRate?.eurToIls ? String(savedRate.eurToIls) : '')
+    return !!newCategoryName || !!newRuleKeyword || balanceChanged || rateUsdChanged || rateEurChanged || categoryFieldsDirty || categorySavesInFlight > 0
   }
 }

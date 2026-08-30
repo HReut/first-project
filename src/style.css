@@ -2509,6 +2509,13 @@ tr.tx-row--pending td {
   font-variant-numeric: tabular-nums;
 }
 
+/* A refund/credit row (negative amount) — money coming back, styled apart
+   from a normal charge so it doesn't read as just another expense. */
+.is-credit,
+.tx-card__amount.is-credit {
+  color: var(--status-good);
+}
+
 .tx-card__footer {
   display: flex;
   align-items: center;
@@ -2870,6 +2877,11 @@ tr.tx-row--pending td {
 
 .import-preview__row--duplicate {
   background: color-mix(in srgb, var(--status-warning) 6%, transparent);
+}
+
+.import-preview__amount--credit {
+  color: var(--status-good);
+  font-weight: 600;
 }
 
 /* ---------- Toggle switch ---------- */

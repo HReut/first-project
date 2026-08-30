@@ -3,7 +3,7 @@
 // camelCase domain types in src/types.ts.
 
 export type PersonRow = 'Reut' | 'Keren'
-export type CurrencyRow = 'ILS' | 'USD'
+export type CurrencyRow = 'ILS' | 'USD' | 'EUR'
 export type AccountRow = 'reut_personal' | 'keren_personal' | 'shared'
 export type TransactionStatusRow = 'pending' | 'on_budget' | 'exceeded'
 export type TransactionSourceRow = 'manual' | 'email_auto' | 'import' | 'recurring'
@@ -68,7 +68,8 @@ export interface AccountBalanceRow {
 
 export interface ExchangeRateRow {
   id: string
-  usd_to_ils: number
+  usd_to_ils: number | null
+  eur_to_ils: number | null
   set_at: string
   updated_at: string
 }

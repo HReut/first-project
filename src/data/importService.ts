@@ -125,11 +125,14 @@ export function detectColumnMapping(headers: string[]): Partial<Record<Canonical
   return mapping
 }
 
+// Sign is preserved (not Math.abs'd) — a negative amount is a real
+// refund/credit row, imported as a real negative-amount transaction rather
+// than dropped. See ParsedImportRow.amount.
 function parseAmount(raw: string | undefined): number | null {
   if (!raw?.trim()) return null
   const cleaned = raw.replace(/[^\d.,-]/g, '').replace(/,/g, '')
   const value = Number(cleaned)
-  return Number.isFinite(value) ? Math.abs(value) : null
+  return Number.isFinite(value) ? value : null
 }
 
 /** Accepts ISO (yyyy-mm-dd), dd/mm/yyyy (common in Israeli bank/card

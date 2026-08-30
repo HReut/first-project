@@ -4,7 +4,7 @@ import { filterTransactions } from '../../utils/filters.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel, personLabel } from '../../utils/format.ts'
 import { computeReviewedStatus, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveIlsAmount } from '../../utils/currency.ts'
-import { fetchHistoricalUsdToIls } from '../../data/exchangeRateApi.ts'
+import { fetchHistoricalRateToIls } from '../../data/exchangeRateApi.ts'
 import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
@@ -33,7 +33,8 @@ type GroupBy = 'none' | 'category' | 'person' | 'month'
 const PEOPLE: Person[] = ['Reut', 'Keren']
 const STATUS_VALUES: TransactionStatus[] = ['pending', 'on_budget', 'exceeded']
 const ACCOUNT_VALUES: Account[] = ['shared', 'reut_personal', 'keren_personal']
-const CURRENCY_VALUES: Currency[] = ['ILS', 'USD']
+const CURRENCY_VALUES: Currency[] = ['ILS', 'USD', 'EUR']
+const CURRENCY_LABEL: Record<Currency, string> = { ILS: '₪ שקל', USD: '$ דולר', EUR: '€ יורו' }
 /** The person a personal account locks the transaction to — 'shared' has no
  * forced person, since either person may have physically paid it. */
 const PERSON_FOR_ACCOUNT: Partial<Record<Account, Person>> = { reut_personal: 'Reut', keren_personal: 'Keren' }
@@ -681,7 +682,7 @@ export class TransactionsView {
     cell.classList.add('is-editing')
     const inputType = field === 'amount' ? 'number' : field === 'date' ? 'date' : 'text'
     const currentValue = field === 'amount' ? tx.originalAmount.toFixed(2) : field === 'date' ? tx.date : tx.merchant
-    cell.innerHTML = `<input type="${inputType}" class="cell-input" value="${currentValue}" ${field === 'amount' ? 'min="0" step="0.01"' : ''}>`
+    cell.innerHTML = `<input type="${inputType}" class="cell-input" value="${currentValue}" ${field === 'amount' ? 'step="0.01"' : ''}>`
     const input = cell.querySelector<HTMLInputElement>('.cell-input')!
     input.focus()
     input.select()
@@ -692,7 +693,8 @@ export class TransactionsView {
       settled = true
       if (field === 'amount') {
         const value = Number(input.value)
-        if (Number.isNaN(value) || value < 0) {
+        // Negative is valid — a real refund/credit row, not an error.
+        if (Number.isNaN(value) || value === 0) {
           this.renderTable(this.#store.getState())
           return
         }
@@ -707,7 +709,7 @@ export class TransactionsView {
           this.renderTable(this.#store.getState())
           return
         }
-        if (tx.currency === 'USD') {
+        if (tx.currency !== 'ILS') {
           const { amount, usedFallback } = await resolveIlsAmount(tx.originalAmount, tx.currency, input.value, this.#store.getState().exchangeRate)
           this.stageEdit(tx.id, { date: input.value, amount })
           if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
@@ -976,12 +978,12 @@ export class TransactionsView {
           </label>
           <label class="filter-group">
             <span class="filter-group__label">סכום</span>
-            <input type="number" class="filter-input" name="amount" min="0" step="0.01" value="${existing ? existing.originalAmount.toFixed(2) : ''}" required>
+            <input type="number" class="filter-input" name="amount" step="0.01" value="${existing ? existing.originalAmount.toFixed(2) : ''}" required>
           </label>
           <label class="filter-group">
             <span class="filter-group__label">מטבע</span>
             <select class="filter-select" name="currency" required>
-              ${CURRENCY_VALUES.map((c) => `<option value="${c}" ${c === (existing?.currency ?? 'ILS') ? 'selected' : ''}>${c === 'ILS' ? '₪ שקל' : '$ דולר'}</option>`).join('')}
+              ${CURRENCY_VALUES.map((c) => `<option value="${c}" ${c === (existing?.currency ?? 'ILS') ? 'selected' : ''}>${CURRENCY_LABEL[c]}</option>`).join('')}
             </select>
             <span class="filter-group__hint" id="rate-preview" hidden></span>
           </label>
@@ -1018,23 +1020,25 @@ export class TransactionsView {
     syncPersonToAccount()
     accountSelect.addEventListener('change', syncPersonToAccount)
 
-    // Shows the real historical rate that'll actually be used for a USD
-    // entry, before submitting — so it's not a black box.
+    // Shows the real historical rate that'll actually be used for a
+    // USD/EUR entry, before submitting — so it's not a black box.
     const currencySelect = modal.element.querySelector<HTMLSelectElement>('select[name="currency"]')!
     const dateInput = modal.element.querySelector<HTMLInputElement>('input[name="date"]')!
     const ratePreviewEl = modal.element.querySelector<HTMLElement>('#rate-preview')!
     let ratePreviewToken = 0
     const updateRatePreview = () => {
-      if (currencySelect.value !== 'USD' || !dateInput.value) {
+      const currency = currencySelect.value as Currency
+      if (currency === 'ILS' || !dateInput.value) {
         ratePreviewEl.hidden = true
         return
       }
       const token = ++ratePreviewToken
       ratePreviewEl.hidden = false
       ratePreviewEl.textContent = 'טוען שער…'
-      fetchHistoricalUsdToIls(dateInput.value).then((rate) => {
+      const symbol = currency === 'USD' ? '$' : '€'
+      fetchHistoricalRateToIls(currency, dateInput.value).then((rate) => {
         if (token !== ratePreviewToken) return // a newer request superseded this one
-        ratePreviewEl.textContent = rate !== null ? `1$ = ${formatCurrency(rate)} בתאריך זה` : 'לא נמצא שער לתאריך זה — ישמש שער הגיבוי'
+        ratePreviewEl.textContent = rate !== null ? `1${symbol} = ${formatCurrency(rate)} בתאריך זה` : 'לא נמצא שער לתאריך זה — ישמש שער הגיבוי'
       })
     }
     updateRatePreview()
@@ -1293,7 +1297,7 @@ export class TransactionsView {
         <td class="editable-cell" data-field="category" data-id="${tx.id}">${renderCategoryBadge(categoryById.get(tx.categoryId))}</td>
         <td class="editable-cell" data-field="person" data-id="${tx.id}">${renderPersonBadge(tx.person)}</td>
         <td class="editable-cell" data-field="account" data-id="${tx.id}">${renderAccountBadge(tx.account)}</td>
-        <td class="is-numeric editable-cell" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.originalAmount, tx.currency)}</td>
+        <td class="is-numeric editable-cell${tx.originalAmount < 0 ? ' is-credit' : ''}" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.originalAmount, tx.currency)}</td>
         <td>${tx.status === 'pending' ? `<button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button>` : ''}</td>
       </tr>
     `
@@ -1307,7 +1311,7 @@ export class TransactionsView {
         <div class="tx-card__body">
           <div class="tx-card__top">
             ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
-            <span class="tx-card__amount">${formatCurrency(tx.originalAmount, tx.currency)}</span>
+            <span class="tx-card__amount${tx.originalAmount < 0 ? ' is-credit' : ''}">${formatCurrency(tx.originalAmount, tx.currency)}</span>
           </div>
           <div class="tx-card__meta">
             ${renderCategoryBadge(categoryById.get(tx.categoryId))}

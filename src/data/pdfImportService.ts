@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { TextItem } from 'pdfjs-dist/types/src/display/api.js'
-import type { Category } from '../types.ts'
+import type { Category, Person } from '../types.ts'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
 
@@ -13,27 +13,32 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
  * real קטגוריה column). Turns either into a string[][] table shaped like a
  * CSV/XLSX import, so it flows through the exact same
  * buildImportPreviewFromTable() review/dedupe/category-mapping pipeline as
- * any other import. Nothing here is written to the database; it only
- * produces rows for the reviewable preview grid.
+ * any other import — that's also where merchant->category/person "memory"
+ * (mapping rules from past edits) gets applied, so nothing extra is needed
+ * here for that. Nothing here is written to the database; it only produces
+ * rows for the reviewable preview grid.
  *
  * The approach: reconstruct each page's text into visual lines (pdf.js
  * hands back text fragments in paint order, not reading order), then treat
- * any line containing both a date and a positive amount as a transaction
- * row — deliberately format-tolerant rather than matching a rigid column
- * layout, since this only needs to be a reasonable first pass the user
- * reviews before confirming. When a קטגוריה column is present, its Max
- * category label is matched against the household's actual category names
- * (via MAX_CATEGORY_ALIASES below) so the preview grid comes in
- * pre-categorized where the guess is confident, and left "not detected"
- * otherwise. Also extracts the statement's own stated total ("סה"כ ...")
- * so the preview screen can flag a mismatch against what was actually
- * parsed — see PdfImportResult.declaredTotal and the reconciliation banner
- * in TransactionsImport.ts. Known limitations: skips negative amounts
- * (refunds/cancelled fees), since this app has no way to represent a
- * negative transaction yet; a merchant name that wraps onto a second
- * visual line loses that second line; and MAX_CATEGORY_ALIASES only covers
- * category labels seen so far — an unrecognized one just leaves the
- * category blank rather than guessing.
+ * any line containing both a date and an amount as a transaction row —
+ * deliberately format-tolerant rather than matching a rigid column layout,
+ * since this only needs to be a reasonable first pass the user reviews
+ * before confirming. When a קטגוריה column is present, its Max category
+ * label is matched against the household's actual category names (via
+ * MAX_CATEGORY_ALIASES below) so the preview grid comes in pre-categorized
+ * where the guess is confident, and left "not detected" otherwise. Also
+ * extracts the statement's own stated total ("סה"כ ...") so the preview
+ * screen can flag a mismatch against what was actually parsed — see
+ * PdfImportResult.declaredTotal and the reconciliation banner in
+ * TransactionsImport.ts. A negative amount (refund/reversal) is kept as a
+ * real negative-amount row rather than skipped — see CARD_SUFFIX_TO_PERSON
+ * for how the cardholder (and so "מי שילם/ה") is detected. Known
+ * limitations: a merchant name that wraps onto a second visual line loses
+ * that second line; MAX_CATEGORY_ALIASES only covers category labels seen
+ * so far — an unrecognized one just leaves the category blank rather than
+ * guessing; and a statement covering more than one card wouldn't have every
+ * row correctly attributed, since cardholder detection is document-wide,
+ * not per-row (see detectCardholder).
  */
 
 const DATE_RE = /\b(\d{1,2})[./](\d{1,2})[./](\d{2,4})\b/
@@ -89,6 +94,29 @@ const SKIP_IF_CONTAINS = [
   'העסקאות שמוצגות',
 ]
 
+// Card last-4 -> household member — lets the parser fill in "מי שילם/ה"
+// automatically from whichever card the statement is for, instead of
+// leaving every imported row on the current user by default. Extend as
+// more cards are added to the household.
+const CARD_SUFFIX_TO_PERSON: Record<string, Person> = {
+  '4022': 'Reut',
+  '3925': 'Keren',
+}
+const CARD_SUFFIX_RE = new RegExp(`\\b(${Object.keys(CARD_SUFFIX_TO_PERSON).join('|')})\\b`)
+
+/** Scans the whole document (not just transaction rows) for a known card's
+ * last 4 digits — usually printed once in the statement header ("כרטיס
+ * ...4022") but sometimes repeated per row too, so a document-wide search
+ * catches either layout. Assumes one card per statement; the preview grid
+ * lets any row be corrected by hand if that's ever wrong. */
+function detectCardholder(lines: string[]): Person | null {
+  for (const line of lines) {
+    const match = line.match(CARD_SUFFIX_RE)
+    if (match) return CARD_SUFFIX_TO_PERSON[match[1]]
+  }
+  return null
+}
+
 function isoDate(day: string, month: string, yearRaw: string): string | null {
   const year = yearRaw.length === 2 ? `20${yearRaw}` : yearRaw
   if (!/^\d{1,2}$/.test(day) || !/^\d{1,2}$/.test(month) || !/^\d{4}$/.test(year)) return null
@@ -122,17 +150,26 @@ function linesFromItems(items: { str: string; x: number; y: number }[]): string[
     .filter(Boolean)
 }
 
+/** Reads every page and concatenates their reconstructed lines. A single
+ * page failing to extract (corrupt content stream, an image-only page,
+ * etc.) is skipped rather than aborting the whole file — otherwise one bad
+ * page in a multi-page statement would silently drop every transaction on
+ * every other page too. */
 async function extractLines(file: File): Promise<string[]> {
   const buffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
   const lines: string[] = []
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum)
-    const content = await page.getTextContent()
-    const items = content.items
-      .filter((it): it is TextItem => 'str' in it && it.str.trim() !== '')
-      .map((it) => ({ str: it.str, x: it.transform[4] as number, y: it.transform[5] as number }))
-    lines.push(...linesFromItems(items))
+    try {
+      const page = await pdf.getPage(pageNum)
+      const content = await page.getTextContent()
+      const items = content.items
+        .filter((it): it is TextItem => 'str' in it && it.str.trim() !== '')
+        .map((it) => ({ str: it.str, x: it.transform[4] as number, y: it.transform[5] as number }))
+      lines.push(...linesFromItems(items))
+    } catch (err) {
+      console.warn(`Could not read page ${pageNum} of ${pdf.numPages} — skipping it, continuing with the rest.`, err)
+    }
   }
   return lines
 }
@@ -155,25 +192,24 @@ export interface PdfImportResult {
   table: string[][]
   /** The statement's own stated total ("סה"כ ..."), when one could be found
    * — the last such line wins, since a multi-page statement's real total
-   * sits at the bottom, after any subtotals — adjusted down by any
-   * skipped negative-amount lines (refunds/cancelled fees) so a statement
-   * with a reversal on it doesn't produce a false-alarm mismatch, since
-   * this app doesn't import those but the statement's own total nets them
-   * in. Lets the preview screen show "does what we parsed actually add up
-   * to what the statement says it should" instead of silently trusting the
-   * extraction — see TransactionsImport.ts's reconciliation banner. */
+   * sits at the bottom, after any subtotals. Lets the preview screen show
+   * "does what we parsed actually add up to what the statement says it
+   * should" instead of silently trusting the extraction — see
+   * TransactionsImport.ts's reconciliation banner. Since refund/credit rows
+   * are now imported as real negative amounts (not skipped), no separate
+   * adjustment is needed here — the parsed rows already net the same way
+   * the statement's own total does. */
   declaredTotal: number | null
 }
 
-function linesToTable(lines: string[], categories: Category[]): PdfImportResult {
+function linesToTable(lines: string[], categories: Category[], cardholder: Person | null): PdfImportResult {
   // Presence of a קטגוריה header column changes how a row's residual text
   // (after date/amount/type removal) is split — with a category column, a
   // known Max category label is peeled off the end of it; without one,
   // that entire residue is just the merchant name.
   const hasCategoryColumn = lines.some((line) => line.includes('קטגוריה'))
-  const rows: string[][] = [['תאריך', 'תיאור', 'קטגוריה', 'סכום']]
+  const rows: string[][] = [['תאריך', 'תיאור', 'קטגוריה', 'סכום', 'מי שילם']]
   let declaredTotal: number | null = null
-  let skippedNegativesTotal = 0
 
   for (const rawLine of lines) {
     if (rawLine.includes('סה"כ')) {
@@ -197,17 +233,15 @@ function linesToTable(lines: string[], categories: Category[]): PdfImportResult 
 
     // The rightmost/last amount on the line is the actual charge — takes
     // over an earlier "original transaction amount" column when both are
-    // present (they're usually identical anyway).
+    // present (they're usually identical anyway). Kept even when negative
+    // (a refund/reversal) — see CARD_SUFFIX_TO_PERSON's doc comment above.
     const lastAmount = amounts[amounts.length - 1]
     const amountValue = Number(lastAmount.replace(/,/g, ''))
-    if (!Number.isFinite(amountValue) || amountValue <= 0) {
-      if (Number.isFinite(amountValue) && amountValue < 0) skippedNegativesTotal += Math.abs(amountValue)
-      continue
-    }
+    if (!Number.isFinite(amountValue) || amountValue === 0) continue
 
     let residue = line.replace(dateMatch[0], ' ')
     for (const amount of amounts) residue = residue.replace(amount, ' ')
-    residue = residue.replace(/[₪$]/g, ' ') // currency symbol left behind once its digits are stripped
+    residue = residue.replace(/[₪$€]/g, ' ') // currency symbol left behind once its digits are stripped
     residue = residue.replace(PRORATED_CHARGE_RE, ' ')
     for (const word of NOISE_WORDS) residue = residue.split(word).join(' ')
     residue = residue.replace(/\s+/g, ' ').trim()
@@ -222,13 +256,14 @@ function linesToTable(lines: string[], categories: Category[]): PdfImportResult 
       }
     }
 
-    rows.push([iso, merchant, categoryName, lastAmount.replace(/,/g, '')])
+    rows.push([iso, merchant, categoryName, lastAmount.replace(/,/g, ''), cardholder ?? ''])
   }
 
-  return { table: rows, declaredTotal: declaredTotal !== null ? declaredTotal - skippedNegativesTotal : null }
+  return { table: rows, declaredTotal }
 }
 
 export async function parseCreditCardStatementPdf(file: File, categories: Category[]): Promise<PdfImportResult> {
   const lines = await extractLines(file)
-  return linesToTable(lines, categories)
+  const cardholder = detectCardholder(lines)
+  return linesToTable(lines, categories, cardholder)
 }

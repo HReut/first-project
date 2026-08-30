@@ -318,7 +318,9 @@ export function mountAnalyticsView(root: HTMLElement, store: Store<AppState>, cu
       .map((entry) => {
         const category = categoryById.get(entry.categoryId)
         if (!category) return ''
-        const width = (entry.amount / max) * 100
+        // Clamped at 0 — a category with net refunds this month has a
+        // negative amount, which shouldn't render as a negative-width bar.
+        const width = Math.max(0, (entry.amount / max) * 100)
         return `
           <div class="hbar-row hbar-row--clickable" data-category-id="${category.id}" title="${category.name}: ${formatCurrency(entry.amount)} — לחיצה לפירוט">
             <span class="hbar-row__label">${category.icon} ${category.name}</span>

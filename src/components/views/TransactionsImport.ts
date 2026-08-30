@@ -152,7 +152,7 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
                   ${row.matchedRule ? '<span class="import-preview__rule-badge" title="מולא אוטומטית מכלל שמור">כלל</span>' : ''}
                   ${row.isPossibleDuplicate ? '<span class="import-preview__rule-badge import-preview__rule-badge--warn" title="אותו תאריך, בית עסק וסכום כמו תנועה קיימת">כפילות אפשרית</span>' : ''}
                 </td>
-                <td><input type="number" class="filter-input" data-field="amount" min="0" step="0.01" value="${row.amount !== null ? row.amount.toFixed(2) : ''}"></td>
+                <td><input type="number" class="filter-input${row.amount !== null && row.amount < 0 ? ' import-preview__amount--credit' : ''}" data-field="amount" step="0.01" value="${row.amount !== null ? row.amount.toFixed(2) : ''}"></td>
                 <td>
                   <select class="filter-select" data-field="category">
                     <option value="" ${row.categoryId === null ? 'selected' : ''}>🟠 לא זוהה — ללא קטגוריה</option>
@@ -264,7 +264,7 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
     const categoryId = rowEl.querySelector<HTMLSelectElement>('[data-field="category"]')!.value || uncategorized.id
     const person = rowEl.querySelector<HTMLSelectElement>('[data-field="person"]')!.value as Person
 
-    if (!date || !Number.isFinite(amount) || amount <= 0) {
+    if (!date || !Number.isFinite(amount) || amount === 0) {
       skipped++
       continue
     }
