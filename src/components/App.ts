@@ -14,7 +14,7 @@ import { generateDueRecurringTransactions } from '../data/generateRecurringTrans
 import { dedupeRecurringTransactions, removeFutureRecurringTransactions, resyncRecurringRuleCounters } from '../data/dedupeRecurringTransactions.ts'
 import { topBudgetedCategories } from '../utils/insights.ts'
 import { budgetStatus } from '../utils/budget.ts'
-import { formatCurrency } from '../utils/format.ts'
+import { formatCurrency, monthKeyFromDate } from '../utils/format.ts'
 import { personFromEmail, signOut } from '../lib/auth.ts'
 import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
 import { mountAuthGate } from './AuthGate.ts'
@@ -66,7 +66,7 @@ const MANAGEMENT_VIEWS: NavEntry[] = [
 const ALL_VIEWS = [...PRIMARY_VIEWS, ...MANAGEMENT_VIEWS]
 
 function currentMonthKey(): string {
-  return new Date().toISOString().slice(0, 7)
+  return monthKeyFromDate(new Date())
 }
 
 function viewFromHash(): View {

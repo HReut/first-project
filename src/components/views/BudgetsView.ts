@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.ts'
 import type { Account, AppState, BudgetLimitChangedBefore, Category, NewRecurringRule, Person, RecurringRuleDeletedBefore } from '../../types.ts'
 import { computeCategoryBreakdown, resolveBudgetLimitForMonth, resolveBudgetLimitForPeriod } from '../../utils/insights.ts'
-import { formatCurrency } from '../../utils/format.ts'
+import { formatCurrency, monthKeyFromDate } from '../../utils/format.ts'
 import { budgetStatus } from '../../utils/budget.ts'
 import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
 import { ensureUncategorizedCategory, updateCategory } from '../../data/categoriesRepo.ts'
@@ -35,7 +35,7 @@ const ANCHOR_YEARS_BACK = 10
 const ANCHOR_YEARS_FORWARD = 1
 
 function currentMonthKey(): string {
-  return new Date().toISOString().slice(0, 7)
+  return monthKeyFromDate(new Date())
 }
 
 /** Two plain <select> dropdowns (month, year) for a "YYYY-MM" value —

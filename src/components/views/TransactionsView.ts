@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.ts'
 import type { Account, ActivityAction, AppState, Category, Currency, NewTransaction, Person, Transaction, TransactionDeletedBefore, TransactionStatus } from '../../types.ts'
 import { filterTransactions } from '../../utils/filters.ts'
-import { formatCurrency, formatDateShort, formatMonthLabel, personLabel } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, formatMonthLabel, monthKeyFromDate, personLabel } from '../../utils/format.ts'
 import { computeReviewedStatus, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveIlsAmount } from '../../utils/currency.ts'
 import { fetchHistoricalRateToIls } from '../../data/exchangeRateApi.ts'
@@ -47,6 +47,37 @@ const TOGGLEABLE_COLUMNS: { key: SortColumn; label: string }[] = [
   { key: 'amount', label: 'סכום' },
 ]
 
+/** Remembers this device's last-used view setup (grouping, period, sort,
+ * hidden columns) so it's already set up the same way next time — not
+ * synced to the household's shared data, just a per-browser convenience,
+ * same as the sidebar-collapsed preference elsewhere in the app. */
+const VIEW_PREFS_KEY = 'opa-tulik:transactions-view-prefs'
+
+interface TransactionsViewPrefs {
+  preset: PeriodPreset
+  customRange?: { start: string; end: string }
+  sort: { column: SortColumn; direction: 'asc' | 'desc' }
+  groupBy: GroupBy
+  hiddenColumns: SortColumn[]
+}
+
+function loadViewPrefs(): Partial<TransactionsViewPrefs> {
+  try {
+    const raw = localStorage.getItem(VIEW_PREFS_KEY)
+    return raw ? (JSON.parse(raw) as Partial<TransactionsViewPrefs>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveViewPrefs(prefs: TransactionsViewPrefs): void {
+  try {
+    localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify(prefs))
+  } catch {
+    // Best-effort — a full/blocked localStorage just means the setup won't be remembered.
+  }
+}
+
 interface TxGroup {
   key: string
   label: string
@@ -57,8 +88,7 @@ interface TxGroup {
 }
 
 function monthKey(monthsAgo: number, from = new Date()): string {
-  const d = new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1)
-  return d.toISOString().slice(0, 7)
+  return monthKeyFromDate(new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1))
 }
 
 function isoDate(d: Date): string {
@@ -120,6 +150,7 @@ export class TransactionsView {
     this.#container = container
     this.#store = store
     this.#currentPerson = currentPerson
+    this.applySavedViewPrefs()
     this.renderShell()
     this.wireToolbar()
     this.wireTable()
@@ -373,6 +404,39 @@ export class TransactionsView {
     `
   }
 
+  /** Restores last visit's grouping/period/sort/hidden-columns setup —
+   * called before renderShell()/wireToolbar() so the toolbar controls come
+   * up already reflecting it, and before the period is actually applied to
+   * `filters` so the table opens already scoped to it too. */
+  private applySavedViewPrefs(): void {
+    const prefs = loadViewPrefs()
+    if (prefs.groupBy) this.#groupBy = prefs.groupBy
+    if (prefs.sort) this.#sort = prefs.sort
+    if (prefs.hiddenColumns) this.#hiddenColumns = new Set(prefs.hiddenColumns)
+    if (prefs.preset) {
+      this.#preset = prefs.preset
+      if (prefs.preset === 'custom' && prefs.customRange) {
+        this.patchFilters({ period: { kind: 'range', start: prefs.customRange.start, end: prefs.customRange.end } })
+      } else if (prefs.preset !== 'custom') {
+        this.applyPreset(prefs.preset)
+      }
+    }
+  }
+
+  /** Called after every grouping/period/sort/column-visibility change —
+   * see applySavedViewPrefs() for where it's read back. */
+  private saveCurrentViewPrefs(): void {
+    const period = this.#store.getState().filters.period
+    const customRange = this.#preset === 'custom' && period.kind === 'range' ? { start: period.start, end: period.end } : undefined
+    saveViewPrefs({
+      preset: this.#preset,
+      customRange,
+      sort: this.#sort,
+      groupBy: this.#groupBy,
+      hiddenColumns: [...this.#hiddenColumns],
+    })
+  }
+
   private wireToolbar(): void {
     const { filters } = this.#store.getState()
 
@@ -401,6 +465,7 @@ export class TransactionsView {
     groupSelect.addEventListener('change', () => {
       this.#groupBy = groupSelect.value as GroupBy
       this.renderTable(this.#store.getState())
+      this.saveCurrentViewPrefs()
     })
 
     const sortSelect = this.#container.querySelector<HTMLSelectElement>('#sort-select')!
@@ -408,12 +473,14 @@ export class TransactionsView {
     sortSelect.addEventListener('change', () => {
       this.#sort = { column: sortSelect.value as SortColumn, direction: this.#sort.direction }
       this.renderTable(this.#store.getState())
+      this.saveCurrentViewPrefs()
     })
 
     const sortDirBtn = this.#container.querySelector<HTMLButtonElement>('#sort-direction-btn')!
     sortDirBtn.addEventListener('click', () => {
       this.#sort = { column: this.#sort.column, direction: this.#sort.direction === 'asc' ? 'desc' : 'asc' }
       this.renderTable(this.#store.getState())
+      this.saveCurrentViewPrefs()
     })
 
     this.#container.querySelector<HTMLButtonElement>('#clear-filters-btn')!.addEventListener('click', () => {
@@ -430,6 +497,7 @@ export class TransactionsView {
       this.#preset = periodSelect.value as PeriodPreset
       customRangeEl.hidden = this.#preset !== 'custom'
       if (this.#preset !== 'custom') this.applyPreset(this.#preset)
+      this.saveCurrentViewPrefs()
     })
 
     const startInput = this.#container.querySelector<HTMLInputElement>('#range-start')!
@@ -437,6 +505,7 @@ export class TransactionsView {
     const applyCustomRange = () => {
       if (startInput.value && endInput.value) {
         this.patchFilters({ period: { kind: 'range', start: startInput.value, end: endInput.value } })
+        this.saveCurrentViewPrefs()
       }
     }
     startInput.addEventListener('change', applyCustomRange)
@@ -485,6 +554,7 @@ export class TransactionsView {
         if (checkbox.checked) this.#hiddenColumns.delete(column)
         else this.#hiddenColumns.add(column)
         this.renderTable(this.#store.getState())
+        this.saveCurrentViewPrefs()
       })
     })
 
@@ -492,6 +562,7 @@ export class TransactionsView {
       this.#hiddenColumns.clear()
       checkboxes.forEach((checkbox) => (checkbox.checked = true))
       this.renderTable(this.#store.getState())
+      this.saveCurrentViewPrefs()
     })
   }
 
@@ -531,6 +602,7 @@ export class TransactionsView {
       const column = th.dataset.sort as SortColumn
       this.#sort = this.#sort.column === column ? { column, direction: this.#sort.direction === 'asc' ? 'desc' : 'asc' } : { column, direction: 'asc' }
       this.renderTable(this.#store.getState())
+      this.saveCurrentViewPrefs()
     })
 
     const selectAll = this.#container.querySelector<HTMLInputElement>('#select-all')!

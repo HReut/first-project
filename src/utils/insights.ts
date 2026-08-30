@@ -1,6 +1,7 @@
 import type { AccountBalance, BudgetLimitOverride, Category, Filters, Person, Transaction, TransactionStatus } from '../types.ts'
 import { budgetPercent, budgetStatus } from './budget.ts'
 import { matchesPeriod } from './filters.ts'
+import { monthKeyFromDate } from './format.ts'
 
 export interface MonthlyInsights {
   currentMonthTotal: number
@@ -35,7 +36,7 @@ export interface AnalyticsHighlights {
 }
 
 function monthKey(date: Date): string {
-  return date.toISOString().slice(0, 7)
+  return monthKeyFromDate(date)
 }
 
 function sum(transactions: Transaction[]): number {
@@ -86,7 +87,7 @@ function previousPeriod(period: Filters['period']): Filters['period'] | null {
   if (period.kind === 'all') return null
   if (period.kind === 'month') {
     const [year, month] = period.month.split('-').map(Number)
-    return { kind: 'month', month: new Date(year, month - 2, 1).toISOString().slice(0, 7) }
+    return { kind: 'month', month: monthKeyFromDate(new Date(year, month - 2, 1)) }
   }
   const start = new Date(period.start)
   const end = new Date(period.end)

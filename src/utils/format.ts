@@ -36,7 +36,7 @@ export function formatPercent(value: number): string {
 }
 
 export function formatDateShort(iso: string): string {
-  return new Date(iso).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })
+  return new Date(iso).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: '2-digit' })
 }
 
 export function formatDateTime(iso: string): string {
@@ -46,4 +46,16 @@ export function formatDateTime(iso: string): string {
 export function formatMonthLabel(monthKey: string): string {
   const [year, month] = monthKey.split('-').map(Number)
   return new Date(year, month - 1, 1).toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' })
+}
+
+/** Local-calendar month key ("YYYY-MM") for `d` — deliberately NOT
+ * `d.toISOString().slice(0, 7)`, which reads the date in UTC and silently
+ * rolls back to the previous month for any timezone ahead of UTC (Israel
+ * always is, UTC+2/+3) whenever `d` is near local midnight — worst case,
+ * every single call, if `d` was itself constructed at local midnight (e.g.
+ * `new Date(year, month, 1)`). "This month" filters, budget math, and the
+ * Reut/Keren settlement calc all depend on this being the household's own
+ * calendar month, not UTC's. */
+export function monthKeyFromDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }

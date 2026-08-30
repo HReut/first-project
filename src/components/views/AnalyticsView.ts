@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.ts'
 import type { AppState, Category, Filters, Person, Transaction } from '../../types.ts'
 import { computeAnalyticsHighlights, computeCategoryBreakdown } from '../../utils/insights.ts'
-import { formatCurrency, formatDateShort, formatPercent, personLabel } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, formatPercent, monthKeyFromDate, personLabel } from '../../utils/format.ts'
 import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
 import { openCategoryDrilldown } from './CategoryDrilldownModal.ts'
 
@@ -18,7 +18,7 @@ const PERIOD_LABEL: Record<PeriodPreset, string> = {
 }
 
 function monthKeyAgo(monthsAgo: number, from = new Date()): string {
-  return new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1).toISOString().slice(0, 7)
+  return monthKeyFromDate(new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1))
 }
 
 function monthLabelShort(monthKey: string): string {

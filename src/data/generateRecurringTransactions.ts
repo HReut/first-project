@@ -4,6 +4,7 @@ import { createTransactions, updateTransaction } from './transactionsRepo.ts'
 import { updateRecurringRule } from './recurringRulesRepo.ts'
 import { dueMonthsForRule, matchesRuleTransaction, transactionForDueRule } from '../utils/recurring.ts'
 import { computeReviewedStatus } from '../utils/insights.ts'
+import { monthKeyFromDate } from '../utils/format.ts'
 
 // Guards against two overlapping calls both reading the same
 // pre-generation state and both writing the same "missing" months —
@@ -35,7 +36,7 @@ let inFlight: Promise<void> | null = null
  * transaction still stuck 'pending' from before that was true (e.g. a
  * backfill run before this fix), since there's no "מרכז בדיקה"/"סמן כנבדק"
  * workflow left to clear it otherwise. */
-export function generateDueRecurringTransactions(store: Store<AppState>, monthKey = new Date().toISOString().slice(0, 7)): Promise<void> {
+export function generateDueRecurringTransactions(store: Store<AppState>, monthKey = monthKeyFromDate(new Date())): Promise<void> {
   if (inFlight) return inFlight
   inFlight = runGeneration(store, monthKey).finally(() => {
     inFlight = null

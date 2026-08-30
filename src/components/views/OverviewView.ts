@@ -2,7 +2,7 @@ import type { Store } from '../../state/store.ts'
 import type { Account, AppState, BudgetLimitOverride, Category, Person, Transaction } from '../../types.ts'
 import { computeCategoryBreakdown, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveSettledAfter } from '../../utils/activity.ts'
-import { formatCurrency, formatDateShort, personLabel } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, monthKeyFromDate, personLabel } from '../../utils/format.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
@@ -267,7 +267,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
    * not logging anything is worth a nudge. */
   function renderReminder(state: AppState): void {
     const now = new Date()
-    const currentMonth = now.toISOString().slice(0, 7)
+    const currentMonth = monthKeyFromDate(now)
     const hasLoggedThisMonth = state.transactions.some((tx) => tx.date.startsWith(currentMonth))
     reminderBandEl.hidden = reminderDismissed || hasLoggedThisMonth || now.getDate() < 5
   }

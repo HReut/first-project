@@ -1,4 +1,5 @@
 import type { Filters, Transaction } from '../types.ts'
+import { monthKeyFromDate } from './format.ts'
 
 export function matchesPeriod(date: string, period: Filters['period']): boolean {
   if (period.kind === 'all') return true
@@ -9,7 +10,7 @@ export function matchesPeriod(date: string, period: Filters['period']): boolean 
 export type PeriodPreset = 'this-month' | 'last-month' | 'last-3' | 'last-6' | 'this-year' | 'all'
 
 function monthKeyOffset(monthsAgo: number, from: Date): string {
-  return new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1).toISOString().slice(0, 7)
+  return monthKeyFromDate(new Date(from.getFullYear(), from.getMonth() - monthsAgo, 1))
 }
 
 function isoDate(d: Date): string {
