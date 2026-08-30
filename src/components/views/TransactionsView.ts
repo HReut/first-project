@@ -359,7 +359,6 @@ export class TransactionsView {
                     <th data-sort="person">משלם/ת</th>
                     <th data-sort="account">חשבון</th>
                     <th class="is-numeric" data-sort="amount">סכום</th>
-                    <th></th>
                   </tr>
                 </thead>
                 <tbody id="transactions-body"></tbody>
@@ -549,8 +548,7 @@ export class TransactionsView {
 
     this.#container.querySelector<HTMLElement>('#bulk-bar')!.addEventListener('click', (event) => {
       const target = event.target as HTMLElement
-      if (target.closest('[data-bulk-mark-reviewed]')) this.bulkMarkReviewed()
-      else if (target.closest('[data-bulk-delete]')) this.bulkDelete()
+      if (target.closest('[data-bulk-delete]')) this.bulkDelete()
     })
 
     this.#container.querySelector<HTMLElement>('#bulk-bar')!.addEventListener('change', (event) => {
@@ -583,12 +581,6 @@ export class TransactionsView {
         if (this.#collapsedGroups.has(categoryId)) this.#collapsedGroups.delete(categoryId)
         else this.#collapsedGroups.add(categoryId)
         this.renderTable(this.#store.getState())
-        return
-      }
-
-      const reviewBtn = target.closest<HTMLButtonElement>('[data-mark-reviewed-id]')
-      if (reviewBtn) {
-        this.markReviewed(reviewBtn.dataset.markReviewedId!)
         return
       }
 
@@ -889,31 +881,6 @@ export class TransactionsView {
       const { transactions } = this.#store.getState()
       this.#store.setState({ transactions: transactions.map((tx) => (tx.id === id ? updated : tx)) })
       this.logTx('updated', `עודכן ${updated.merchant || 'תנועה'} (${Object.keys(patch).join(', ')})`)
-    })
-  }
-
-  private markReviewed(id: string): void {
-    const state = this.#store.getState()
-    const tx = state.transactions.find((t) => t.id === id)
-    if (!tx) return
-    this.commitEdit(id, { status: computeReviewedStatus(state.transactions, state.categories, tx.categoryId, state.budgetLimitOverrides) })
-    showToast('התנועה אושרה', [], 2000)
-  }
-
-  private bulkMarkReviewed(): void {
-    const ids = [...this.#selection]
-    const state = this.#store.getState()
-    const byId = new Map(state.transactions.map((tx) => [tx.id, tx]))
-    Promise.all(
-      ids.map((id) =>
-        updateTransaction(id, { status: computeReviewedStatus(state.transactions, state.categories, byId.get(id)?.categoryId ?? '', state.budgetLimitOverrides) }),
-      ),
-    ).then((updated) => {
-      const updatedById = new Map(updated.map((tx) => [tx.id, tx]))
-      const { transactions } = this.#store.getState()
-      this.#store.setState({ transactions: transactions.map((tx) => updatedById.get(tx.id) ?? tx) })
-      showToast(`${ids.length} תנועות אושרו`, [], 2000)
-      this.logTx('bulk_marked_reviewed', `${ids.length} תנועות סומנו כנבדקו`)
     })
   }
 
@@ -1245,7 +1212,7 @@ export class TransactionsView {
         state.transactions.length > 0
           ? 'אין תנועות התואמות לסינון הזה — נסה/י להרחיב את התקופה (למשל ל"כל הזמנים") או לנקות סינונים אחרים.'
           : 'עדיין אין תנועות — הוסף/י תנועה או ייבא/י קובץ.'
-      tbody.innerHTML = `<tr><td colspan="8" class="transactions__empty">${emptyMessage}</td></tr>`
+      tbody.innerHTML = `<tr><td colspan="7" class="transactions__empty">${emptyMessage}</td></tr>`
       cardsContainer.innerHTML = `<p class="transactions__empty">${emptyMessage}</p>`
     } else if (this.#groupBy !== 'none') {
       const groups = this.buildGroups(rows, categoryById)
@@ -1356,7 +1323,7 @@ export class TransactionsView {
     const collapsed = this.#collapsedGroups.has(g.key)
     return `
       <tr class="group-header-row">
-        <td colspan="8">${this.renderGroupHeader(g)}</td>
+        <td colspan="7">${this.renderGroupHeader(g)}</td>
       </tr>
       ${collapsed ? '' : g.rows.map((tx) => this.renderRow(tx, categoryById)).join('')}
     `
@@ -1387,7 +1354,6 @@ export class TransactionsView {
         <td class="editable-cell" data-field="person" data-id="${tx.id}">${renderPersonBadge(tx.person)}</td>
         <td class="editable-cell" data-field="account" data-id="${tx.id}">${renderAccountBadge(tx.account)}</td>
         <td class="is-numeric editable-cell${tx.originalAmount < 0 ? ' is-credit' : ''}" data-field="amount" data-id="${tx.id}">${formatCurrency(tx.originalAmount, tx.currency)}</td>
-        <td>${tx.status === 'pending' ? `<button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button>` : ''}</td>
       </tr>
     `
   }
@@ -1410,11 +1376,6 @@ export class TransactionsView {
             ${renderWaitingBadge(tx)}
             <span class="tx-card__date">${formatDateShort(tx.date)}</span>
           </div>
-          ${
-            tx.status === 'pending'
-              ? `<div class="tx-card__footer"><button type="button" class="btn btn--approve btn--sm" data-mark-reviewed-id="${tx.id}">סמן כנבדק</button></div>`
-              : ''
-          }
         </div>
       </article>
     `
@@ -1430,7 +1391,6 @@ export class TransactionsView {
     bar.hidden = false
     bar.innerHTML = `
       <span class="bulk-bar__count">${this.#selection.size} נבחרו</span>
-      <button type="button" class="btn btn--sm" data-bulk-mark-reviewed>סמן כנבדק</button>
       <select class="filter-select filter-select--sm" data-bulk-recategorize>
         <option value="">הגדרת קטגוריה…</option>
         ${categories.map((c) => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}

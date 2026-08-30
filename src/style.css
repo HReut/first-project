@@ -997,12 +997,6 @@ p {
   padding: 6px 12px;
 }
 
-.btn--approve {
-  background: var(--status-good);
-  border-color: var(--status-good);
-  color: #fff;
-}
-
 .btn--danger {
   color: var(--status-critical);
 }
@@ -2514,12 +2508,6 @@ tr.tx-row--pending td {
 .is-credit,
 .tx-card__amount.is-credit {
   color: var(--status-good);
-}
-
-.tx-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
 }
 
 .editable-cell {

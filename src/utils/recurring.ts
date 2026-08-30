@@ -1,4 +1,5 @@
-import type { NewTransaction, RecurringRule } from '../types.ts'
+import type { BudgetLimitOverride, Category, NewTransaction, RecurringRule, Transaction } from '../types.ts'
+import { computeReviewedStatus } from './insights.ts'
 
 /** True when `monthKey` (YYYY-MM) is one of the rule's due months: its
  * anchor month, or anchor month plus a whole multiple of intervalMonths.
@@ -40,9 +41,19 @@ export function dueMonthsForRule(rule: RecurringRule, upToMonthKey: string): str
   return months
 }
 
-/** Builds the pending transaction a due rule generates for `monthKey`,
- * dated to the rule's configured day of month. */
-export function transactionForDueRule(rule: RecurringRule, monthKey: string): NewTransaction {
+/** Builds the transaction a due rule generates for `monthKey`, dated to the
+ * rule's configured day of month. Snapshots its category's current budget
+ * standing the same way a manually-typed or imported transaction does
+ * (computeReviewedStatus) instead of landing 'pending' — a scheduled bill
+ * firing automatically needs no separate "mark as reviewed" step, same
+ * reasoning as CSV/PDF imports. */
+export function transactionForDueRule(
+  rule: RecurringRule,
+  monthKey: string,
+  transactions: Transaction[],
+  categories: Category[],
+  overrides: BudgetLimitOverride[],
+): NewTransaction {
   const day = String(rule.dayOfMonth).padStart(2, '0')
   return {
     date: `${monthKey}-${day}`,
@@ -53,7 +64,7 @@ export function transactionForDueRule(rule: RecurringRule, monthKey: string): Ne
     categoryId: rule.categoryId,
     account: rule.account,
     person: rule.person,
-    status: 'pending',
+    status: computeReviewedStatus(transactions, categories, rule.categoryId, overrides),
     source: 'recurring',
   }
 }

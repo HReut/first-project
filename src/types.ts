@@ -4,9 +4,12 @@ export type Currency = 'ILS' | 'USD' | 'EUR'
  * household expenses paid individually — see computeSplitBalance() in
  * insights.ts for how each value affects the Reut/Keren settlement math. */
 export type Account = 'reut_personal' | 'keren_personal' | 'shared'
-/** 'pending' = imported/unreviewed. Reviewing a pending transaction snapshots
- * its category's current budget standing into 'on_budget' or 'exceeded' —
- * see markReviewed() in TransactionsView.ts. */
+/** 'pending' is legacy — nothing produces it anymore (manual entries,
+ * imports, and recurring-rule generation all snapshot straight to
+ * 'on_budget'/'exceeded' via computeReviewedStatus(), and
+ * generateDueRecurringTransactions() one-time-resolves any row still stuck
+ * 'pending' from before that was true). Kept as a valid value only so old
+ * data and the status edit dropdown don't break. */
 export type TransactionStatus = 'pending' | 'on_budget' | 'exceeded'
 export type TransactionSource = 'manual' | 'email_auto' | 'import' | 'recurring'
 
