@@ -21,12 +21,23 @@ export function isRuleDueForMonth(rule: RecurringRule, monthKey: string): boolea
  * month since lastGeneratedMonth gets caught up, not just the latest one.
  * An installment plan (totalOccurrences set) stops once it's produced that
  * many transactions total, even mid-backfill. */
-export function dueMonthsForRule(rule: RecurringRule, upToMonthKey: string): string[] {
+export function dueMonthsForRule(rule: RecurringRule, upToMonthKey: string, existingTransactions: Transaction[] = []): string[] {
   if (!rule.isActive) return []
   const [anchorYear, anchorMonth] = rule.anchorMonth.split('-').map(Number)
   const [upToYear, upToMonth] = upToMonthKey.split('-').map(Number)
   const span = (upToYear - anchorYear) * 12 + (upToMonth - anchorMonth)
   if (span < 0) return []
+
+  // Self-heals a rule whose lastGeneratedMonth claims its most recent month
+  // is already generated but no matching transaction actually exists for
+  // it — e.g. an insert that silently failed, or a generation race that
+  // left the counter and the real data out of sync. Only checked for the
+  // exact claimed month (not every earlier one — that'd be a full audit on
+  // every call) since that's the one a write race would actually affect.
+  const hasTransactionForMonth = (monthKey: string) =>
+    existingTransactions.some(
+      (tx) => tx.source === 'recurring' && tx.merchant === rule.merchant && tx.categoryId === rule.categoryId && tx.account === rule.account && tx.date.startsWith(monthKey),
+    )
 
   let remaining = rule.totalOccurrences === null ? Infinity : rule.totalOccurrences - rule.occurrencesGenerated
   const months: string[] = []
@@ -34,7 +45,8 @@ export function dueMonthsForRule(rule: RecurringRule, upToMonthKey: string): str
     const d = new Date(anchorYear, anchorMonth - 1 + offset, 1)
     const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     if (!isRuleDueForMonth(rule, monthKey)) continue
-    if (rule.lastGeneratedMonth !== null && monthKey <= rule.lastGeneratedMonth) continue
+    const claimedDone = rule.lastGeneratedMonth !== null && monthKey <= rule.lastGeneratedMonth
+    if (claimedDone && (monthKey !== rule.lastGeneratedMonth || hasTransactionForMonth(monthKey))) continue
     months.push(monthKey)
     remaining--
   }

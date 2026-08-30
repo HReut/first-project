@@ -40,7 +40,7 @@ export function generateDueRecurringTransactions(store: Store<AppState>, monthKe
 
 async function runGeneration(store: Store<AppState>, monthKey: string): Promise<void> {
   const { recurringRules: rules, transactions, categories, budgetLimitOverrides } = store.getState()
-  const due = rules.map((rule) => ({ rule, months: dueMonthsForRule(rule, monthKey) })).filter((entry) => entry.months.length > 0)
+  const due = rules.map((rule) => ({ rule, months: dueMonthsForRule(rule, monthKey, transactions) })).filter((entry) => entry.months.length > 0)
   const stalePending = transactions.filter((tx) => tx.status === 'pending')
   if (due.length === 0 && stalePending.length === 0) return
 
