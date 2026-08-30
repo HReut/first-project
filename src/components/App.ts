@@ -282,8 +282,9 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   }
   const navButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.sidebar__link, .bottom-nav__link'))
   let mounted = false
-  let settingsHasUnsavedChanges: (() => boolean) | null = null
-  let transactionsHasUnsavedChanges: (() => boolean) | null = null
+  // Every view whose inline edits stage behind a "שמירת שינויים" button
+  // instead of auto-saving — see navigate()'s guard below.
+  const unsavedChangesCheckers: Partial<Record<View, () => boolean>> = {}
 
   function applyViewVisibility(state: AppState): void {
     navButtons.forEach((btn) => btn.classList.toggle('is-active', btn.dataset.view === state.view))
@@ -298,19 +299,17 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
   }
 
   /** Warns before leaving a view that has unsaved changes waiting on an
-   * explicit Save click — Settings (a typed-but-unsubmitted "add new" row;
-   * everything else there auto-saves on blur) and Transactions (staged
-   * inline-edit changes, which never touch real data until "שמירת שינויים"
-   * is clicked — see TransactionsView's pending-edits pattern). Every other
-   * page navigates immediately. */
+   * explicit Save click — inline edits everywhere data gets edited (staged
+   * changes never touch real data until "שמירת שינויים" is clicked, see
+   * TransactionsView's pending-edits pattern, now shared by Settings'
+   * category manager, Budgets' recurring rules, and Savings' goals) plus a
+   * typed-but-unsubmitted "add new" row. Every other page navigates
+   * immediately. */
   function navigate(view: View): void {
     const currentView = store.getState().view
     if (currentView === view) return
-    const guard = currentView === 'settings' ? settingsHasUnsavedChanges : currentView === 'transactions' ? transactionsHasUnsavedChanges : null
-    if (guard?.()) {
-      const message =
-        currentView === 'settings' ? 'יש לך שינויים בהגדרות שעדיין לא נשמרו. לצאת בכל זאת?' : 'יש לך שינויים בתנועות שעדיין לא נשמרו. לצאת בכל זאת?'
-      confirmDialog(message, 'צא').then((confirmed) => {
+    if (unsavedChangesCheckers[currentView]?.()) {
+      confirmDialog('יש לך שינויים שעדיין לא נשמרו. לצאת בכל זאת?', 'צא').then((confirmed) => {
         if (confirmed) goToView(view)
       })
       return
@@ -433,12 +432,12 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     if (state.status === 'ready' && !mounted) {
       mounted = true
       mountOverviewView(viewEls.overview, store, currentPerson)
-      transactionsHasUnsavedChanges = mountTransactionsView(viewEls.transactions, store, currentPerson)
-      mountBudgetsView(viewEls.budgets, store, currentPerson)
+      unsavedChangesCheckers.transactions = mountTransactionsView(viewEls.transactions, store, currentPerson)
+      unsavedChangesCheckers.budgets = mountBudgetsView(viewEls.budgets, store, currentPerson)
       mountAnalyticsView(viewEls.analytics, store, currentPerson)
-      settingsHasUnsavedChanges = mountSettingsView(viewEls.settings, store, currentPerson)
+      unsavedChangesCheckers.settings = mountSettingsView(viewEls.settings, store, currentPerson)
       mountHistoryView(viewEls.history, store)
-      mountSavingsView(viewEls.savings, store, currentPerson)
+      unsavedChangesCheckers.savings = mountSavingsView(viewEls.savings, store, currentPerson)
     }
 
     applyViewVisibility(state)

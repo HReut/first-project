@@ -1,5 +1,5 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, CategoryDeletedBefore, Person } from '../../types.ts'
+import type { AppState, CategoryDeletedBefore, NewCategory, Person } from '../../types.ts'
 import { createCategory, deleteCategory, updateCategory } from '../../data/categoriesRepo.ts'
 import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/emailRulesRepo.ts'
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
@@ -25,15 +25,10 @@ function themeToggleIcon(): string {
 
 export function mountSettingsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): () => boolean {
   let accountSettings = loadEmailAccountSettings()
-  // True while an existing category's color/icon/name has been typed/picked
-  // but not yet blurred, OR while its save request is still in flight.
-  // Clicking a nav button blurs the focused input (firing `change`) *before*
-  // the button's own click event runs — so if we cleared this flag as soon
-  // as `change` fires, it'd already be false by the time navigate() checks
-  // it. Keeping it true until the request resolves is what actually makes
-  // the warning appear on a real click-away.
-  let categoryFieldsDirty = false
-  let categorySavesInFlight = 0
+  // Staged edits to existing categories — merged over the real data for
+  // display without touching the store until "שמירת שינויים" is clicked,
+  // same pattern as TransactionsView's pending edits.
+  const categoryPendingEdits = new Map<string, Partial<NewCategory>>()
 
   root.innerHTML = `
     <section class="band band--hero">
@@ -104,6 +99,11 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
           <h2 class="settings-card__title">קטגוריות</h2>
           <p class="settings-card__desc">צבעים ואייקונים מתאימים אישית תגים, אריחים וגרפים בכל האפליקציה.</p>
           <div class="settings-list" id="category-manager"></div>
+          <div class="pending-bar" id="category-pending-bar" hidden>
+            <span class="pending-bar__count" id="category-pending-count"></span>
+            <button type="button" class="btn btn--sm" id="category-discard-btn">ביטול שינויים</button>
+            <button type="button" class="btn btn--primary btn--sm" id="category-save-btn">שמירת שינויים</button>
+          </div>
         </section>
       </div>
     </section>
@@ -138,6 +138,8 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
   `
 
   const categoryManagerEl = root.querySelector<HTMLElement>('#category-manager')!
+  const categoryPendingBarEl = root.querySelector<HTMLElement>('#category-pending-bar')!
+  const categoryPendingCountEl = root.querySelector<HTMLElement>('#category-pending-count')!
   const emailAccountsEl = root.querySelector<HTMLElement>('#email-accounts')!
   const ruleBuilderEl = root.querySelector<HTMLElement>('#rule-builder')!
 
@@ -237,12 +239,20 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     const usageCount = new Map<string, number>()
     for (const tx of state.transactions) usageCount.set(tx.categoryId, (usageCount.get(tx.categoryId) ?? 0) + 1)
 
+    // Overlays unsaved staged edits over the real categories before
+    // rendering — same "display what you typed without touching the store
+    // yet" pattern as TransactionsView's visibleRows().
+    const overlaidCategories = state.categories.map((category) => {
+      const pending = categoryPendingEdits.get(category.id)
+      return pending ? { ...category, ...pending } : category
+    })
+
     categoryManagerEl.innerHTML = `
-      ${state.categories
+      ${overlaidCategories
         .map((category) => {
           const usage = usageCount.get(category.id) ?? 0
           return `
-          <div class="settings-list__row" data-id="${category.id}">
+          <div class="settings-list__row${categoryPendingEdits.has(category.id) ? ' settings-list__row--pending' : ''}" data-id="${category.id}">
             <input type="color" class="color-input" value="${category.colorCode}" data-field="colorCode" title="צבע">
             <input type="text" class="icon-input" value="${category.icon}" data-field="icon" maxlength="4" title="אייקון">
             <input type="text" class="name-input" value="${category.name}" data-field="name" title="שם">
@@ -259,6 +269,8 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
         <button type="button" class="btn btn--primary btn--sm" id="add-category-btn">+ הוספה</button>
       </div>
     `
+    categoryPendingBarEl.hidden = categoryPendingEdits.size === 0
+    categoryPendingCountEl.textContent = `${categoryPendingEdits.size} שינויים לא שמורים`
   }
 
   /** Fire-and-forget, same reasoning as TransactionsView's logTx: a logging
@@ -272,26 +284,40 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
   }
 
-  categoryManagerEl.addEventListener('input', (event) => {
-    if ((event.target as HTMLElement).closest<HTMLInputElement>('[data-field]')) categoryFieldsDirty = true
-  })
-
   categoryManagerEl.addEventListener('change', (event) => {
     const input = (event.target as HTMLElement).closest<HTMLInputElement>('[data-field]')
     if (!input) return
     const row = input.closest<HTMLElement>('.settings-list__row')!
     const id = row.dataset.id!
-    const field = input.dataset.field!
-    categoryFieldsDirty = false
-    categorySavesInFlight++
-    updateCategory(id, { [field]: input.value })
-      .then((updated) => {
-        const { categories } = store.getState()
-        store.setState({ categories: categories.map((c) => (c.id === updated.id ? updated : c)) })
-        logCategory('updated', `קטגוריה עודכנה: ${updated.name} (${field})`)
-      })
-      .catch(() => showToast('לא ניתן היה לשמור את שינוי הקטגוריה — נסה/י שוב.'))
-      .finally(() => categorySavesInFlight--)
+    const field = input.dataset.field! as keyof NewCategory
+    categoryPendingEdits.set(id, { ...categoryPendingEdits.get(id), [field]: input.value })
+    renderCategoryManager(store.getState())
+  })
+
+  async function saveCategoryPendingEdits(): Promise<void> {
+    const entries = [...categoryPendingEdits]
+    if (entries.length === 0) return
+
+    try {
+      const updated = await Promise.all(entries.map(([id, patch]) => updateCategory(id, patch)))
+      const updatedById = new Map(updated.map((category) => [category.id, category]))
+      const { categories } = store.getState()
+      store.setState({ categories: categories.map((c) => updatedById.get(c.id) ?? c) })
+      categoryPendingEdits.clear()
+      showToast(entries.length === 1 ? 'השינוי נשמר.' : `${entries.length} שינויים נשמרו.`, [], 2000)
+      logCategory('updated', entries.length === 1 ? `קטגוריה עודכנה: ${updated[0]?.name}` : `${entries.length} קטגוריות עודכנו`)
+      renderCategoryManager(store.getState())
+    } catch {
+      showToast('שמירת השינויים נכשלה — נסה/י שוב.')
+    }
+  }
+
+  root.querySelector<HTMLButtonElement>('#category-save-btn')!.addEventListener('click', () => {
+    void saveCategoryPendingEdits()
+  })
+  root.querySelector<HTMLButtonElement>('#category-discard-btn')!.addEventListener('click', () => {
+    categoryPendingEdits.clear()
+    renderCategoryManager(store.getState())
   })
 
   categoryManagerEl.addEventListener('click', (event) => {
@@ -311,6 +337,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
             categories: categories.filter((c) => c.id !== id),
             budgetLimitOverrides: budgetLimitOverrides.filter((o) => o.categoryId !== id),
           })
+          categoryPendingEdits.delete(id)
           const before: CategoryDeletedBefore = { category, overrides }
           logCategory('deleted', `קטגוריה נמחקה: ${category.name}`, before)
         })
@@ -472,10 +499,10 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
   renderRuleBuilder(store.getState())
 
   /** Typed-but-not-yet-committed edits: the "add new" rows only save on an
-   * explicit button click, and existing category fields only save on blur —
-   * both leave a window where a nav click would otherwise discard input
-   * silently. Checked by App.ts before letting a sidebar/logo click navigate
-   * away. */
+   * explicit button click, and staged category edits only save on
+   * "שמירת שינויים" — both leave a window where a nav click would otherwise
+   * discard input silently. Checked by App.ts before letting a
+   * sidebar/logo click navigate away. */
   return function hasUnsavedChanges(): boolean {
     const newCategoryName = root.querySelector<HTMLInputElement>('#new-category-name')?.value.trim()
     const newRuleKeyword = root.querySelector<HTMLInputElement>('#new-rule-keyword')?.value.trim()
@@ -487,6 +514,6 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     const rateUsdChanged = !!rateInputUsd && rateInputUsd.value.trim() !== (savedRate?.usdToIls ? String(savedRate.usdToIls) : '')
     const rateInputEur = root.querySelector<HTMLInputElement>('#exchange-rate-input-eur')
     const rateEurChanged = !!rateInputEur && rateInputEur.value.trim() !== (savedRate?.eurToIls ? String(savedRate.eurToIls) : '')
-    return !!newCategoryName || !!newRuleKeyword || balanceChanged || rateUsdChanged || rateEurChanged || categoryFieldsDirty || categorySavesInFlight > 0
+    return !!newCategoryName || !!newRuleKeyword || balanceChanged || rateUsdChanged || rateEurChanged || categoryPendingEdits.size > 0
   }
 }

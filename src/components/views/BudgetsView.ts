@@ -34,8 +34,15 @@ function currentMonthKey(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
-export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
+export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): () => boolean {
   let period: PeriodPreset = 'this-month'
+  // Staged edits to existing recurring rules — merged over the real data for
+  // display without touching the store until "שמירת שינויים" is clicked,
+  // same pattern as TransactionsView's pending edits. Field toggles
+  // (isActive) and delete stay instant, same reasoning as there: those are
+  // already a single deliberate action, not a typed value to accidentally
+  // leave uncommitted.
+  const recurringPendingEdits = new Map<string, Partial<NewRecurringRule>>()
 
   root.innerHTML = `
     <section class="band band--hero">
@@ -75,6 +82,11 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
             ממתינה אוטומטית בטעינת האפליקציה.
           </p>
           <div class="settings-list settings-list--recurring" id="recurring-manager"></div>
+          <div class="pending-bar" id="recurring-pending-bar" hidden>
+            <span class="pending-bar__count" id="recurring-pending-count"></span>
+            <button type="button" class="btn btn--sm" id="recurring-discard-btn">ביטול שינויים</button>
+            <button type="button" class="btn btn--primary btn--sm" id="recurring-save-btn">שמירת שינויים</button>
+          </div>
         </section>
       </div>
     </section>
@@ -82,6 +94,8 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
 
   const budgetListEl = root.querySelector<HTMLElement>('#budget-list')!
   const recurringManagerEl = root.querySelector<HTMLElement>('#recurring-manager')!
+  const recurringPendingBarEl = root.querySelector<HTMLElement>('#recurring-pending-bar')!
+  const recurringPendingCountEl = root.querySelector<HTMLElement>('#recurring-pending-count')!
   const periodSelect = root.querySelector<HTMLSelectElement>('#budgets-period-select')!
   periodSelect.value = period
   periodSelect.addEventListener('change', () => {
@@ -223,11 +237,19 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     const fieldLabel = (label: string, control: string): string =>
       `<label class="recurring-card__field"><span class="recurring-card__field-label">${label}</span>${control}</label>`
 
+    // Overlays unsaved staged edits over the real rules before rendering —
+    // same "display what you typed without touching the store yet" pattern
+    // as TransactionsView's visibleRows().
+    const overlaidRules = state.recurringRules.map((rule) => {
+      const pending = recurringPendingEdits.get(rule.id)
+      return pending ? { ...rule, ...pending } : rule
+    })
+
     recurringManagerEl.innerHTML = `
-      ${state.recurringRules
+      ${overlaidRules
         .map(
           (rule) => `
-        <div class="recurring-card" data-id="${rule.id}">
+        <div class="recurring-card${recurringPendingEdits.has(rule.id) ? ' recurring-card--pending' : ''}" data-id="${rule.id}">
           <div class="recurring-card__top">
             <input type="text" class="name-input recurring-card__name" value="${rule.merchant}" placeholder="שם החשבון" data-rule-field="merchant">
             <input type="number" class="budget-input recurring-card__amount" value="${rule.amount}" min="0" step="1" title="סכום" data-rule-field="amount">
@@ -249,7 +271,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
             )}
             ${fieldLabel(
               'מתאריך',
-              `<input type="month" class="icon-input" value="${rule.anchorMonth}" title="החודש שממנו הכלל מתחיל — שינוי לתאריך שעבר ייצור אוטומטית את התנועות שהוחמצו" data-rule-field="anchorMonth">`,
+              `<input type="date" class="icon-input" value="${rule.anchorMonth}-01" title="החודש שממנו הכלל מתחיל — שינוי לתאריך שעבר ייצור אוטומטית את התנועות שהוחמצו" data-rule-field="anchorMonth">`,
             )}
           </div>
           <div class="recurring-card__bottom">
@@ -282,7 +304,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
           )}
           ${fieldLabel(
             'מתאריך',
-            `<input type="month" class="icon-input" id="new-recurring-anchor" value="${currentMonth}" title="בחר/י חודש בעבר כדי ליצור אוטומטית את כל התנועות שהוחמצו מאז">`,
+            `<input type="date" class="icon-input" id="new-recurring-anchor" value="${currentMonth}-01" title="בחר/י חודש בעבר כדי ליצור אוטומטית את כל התנועות שהוחמצו מאז">`,
           )}
         </div>
         <div class="recurring-card__bottom">
@@ -290,6 +312,12 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         </div>
       </div>
     `
+    renderRecurringPendingBar()
+  }
+
+  function renderRecurringPendingBar(): void {
+    recurringPendingBarEl.hidden = recurringPendingEdits.size === 0
+    recurringPendingCountEl.textContent = `${recurringPendingEdits.size} שינויים לא שמורים`
   }
 
   /** Fire-and-forget, same reasoning as the other logXxx helpers: a logging
@@ -313,23 +341,58 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     const rule = store.getState().recurringRules.find((r) => r.id === id)
     if (!rule) return
 
+    // isActive is a single deliberate toggle, not a typed value — stays
+    // instant, same reasoning as delete. Everything else stages.
+    if (field === 'isActive') {
+      updateRecurringRule(id, { isActive: (input as HTMLInputElement).checked }).then((updated) => {
+        const { recurringRules } = store.getState()
+        store.setState({ recurringRules: recurringRules.map((r) => (r.id === updated.id ? updated : r)) })
+        logRecurring('updated', `כלל חוזר עודכן: ${updated.merchant} (isActive)`)
+        void generateDueRecurringTransactions(store)
+      })
+      return
+    }
+
     let patch: Partial<NewRecurringRule>
-    if (field === 'isActive') patch = { isActive: (input as HTMLInputElement).checked }
-    else if (field === 'totalOccurrences') patch = { totalOccurrences: input.value.trim() === '' ? null : Math.max(1, Number(input.value)) }
+    if (field === 'totalOccurrences') patch = { totalOccurrences: input.value.trim() === '' ? null : Math.max(1, Number(input.value)) }
     else if (field === 'amount' || field === 'intervalMonths' || field === 'dayOfMonth') patch = { [field]: Number(input.value) }
     else if (field === 'account') {
       const account = input.value as Account
       patch = { account, person: PERSON_FOR_ACCOUNT[account] ?? rule.person }
-    } else patch = { [field]: input.value }
+    } else if (field === 'anchorMonth') patch = { anchorMonth: input.value.slice(0, 7) }
+    else patch = { [field]: input.value }
 
-    updateRecurringRule(id, patch).then((updated) => {
+    recurringPendingEdits.set(id, { ...recurringPendingEdits.get(id), ...patch })
+    renderRecurringManager(store.getState())
+  })
+
+  async function saveRecurringPendingEdits(): Promise<void> {
+    const entries = [...recurringPendingEdits]
+    if (entries.length === 0) return
+
+    try {
+      const updated = await Promise.all(entries.map(([id, patch]) => updateRecurringRule(id, patch)))
+      const updatedById = new Map(updated.map((rule) => [rule.id, rule]))
       const { recurringRules } = store.getState()
-      store.setState({ recurringRules: recurringRules.map((r) => (r.id === updated.id ? updated : r)) })
-      logRecurring('updated', `כלל חוזר עודכן: ${updated.merchant} (${field})`)
-      // Moving anchorMonth (or any other due-affecting field) back in time
-      // backfills the newly-missed months right away — a no-op otherwise.
-      if (field === 'anchorMonth' || field === 'intervalMonths' || field === 'isActive') void generateDueRecurringTransactions(store)
-    })
+      store.setState({ recurringRules: recurringRules.map((r) => updatedById.get(r.id) ?? r) })
+      recurringPendingEdits.clear()
+      showToast(entries.length === 1 ? 'השינוי נשמר.' : `${entries.length} שינויים נשמרו.`, [], 2000)
+      logRecurring('updated', entries.length === 1 ? `כלל חוזר עודכן: ${updated[0]?.merchant}` : `${entries.length} כללים חוזרים עודכנו`)
+      // Any of those edits might have moved anchorMonth/intervalMonths back
+      // in time — backfills the newly-missed months right away, a no-op otherwise.
+      await generateDueRecurringTransactions(store)
+      renderRecurringManager(store.getState())
+    } catch {
+      showToast('שמירת השינויים נכשלה — נסה/י שוב.')
+    }
+  }
+
+  root.querySelector<HTMLButtonElement>('#recurring-save-btn')!.addEventListener('click', () => {
+    void saveRecurringPendingEdits()
+  })
+  root.querySelector<HTMLButtonElement>('#recurring-discard-btn')!.addEventListener('click', () => {
+    recurringPendingEdits.clear()
+    renderRecurringManager(store.getState())
   })
 
   recurringManagerEl.addEventListener('click', (event) => {
@@ -343,6 +406,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         deleteRecurringRule(id).then(() => {
           const { recurringRules } = store.getState()
           store.setState({ recurringRules: recurringRules.filter((r) => r.id !== id) })
+          recurringPendingEdits.delete(id)
           const before: RecurringRuleDeletedBefore = { rule }
           logRecurring('deleted', `כלל חוזר נמחק: ${rule.merchant}`, before)
         })
@@ -372,7 +436,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         account,
         person: PERSON_FOR_ACCOUNT[account] ?? 'Reut',
         intervalMonths: Math.max(1, Number(intervalInput.value) || 1),
-        anchorMonth: anchorInput.value || currentMonthKey(),
+        anchorMonth: anchorInput.value ? anchorInput.value.slice(0, 7) : currentMonthKey(),
         dayOfMonth: Math.min(28, Math.max(1, Number(dayInput.value) || 1)),
         totalOccurrences: installmentsInput.value.trim() === '' ? null : Math.max(1, Number(installmentsInput.value)),
         isActive: true,
@@ -395,4 +459,9 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
   })
   renderBudgets(store.getState())
   renderRecurringManager(store.getState())
+
+  return function hasUnsavedChanges(): boolean {
+    const newMerchant = root.querySelector<HTMLInputElement>('#new-recurring-merchant')?.value.trim()
+    return recurringPendingEdits.size > 0 || !!newMerchant
+  }
 }

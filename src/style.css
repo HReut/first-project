@@ -3030,6 +3030,10 @@ tr.tx-row--pending td {
   padding-top: 14px;
 }
 
+.settings-list__row--pending {
+  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
+}
+
 .settings-list__person {
   font-size: 14px;
   font-weight: 600;
@@ -3122,6 +3126,10 @@ tr.tx-row--pending td {
 .recurring-card--add {
   border: 1px dashed var(--border);
   background: transparent;
+}
+
+.recurring-card--pending {
+  background: color-mix(in srgb, var(--status-warning) 8%, var(--bg));
 }
 
 .recurring-card__top {

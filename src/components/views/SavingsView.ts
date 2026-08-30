@@ -19,7 +19,7 @@ function renderGoalProgress(saved: number, target: number): string {
   `
 }
 
-export function mountSavingsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): void {
+export function mountSavingsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): () => boolean {
   root.innerHTML = `
     <section class="band band--hero">
       <div class="band__inner">
@@ -38,12 +38,23 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
             אינו מחושב מהתנועות שלך, מכיוון שהחיסכון לא בהכרח נמצא באותו חשבון.
           </p>
           <div class="settings-list" id="savings-list"></div>
+          <div class="pending-bar" id="savings-pending-bar" hidden>
+            <span class="pending-bar__count" id="savings-pending-count"></span>
+            <button type="button" class="btn btn--sm" id="savings-discard-btn">ביטול שינויים</button>
+            <button type="button" class="btn btn--primary btn--sm" id="savings-save-btn">שמירת שינויים</button>
+          </div>
         </section>
       </div>
     </section>
   `
 
   const listEl = root.querySelector<HTMLElement>('#savings-list')!
+  const pendingBarEl = root.querySelector<HTMLElement>('#savings-pending-bar')!
+  const pendingCountEl = root.querySelector<HTMLElement>('#savings-pending-count')!
+  // Staged edits to existing goals — merged over the real data for display
+  // without touching the store until "שמירת שינויים" is clicked, same
+  // pattern as TransactionsView's pending edits.
+  const pendingEdits = new Map<string, Partial<NewSavingsGoal>>()
 
   /** Fire-and-forget, same reasoning as the other logXxx helpers in this
    * codebase: a logging failure shouldn't block the real action, but
@@ -58,11 +69,19 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
   }
 
   function render(state: AppState): void {
+    // Overlays unsaved staged edits over the real goals before rendering —
+    // same "display what you typed without touching the store yet" pattern
+    // as TransactionsView's visibleRows().
+    const overlaidGoals = state.savingsGoals.map((goal) => {
+      const pending = pendingEdits.get(goal.id)
+      return pending ? { ...goal, ...pending } : goal
+    })
+
     listEl.innerHTML = `
-      ${state.savingsGoals
+      ${overlaidGoals
         .map(
           (goal) => `
-        <div class="settings-list__row" data-id="${goal.id}">
+        <div class="settings-list__row${pendingEdits.has(goal.id) ? ' settings-list__row--pending' : ''}" data-id="${goal.id}">
           <input type="text" class="name-input" value="${goal.name}" placeholder="שם היעד" data-field="name">
           <span class="settings-list__inline-field">
             <span>נחסך</span>
@@ -96,6 +115,9 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
     if (state.savingsGoals.length === 0) {
       listEl.insertAdjacentHTML('afterbegin', `<p class="budget-summary__empty">עדיין אין יעדי חיסכון — הוסף/י אחד למטה.</p>`)
     }
+
+    pendingBarEl.hidden = pendingEdits.size === 0
+    pendingCountEl.textContent = `${pendingEdits.size} שינויים לא שמורים`
   }
 
   listEl.addEventListener('change', (event) => {
@@ -105,15 +127,36 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
     const id = row.dataset.id
     if (!id) return
     const field = input.dataset.field as keyof NewSavingsGoal
-    const goal = store.getState().savingsGoals.find((g) => g.id === id)
-    if (!goal) return
 
     const patch: Partial<NewSavingsGoal> = field === 'name' ? { name: input.value } : { [field]: Number(input.value) }
-    updateSavingsGoal(id, patch).then((updated) => {
+    pendingEdits.set(id, { ...pendingEdits.get(id), ...patch })
+    render(store.getState())
+  })
+
+  async function savePendingEdits(): Promise<void> {
+    const entries = [...pendingEdits]
+    if (entries.length === 0) return
+
+    try {
+      const updated = await Promise.all(entries.map(([id, patch]) => updateSavingsGoal(id, patch)))
+      const updatedById = new Map(updated.map((goal) => [goal.id, goal]))
       const { savingsGoals } = store.getState()
-      store.setState({ savingsGoals: savingsGoals.map((g) => (g.id === updated.id ? updated : g)) })
-      logSavings('updated', `יעד החיסכון ${updated.name} עודכן (${field === 'name' ? 'שם' : field === 'savedAmount' ? 'סכום שנחסך' : 'יעד'})`)
-    })
+      store.setState({ savingsGoals: savingsGoals.map((g) => updatedById.get(g.id) ?? g) })
+      pendingEdits.clear()
+      showToast(entries.length === 1 ? 'השינוי נשמר.' : `${entries.length} שינויים נשמרו.`, [], 2000)
+      logSavings('updated', entries.length === 1 ? `יעד החיסכון ${updated[0]?.name} עודכן` : `${entries.length} יעדי חיסכון עודכנו`)
+      render(store.getState())
+    } catch {
+      showToast('שמירת השינויים נכשלה — נסה/י שוב.')
+    }
+  }
+
+  root.querySelector<HTMLButtonElement>('#savings-save-btn')!.addEventListener('click', () => {
+    void savePendingEdits()
+  })
+  root.querySelector<HTMLButtonElement>('#savings-discard-btn')!.addEventListener('click', () => {
+    pendingEdits.clear()
+    render(store.getState())
   })
 
   listEl.addEventListener('click', (event) => {
@@ -127,6 +170,7 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
         deleteSavingsGoal(id).then(() => {
           const { savingsGoals } = store.getState()
           store.setState({ savingsGoals: savingsGoals.filter((g) => g.id !== id) })
+          pendingEdits.delete(id)
           const before: SavingsGoalDeletedBefore = { goal }
           logSavings('deleted', `יעד החיסכון ${goal.name} נמחק`, before)
         })
@@ -156,4 +200,9 @@ export function mountSavingsView(root: HTMLElement, store: Store<AppState>, curr
 
   store.subscribe(render)
   render(store.getState())
+
+  return function hasUnsavedChanges(): boolean {
+    const newName = root.querySelector<HTMLInputElement>('#new-goal-name')?.value.trim()
+    return pendingEdits.size > 0 || !!newName
+  }
 }
