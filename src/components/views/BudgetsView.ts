@@ -30,8 +30,40 @@ const ACCOUNT_VALUES: Account[] = ['shared', 'reut_personal', 'keren_personal']
 /** A personal account locks the person, same rule as the transaction form. */
 const PERSON_FOR_ACCOUNT: Partial<Record<Account, Person>> = { reut_personal: 'Reut', keren_personal: 'Keren' }
 
+const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
+const ANCHOR_YEARS_BACK = 10
+const ANCHOR_YEARS_FORWARD = 1
+
 function currentMonthKey(): string {
   return new Date().toISOString().slice(0, 7)
+}
+
+/** Two plain <select> dropdowns (month, year) for a "YYYY-MM" value —
+ * deliberately not a native date/month input. type="month" renders
+ * inconsistently across browsers, and type="date" offers a day segment
+ * that looks editable but is silently discarded on save (anchorMonth has
+ * no day), which reads as "the picker won't let me set the day." Plain
+ * selects have neither problem. `fieldPrefix` becomes each select's
+ * data-rule-field / id suffix so the change handler can tell them apart
+ * and combine both back into one "YYYY-MM" value. */
+function monthYearSelectHtml(monthAttr: string, yearAttr: string, currentValue: string): string {
+  const [yearStr, monthStr] = currentValue.split('-')
+  const selectedYear = Number(yearStr)
+  const selectedMonth = Number(monthStr)
+  const thisYear = new Date().getFullYear()
+  const years: number[] = []
+  for (let y = thisYear - ANCHOR_YEARS_BACK; y <= thisYear + ANCHOR_YEARS_FORWARD; y++) years.push(y)
+
+  return `
+    <span class="month-year-picker">
+      <select class="filter-select" ${monthAttr}>
+        ${MONTH_NAMES.map((name, i) => `<option value="${i + 1}" ${i + 1 === selectedMonth ? 'selected' : ''}>${name}</option>`).join('')}
+      </select>
+      <select class="filter-select" ${yearAttr}>
+        ${years.map((y) => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('')}
+      </select>
+    </span>
+  `
 }
 
 export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, currentPerson: Person): () => boolean {
@@ -271,7 +303,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
             )}
             ${fieldLabel(
               'מתאריך',
-              `<input type="date" class="icon-input" value="${rule.anchorMonth}-01" title="החודש שממנו הכלל מתחיל — שינוי לתאריך שעבר ייצור אוטומטית את התנועות שהוחמצו" data-rule-field="anchorMonth">`,
+              monthYearSelectHtml('data-rule-field="anchorMonth-month"', 'data-rule-field="anchorMonth-year"', rule.anchorMonth),
             )}
           </div>
           <div class="recurring-card__bottom">
@@ -302,10 +334,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
             'תשלומים (ריק = מתמשך)',
             `<input type="number" class="icon-input" id="new-recurring-installments" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים">`,
           )}
-          ${fieldLabel(
-            'מתאריך',
-            `<input type="date" class="icon-input" id="new-recurring-anchor" value="${currentMonth}-01" title="בחר/י חודש בעבר כדי ליצור אוטומטית את כל התנועות שהוחמצו מאז">`,
-          )}
+          ${fieldLabel('מתאריך', monthYearSelectHtml('id="new-recurring-anchor-month"', 'id="new-recurring-anchor-year"', currentMonth))}
         </div>
         <div class="recurring-card__bottom">
           <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ הוספת הוצאה קבועה</button>
@@ -337,9 +366,23 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     const row = input.closest<HTMLElement>('.recurring-card')!
     const id = row.dataset.id
     if (!id) return
-    const field = input.dataset.ruleField as keyof NewRecurringRule
+    const rawField = input.dataset.ruleField!
     const rule = store.getState().recurringRules.find((r) => r.id === id)
     if (!rule) return
+
+    // The month/year dropdowns combine into one anchorMonth patch — reading
+    // both selects fresh here so changing either one produces the same
+    // correct "YYYY-MM" regardless of which fired 'change'.
+    if (rawField === 'anchorMonth-month' || rawField === 'anchorMonth-year') {
+      const monthSelect = row.querySelector<HTMLSelectElement>('[data-rule-field="anchorMonth-month"]')!
+      const yearSelect = row.querySelector<HTMLSelectElement>('[data-rule-field="anchorMonth-year"]')!
+      recurringPendingEdits.set(id, { ...recurringPendingEdits.get(id), anchorMonth: `${yearSelect.value}-${monthSelect.value.padStart(2, '0')}` })
+      row.classList.add('recurring-card--pending')
+      renderRecurringPendingBar()
+      return
+    }
+
+    const field = rawField as keyof NewRecurringRule
 
     // isActive is a single deliberate toggle, not a typed value — stays
     // instant, same reasoning as delete. Everything else stages.
@@ -359,16 +402,14 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     else if (field === 'account') {
       const account = input.value as Account
       patch = { account, person: PERSON_FOR_ACCOUNT[account] ?? rule.person }
-    } else if (field === 'anchorMonth') patch = { anchorMonth: input.value.slice(0, 7) }
-    else patch = { [field]: input.value }
+    } else patch = { [field]: input.value }
 
     recurringPendingEdits.set(id, { ...recurringPendingEdits.get(id), ...patch })
-    // Deliberately not a full renderRecurringManager() rebuild — a native
-    // <input type="date"> (like מתאריך) fires 'change' after each segment
-    // is completed, not just once at the end, so rebuilding the row's
-    // innerHTML mid-edit would destroy the input the person is still
-    // typing into. Just flag the row and update the bar; the row's own
-    // inputs already show what was typed since nothing touched them.
+    // Deliberately not a full renderRecurringManager() rebuild — that would
+    // recreate every input in the row, which can steal focus/reset
+    // in-progress typing elsewhere in the same row. Just flag the row and
+    // update the bar; the row's own inputs already show what was picked
+    // since nothing touched them.
     row.classList.add('recurring-card--pending')
     renderRecurringPendingBar()
   })
@@ -429,7 +470,8 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       const intervalInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-interval')!
       const dayInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-day')!
       const installmentsInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-installments')!
-      const anchorInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-anchor')!
+      const anchorMonthSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-anchor-month')!
+      const anchorYearSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-anchor-year')!
 
       const merchant = merchantInput.value.trim()
       const amount = Number(amountInput.value)
@@ -443,7 +485,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         account,
         person: PERSON_FOR_ACCOUNT[account] ?? 'Reut',
         intervalMonths: Math.max(1, Number(intervalInput.value) || 1),
-        anchorMonth: anchorInput.value ? anchorInput.value.slice(0, 7) : currentMonthKey(),
+        anchorMonth: `${anchorYearSelect.value}-${anchorMonthSelect.value.padStart(2, '0')}`,
         dayOfMonth: Math.min(28, Math.max(1, Number(dayInput.value) || 1)),
         totalOccurrences: installmentsInput.value.trim() === '' ? null : Math.max(1, Number(installmentsInput.value)),
         isActive: true,

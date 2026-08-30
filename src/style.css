@@ -3173,6 +3173,17 @@ tr.tx-row--pending td {
   width: 100%;
 }
 
+.month-year-picker {
+  display: flex;
+  gap: 6px;
+}
+
+.month-year-picker .filter-select {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}
+
 .recurring-card__bottom {
   display: flex;
   align-items: center;
