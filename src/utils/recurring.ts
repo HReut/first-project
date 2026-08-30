@@ -21,6 +21,14 @@ export function isRuleDueForMonth(rule: RecurringRule, monthKey: string): boolea
  * month since lastGeneratedMonth gets caught up, not just the latest one.
  * An installment plan (totalOccurrences set) stops once it's produced that
  * many transactions total, even mid-backfill. */
+/** True when `tx` is a transaction this rule itself would generate —
+ * matched by content (merchant/category/account/source), not by any
+ * generation-tracking field, so it stays correct even if lastGeneratedMonth
+ * or occurrencesGenerated ever gets out of sync with the real data. */
+export function matchesRuleTransaction(rule: RecurringRule, tx: Transaction): boolean {
+  return tx.source === 'recurring' && tx.merchant === rule.merchant && tx.categoryId === rule.categoryId && tx.account === rule.account
+}
+
 export function dueMonthsForRule(rule: RecurringRule, upToMonthKey: string, existingTransactions: Transaction[] = []): string[] {
   if (!rule.isActive) return []
   const [anchorYear, anchorMonth] = rule.anchorMonth.split('-').map(Number)
@@ -28,25 +36,20 @@ export function dueMonthsForRule(rule: RecurringRule, upToMonthKey: string, exis
   const span = (upToYear - anchorYear) * 12 + (upToMonth - anchorMonth)
   if (span < 0) return []
 
-  // Self-heals a rule whose lastGeneratedMonth claims its most recent month
-  // is already generated but no matching transaction actually exists for
-  // it — e.g. an insert that silently failed, or a generation race that
-  // left the counter and the real data out of sync. Only checked for the
-  // exact claimed month (not every earlier one — that'd be a full audit on
-  // every call) since that's the one a write race would actually affect.
-  const hasTransactionForMonth = (monthKey: string) =>
-    existingTransactions.some(
-      (tx) => tx.source === 'recurring' && tx.merchant === rule.merchant && tx.categoryId === rule.categoryId && tx.account === rule.account && tx.date.startsWith(monthKey),
-    )
-
-  let remaining = rule.totalOccurrences === null ? Infinity : rule.totalOccurrences - rule.occurrencesGenerated
+  // Whether a month is already covered is decided by whether a matching
+  // transaction actually exists for it — not by trusting
+  // lastGeneratedMonth/occurrencesGenerated, which are just a display
+  // summary of past runs and can drift from reality (a failed insert, a
+  // generation race, bad data from a since-fixed input bug). This can't
+  // get permanently stuck the way trusting those fields could.
+  const matching = existingTransactions.filter((tx) => matchesRuleTransaction(rule, tx))
+  let remaining = rule.totalOccurrences === null ? Infinity : rule.totalOccurrences - matching.length
   const months: string[] = []
   for (let offset = 0; offset <= span && remaining > 0; offset++) {
     const d = new Date(anchorYear, anchorMonth - 1 + offset, 1)
     const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     if (!isRuleDueForMonth(rule, monthKey)) continue
-    const claimedDone = rule.lastGeneratedMonth !== null && monthKey <= rule.lastGeneratedMonth
-    if (claimedDone && (monthKey !== rule.lastGeneratedMonth || hasTransactionForMonth(monthKey))) continue
+    if (matching.some((tx) => tx.date.startsWith(monthKey))) continue
     months.push(monthKey)
     remaining--
   }

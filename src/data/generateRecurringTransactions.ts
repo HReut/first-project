@@ -2,7 +2,7 @@ import type { Store } from '../state/store.ts'
 import type { AppState } from '../types.ts'
 import { createTransactions, updateTransaction } from './transactionsRepo.ts'
 import { updateRecurringRule } from './recurringRulesRepo.ts'
-import { dueMonthsForRule, transactionForDueRule } from '../utils/recurring.ts'
+import { dueMonthsForRule, matchesRuleTransaction, transactionForDueRule } from '../utils/recurring.ts'
 import { computeReviewedStatus } from '../utils/insights.ts'
 
 // Guards against two overlapping calls both reading the same
@@ -24,12 +24,17 @@ let inFlight: Promise<void> | null = null
  * up immediately rather than waiting for the next reload. Safe to call
  * repeatedly, including concurrently — a rule with nothing new due is a
  * no-op, and an overlapping call reuses the in-flight run instead of
- * racing it (see `inFlight` above). New rows snapshot their category's
- * budget standing the same as any other transaction (see
- * transactionForDueRule) rather than landing 'pending'; this also
- * one-time-resolves any transaction still stuck 'pending' from before that
- * was true (e.g. a backfill run before this fix), since there's no "מרכז
- * בדיקה"/"סמן כנבדק" workflow left to clear it otherwise. */
+ * racing it (see `inFlight` above). Which months are "already covered" is
+ * decided by matching real transactions (see dueMonthsForRule /
+ * matchesRuleTransaction), not by trusting lastGeneratedMonth/
+ * occurrencesGenerated — those are just a display summary of past runs and
+ * can drift from reality, so a rule can never get permanently stuck the
+ * way trusting them could. New rows snapshot their category's budget
+ * standing the same as any other transaction (see transactionForDueRule)
+ * rather than landing 'pending'; this also one-time-resolves any
+ * transaction still stuck 'pending' from before that was true (e.g. a
+ * backfill run before this fix), since there's no "מרכז בדיקה"/"סמן כנבדק"
+ * workflow left to clear it otherwise. */
 export function generateDueRecurringTransactions(store: Store<AppState>, monthKey = new Date().toISOString().slice(0, 7)): Promise<void> {
   if (inFlight) return inFlight
   inFlight = runGeneration(store, monthKey).finally(() => {
@@ -40,23 +45,7 @@ export function generateDueRecurringTransactions(store: Store<AppState>, monthKe
 
 async function runGeneration(store: Store<AppState>, monthKey: string): Promise<void> {
   const { recurringRules: rules, transactions, categories, budgetLimitOverrides } = store.getState()
-  const allDue = rules.map((rule) => ({ rule, months: dueMonthsForRule(rule, monthKey, transactions) }))
-  // TEMPORARY diagnostic logging — remove once the "not generating" issue is confirmed fixed.
-  console.log(
-    '[recurring-debug] monthKey=%s rules=%o',
-    monthKey,
-    allDue.map(({ rule, months }) => ({
-      merchant: rule.merchant,
-      isActive: rule.isActive,
-      anchorMonth: rule.anchorMonth,
-      lastGeneratedMonth: rule.lastGeneratedMonth,
-      intervalMonths: rule.intervalMonths,
-      totalOccurrences: rule.totalOccurrences,
-      occurrencesGenerated: rule.occurrencesGenerated,
-      computedDueMonths: months,
-    })),
-  )
-  const due = allDue.filter((entry) => entry.months.length > 0)
+  const due = rules.map((rule) => ({ rule, months: dueMonthsForRule(rule, monthKey, transactions) })).filter((entry) => entry.months.length > 0)
   const stalePending = transactions.filter((tx) => tx.status === 'pending')
   if (due.length === 0 && stalePending.length === 0) return
 
@@ -64,7 +53,11 @@ async function runGeneration(store: Store<AppState>, monthKey: string): Promise<
   const ruleUpdates = due.map(({ rule, months }) => ({
     id: rule.id,
     lastGeneratedMonth: months[months.length - 1],
-    occurrencesGenerated: rule.occurrencesGenerated + months.length,
+    // Derived from real matching transactions plus what this run adds —
+    // not rule.occurrencesGenerated + months.length, which would just keep
+    // compounding a value that's already drifted from reality (see
+    // matchesRuleTransaction's doc comment).
+    occurrencesGenerated: transactions.filter((tx) => matchesRuleTransaction(rule, tx)).length + months.length,
   }))
 
   const [created, updatedRules, resolvedStale] = await Promise.all([
