@@ -7,6 +7,7 @@ import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
 import { updateCategory } from '../../data/categoriesRepo.ts'
 import { createBudgetLimitOverride, deleteBudgetLimitOverridesForCategory } from '../../data/budgetLimitOverridesRepo.ts'
 import { createRecurringRule, deleteRecurringRule, updateRecurringRule } from '../../data/recurringRulesRepo.ts'
+import { generateDueRecurringTransactions } from '../../data/generateRecurringTransactions.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { ACCOUNT_LABEL } from '../shared/transactionCells.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
@@ -246,6 +247,10 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
               'תשלומים (ריק = מתמשך)',
               `<input type="number" class="icon-input" value="${rule.totalOccurrences ?? ''}" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים" data-rule-field="totalOccurrences">`,
             )}
+            ${fieldLabel(
+              'מתאריך',
+              `<input type="month" class="icon-input" value="${rule.anchorMonth}" title="החודש שממנו הכלל מתחיל — שינוי לתאריך שעבר ייצור אוטומטית את התנועות שהוחמצו" data-rule-field="anchorMonth">`,
+            )}
           </div>
           <div class="recurring-card__bottom">
             <span class="settings-list__usage">${statusText(rule)}</span>
@@ -274,6 +279,10 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
           ${fieldLabel(
             'תשלומים (ריק = מתמשך)',
             `<input type="number" class="icon-input" id="new-recurring-installments" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים">`,
+          )}
+          ${fieldLabel(
+            'מתאריך',
+            `<input type="month" class="icon-input" id="new-recurring-anchor" value="${currentMonth}" title="בחר/י חודש בעבר כדי ליצור אוטומטית את כל התנועות שהוחמצו מאז">`,
           )}
         </div>
         <div class="recurring-card__bottom">
@@ -317,6 +326,9 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       const { recurringRules } = store.getState()
       store.setState({ recurringRules: recurringRules.map((r) => (r.id === updated.id ? updated : r)) })
       logRecurring('updated', `כלל חוזר עודכן: ${updated.merchant} (${field})`)
+      // Moving anchorMonth (or any other due-affecting field) back in time
+      // backfills the newly-missed months right away — a no-op otherwise.
+      if (field === 'anchorMonth' || field === 'intervalMonths' || field === 'isActive') void generateDueRecurringTransactions(store)
     })
   })
 
@@ -346,6 +358,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       const intervalInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-interval')!
       const dayInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-day')!
       const installmentsInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-installments')!
+      const anchorInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-anchor')!
 
       const merchant = merchantInput.value.trim()
       const amount = Number(amountInput.value)
@@ -359,7 +372,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         account,
         person: PERSON_FOR_ACCOUNT[account] ?? 'Reut',
         intervalMonths: Math.max(1, Number(intervalInput.value) || 1),
-        anchorMonth: currentMonthKey(),
+        anchorMonth: anchorInput.value || currentMonthKey(),
         dayOfMonth: Math.min(28, Math.max(1, Number(dayInput.value) || 1)),
         totalOccurrences: installmentsInput.value.trim() === '' ? null : Math.max(1, Number(installmentsInput.value)),
         isActive: true,
@@ -367,6 +380,11 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         const { recurringRules } = store.getState()
         store.setState({ recurringRules: [...recurringRules, created] })
         logRecurring('created', `נוסף כלל חוזר: ${created.merchant} (${formatCurrency(created.amount)})`)
+        // A backdated start month backfills every missed month right away,
+        // instead of waiting for the next app load to catch up one at a time.
+        void generateDueRecurringTransactions(store).then(() => {
+          if (created.anchorMonth < currentMonthKey()) showToast('התנועות שהוחמצו נוצרו אוטומטית — ניתן לבדוק אותן בעמוד התנועות.', [], 3000)
+        })
       })
     }
   })

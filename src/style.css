@@ -2769,6 +2769,41 @@ tr.tx-row--pending td {
   gap: 14px;
 }
 
+#expense-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.expense-row {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Rows after the first (batch-added via "+ הוספת תנועה נוספת") get a
+   header + separator so it's clear they're a distinct transaction. */
+.expense-row:not(:first-child) {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.expense-row__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.expense-row__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+#add-row-btn {
+  align-self: flex-start;
+}
+
 .modal__actions {
   display: flex;
   justify-content: flex-end;

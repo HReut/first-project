@@ -80,7 +80,7 @@ export type NewMappingRule = Omit<MappingRule, 'id' | 'updatedAt'>
  * +2*intervalMonths, etc. — see isRuleDueForMonth() in src/utils/recurring.ts.
  * `totalOccurrences` is null for an ongoing bill, or a count for an
  * installment plan — once occurrencesGenerated reaches it, generation stops
- * on its own (see findRulesDueForGeneration()). `lastGeneratedMonth` tracks
+ * on its own (see dueMonthsForRule()). `lastGeneratedMonth` tracks
  * the last month a transaction was auto-created, so the same month is never
  * generated twice. */
 export interface RecurringRule {

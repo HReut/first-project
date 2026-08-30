@@ -1,16 +1,16 @@
 import { Store } from '../state/store.ts'
 import type { AppState, View } from '../types.ts'
 import { listCategories } from '../data/categoriesRepo.ts'
-import { createTransactions, listTransactions } from '../data/transactionsRepo.ts'
+import { listTransactions } from '../data/transactionsRepo.ts'
 import { listEmailRules } from '../data/emailRulesRepo.ts'
 import { listMappingRules } from '../data/mappingRulesRepo.ts'
-import { listRecurringRules, updateRecurringRule } from '../data/recurringRulesRepo.ts'
+import { listRecurringRules } from '../data/recurringRulesRepo.ts'
 import { loadAccountBalance } from '../data/accountBalanceRepo.ts'
 import { loadExchangeRate } from '../data/exchangeRateRepo.ts'
 import { listBudgetLimitOverrides } from '../data/budgetLimitOverridesRepo.ts'
 import { listActivityLog } from '../data/activityLogRepo.ts'
 import { listSavingsGoals } from '../data/savingsGoalsRepo.ts'
-import { findRulesDueForGeneration, transactionForDueRule } from '../utils/recurring.ts'
+import { generateDueRecurringTransactions } from '../data/generateRecurringTransactions.ts'
 import { topBudgetedCategories } from '../utils/insights.ts'
 import { budgetStatus } from '../utils/budget.ts'
 import { formatCurrency } from '../utils/format.ts'
@@ -166,34 +166,13 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           savingsGoals,
           status: 'ready',
         })
-        return generateDueRecurringTransactions()
+        return generateDueRecurringTransactions(store)
       })
       .catch((err: unknown) => {
         store.setState({ status: 'error', error: err instanceof Error ? err.message : 'טעינת נתוני משק הבית נכשלה.' })
       })
   }
 
-  /** Auto-creates this month's transaction for every active recurring rule
-   * that's due and hasn't already generated one this month — runs once per
-   * app load, right after household data is ready. New rows land 'pending'
-   * so they go through the normal review flow, same as an import. */
-  function generateDueRecurringTransactions(): Promise<void> {
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const due = findRulesDueForGeneration(store.getState().recurringRules, monthKey)
-    if (due.length === 0) return Promise.resolve()
-
-    return Promise.all([
-      createTransactions(due.map((rule) => transactionForDueRule(rule, monthKey))),
-      Promise.all(due.map((rule) => updateRecurringRule(rule.id, { lastGeneratedMonth: monthKey, occurrencesGenerated: rule.occurrencesGenerated + 1 }))),
-    ]).then(([created, updatedRules]) => {
-      const updatedById = new Map(updatedRules.map((rule) => [rule.id, rule]))
-      const state = store.getState()
-      store.setState({
-        transactions: [...created, ...state.transactions],
-        recurringRules: state.recurringRules.map((rule) => updatedById.get(rule.id) ?? rule),
-      })
-    })
-  }
 
   root.innerHTML = `
     <div class="app-shell">

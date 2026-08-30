@@ -11,18 +11,33 @@ export function isRuleDueForMonth(rule: RecurringRule, monthKey: string): boolea
   return monthsSinceAnchor % rule.intervalMonths === 0
 }
 
-/** Active rules due for `monthKey` that haven't already generated a
- * transaction for it — i.e. what App.ts should generate on this load. An
- * installment plan (totalOccurrences set) stops matching once it's produced
- * that many transactions — no separate "completed" flag needed. */
-export function findRulesDueForGeneration(rules: RecurringRule[], monthKey: string): RecurringRule[] {
-  return rules.filter(
-    (rule) =>
-      rule.isActive &&
-      rule.lastGeneratedMonth !== monthKey &&
-      (rule.totalOccurrences === null || rule.occurrencesGenerated < rule.totalOccurrences) &&
-      isRuleDueForMonth(rule, monthKey),
-  )
+/** Every one of a rule's due months, from its anchor up through `upToMonthKey`
+ * inclusive, that hasn't already generated a transaction — not just the
+ * current month. This is what lets a rule with a backdated anchorMonth (set
+ * up to retroactively cover months already gone by) backfill all of them in
+ * one pass, and also means a household that skips opening the app for a
+ * stretch doesn't silently lose whichever month fell in the gap — every due
+ * month since lastGeneratedMonth gets caught up, not just the latest one.
+ * An installment plan (totalOccurrences set) stops once it's produced that
+ * many transactions total, even mid-backfill. */
+export function dueMonthsForRule(rule: RecurringRule, upToMonthKey: string): string[] {
+  if (!rule.isActive) return []
+  const [anchorYear, anchorMonth] = rule.anchorMonth.split('-').map(Number)
+  const [upToYear, upToMonth] = upToMonthKey.split('-').map(Number)
+  const span = (upToYear - anchorYear) * 12 + (upToMonth - anchorMonth)
+  if (span < 0) return []
+
+  let remaining = rule.totalOccurrences === null ? Infinity : rule.totalOccurrences - rule.occurrencesGenerated
+  const months: string[] = []
+  for (let offset = 0; offset <= span && remaining > 0; offset++) {
+    const d = new Date(anchorYear, anchorMonth - 1 + offset, 1)
+    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (!isRuleDueForMonth(rule, monthKey)) continue
+    if (rule.lastGeneratedMonth !== null && monthKey <= rule.lastGeneratedMonth) continue
+    months.push(monthKey)
+    remaining--
+  }
+  return months
 }
 
 /** Builds the pending transaction a due rule generates for `monthKey`,

@@ -5,7 +5,7 @@ import { formatCurrency, formatDateShort, formatMonthLabel, personLabel } from '
 import { computeReviewedStatus, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveIlsAmount } from '../../utils/currency.ts'
 import { fetchHistoricalRateToIls } from '../../data/exchangeRateApi.ts'
-import { createTransaction, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
+import { createTransactions, deleteTransactions, updateTransaction } from '../../data/transactionsRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
 import {
@@ -954,79 +954,103 @@ export class TransactionsView {
     })
   }
 
-  private openExpenseModal(existing?: Transaction): void {
+  /** One row's fields — used both for the single (edit) row and every row of
+   * the add-mode batch. `data-field` (not `name`) since batch mode can have
+   * several same-named inputs at once; each row is read by scoped
+   * querySelector, not FormData. */
+  private expenseRowFieldsHtml(prefill?: { date: string; categoryId: string; merchant: string; amount: string; currency: Currency; account: Account; person: Person }): string {
     const { categories } = this.#store.getState()
-    const isEdit = !!existing
     const today = isoDate(new Date())
-    const modal = new Modal(
-      `
-        <h2 class="modal__title">${isEdit ? 'עריכת תנועה' : 'הוספת תנועה'}</h2>
-        <form class="modal__form" id="add-expense-form">
-          <label class="filter-group">
-            <span class="filter-group__label">תאריך</span>
-            <input type="date" class="filter-input" name="date" value="${existing?.date ?? today}" required>
-          </label>
-          <label class="filter-group">
-            <span class="filter-group__label">קטגוריה</span>
-            <select class="filter-select" name="categoryId" required>
-              ${categories.map((c) => `<option value="${c.id}" ${c.id === existing?.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
-            </select>
-          </label>
-          <label class="filter-group">
-            <span class="filter-group__label">בית עסק (לא חובה)</span>
-            <input type="text" class="filter-input" name="merchant" placeholder="לדוגמה: שופרסל" value="${existing?.merchant ?? ''}">
-          </label>
-          <label class="filter-group">
-            <span class="filter-group__label">סכום</span>
-            <input type="number" class="filter-input" name="amount" step="0.01" value="${existing ? existing.originalAmount.toFixed(2) : ''}" required>
-          </label>
-          <label class="filter-group">
-            <span class="filter-group__label">מטבע</span>
-            <select class="filter-select" name="currency" required>
-              ${CURRENCY_VALUES.map((c) => `<option value="${c}" ${c === (existing?.currency ?? 'ILS') ? 'selected' : ''}>${CURRENCY_LABEL[c]}</option>`).join('')}
-            </select>
-            <span class="filter-group__hint" id="rate-preview" hidden></span>
-          </label>
-          <label class="filter-group">
-            <span class="filter-group__label">חשבון</span>
-            <select class="filter-select" name="account" required>
-              ${ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === (existing?.account ?? 'shared') ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')}
-            </select>
-          </label>
-          <label class="filter-group">
-            <span class="filter-group__label">מי שילם/ה</span>
-            <select class="filter-select" name="person" required>
-              ${PEOPLE.map((p) => `<option value="${p}" ${p === existing?.person ? 'selected' : ''}>${personLabel(p)}</option>`).join('')}
-            </select>
-          </label>
-          <div class="modal__actions">
-            <button type="button" class="btn" id="modal-cancel">ביטול</button>
-            <button type="submit" class="btn btn--primary">${isEdit ? 'שמירת שינויים' : 'הוספת תנועה'}</button>
-          </div>
-        </form>
-      `,
-      { ariaLabel: isEdit ? 'עריכת תנועה' : 'הוספת תנועה' },
-    )
+    return `
+      <label class="filter-group">
+        <span class="filter-group__label">תאריך</span>
+        <input type="date" class="filter-input" data-field="date" value="${prefill?.date ?? today}" required>
+      </label>
+      <label class="filter-group">
+        <span class="filter-group__label">קטגוריה</span>
+        <select class="filter-select" data-field="categoryId" required>
+          ${categories.map((c) => `<option value="${c.id}" ${c.id === prefill?.categoryId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
+        </select>
+      </label>
+      <label class="filter-group">
+        <span class="filter-group__label">בית עסק (לא חובה)</span>
+        <input type="text" class="filter-input" data-field="merchant" placeholder="לדוגמה: שופרסל" value="${prefill?.merchant ?? ''}">
+      </label>
+      <label class="filter-group">
+        <span class="filter-group__label">סכום</span>
+        <input type="number" class="filter-input" data-field="amount" step="0.01" value="${prefill?.amount ?? ''}" required>
+      </label>
+      <label class="filter-group">
+        <span class="filter-group__label">מטבע</span>
+        <select class="filter-select" data-field="currency" required>
+          ${CURRENCY_VALUES.map((c) => `<option value="${c}" ${c === (prefill?.currency ?? 'ILS') ? 'selected' : ''}>${CURRENCY_LABEL[c]}</option>`).join('')}
+        </select>
+        <span class="filter-group__hint" data-rate-preview hidden></span>
+      </label>
+      <label class="filter-group">
+        <span class="filter-group__label">חשבון</span>
+        <select class="filter-select" data-field="account" required>
+          ${ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === (prefill?.account ?? 'shared') ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')}
+        </select>
+      </label>
+      <label class="filter-group">
+        <span class="filter-group__label">מי שילם/ה</span>
+        <select class="filter-select" data-field="person" required>
+          ${PEOPLE.map((p) => `<option value="${p}" ${p === prefill?.person ? 'selected' : ''}>${personLabel(p)}</option>`).join('')}
+        </select>
+      </label>
+    `
+  }
 
-    const accountSelect = modal.element.querySelector<HTMLSelectElement>('select[name="account"]')!
-    const personSelect = modal.element.querySelector<HTMLSelectElement>('select[name="person"]')!
-    // Personal accounts pin the person — keep the (disabled) Person select in
-    // sync so its submitted value always matches what the badge will show.
-    const syncPersonToAccount = () => {
+  /** Reads one row into a NewTransaction, resolving its ILS-equivalent —
+   * shared by both the single-row edit submit and the batch-add submit. */
+  private async readExpenseRow(row: HTMLElement, existing?: Transaction): Promise<NewTransaction> {
+    const categoryId = row.querySelector<HTMLSelectElement>('[data-field="categoryId"]')!.value
+    const account = row.querySelector<HTMLSelectElement>('[data-field="account"]')!.value as Account
+    const currency = row.querySelector<HTMLSelectElement>('[data-field="currency"]')!.value as Currency
+    const originalAmount = Number(row.querySelector<HTMLInputElement>('[data-field="amount"]')!.value)
+    const date = row.querySelector<HTMLInputElement>('[data-field="date"]')!.value
+    const person = row.querySelector<HTMLSelectElement>('[data-field="person"]')!.value as Person
+    const state = this.#store.getState()
+
+    const { amount, usedFallback } = await resolveIlsAmount(originalAmount, currency, date, state.exchangeRate)
+    if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
+
+    // A manually-typed transaction is considered reviewed the instant it's
+    // entered — 'pending' is reserved for imported rows awaiting a look.
+    return {
+      date,
+      merchant: row.querySelector<HTMLInputElement>('[data-field="merchant"]')!.value.trim(),
+      amount,
+      currency,
+      originalAmount,
+      categoryId,
+      account,
+      person: PERSON_FOR_ACCOUNT[account] ?? person,
+      status: existing?.status ?? computeReviewedStatus(state.transactions, state.categories, categoryId, state.budgetLimitOverrides),
+      source: existing?.source ?? 'manual',
+    }
+  }
+
+  /** Wires the two per-row behaviors (personal-account locks the person;
+   * currency/date changes preview the historical rate) via delegation on
+   * `container`, so they work for every row including ones added later by
+   * "+ הוספת תנועה נוספת" — no per-row re-wiring needed. */
+  private wireExpenseRowBehaviors(container: HTMLElement): void {
+    const syncPersonToAccount = (row: HTMLElement) => {
+      const accountSelect = row.querySelector<HTMLSelectElement>('[data-field="account"]')!
+      const personSelect = row.querySelector<HTMLSelectElement>('[data-field="person"]')!
       const forcedPerson = PERSON_FOR_ACCOUNT[accountSelect.value as Account]
       personSelect.disabled = !!forcedPerson
       if (forcedPerson) personSelect.value = forcedPerson
     }
-    syncPersonToAccount()
-    accountSelect.addEventListener('change', syncPersonToAccount)
+    container.querySelectorAll<HTMLElement>('.expense-row').forEach(syncPersonToAccount)
 
-    // Shows the real historical rate that'll actually be used for a
-    // USD/EUR entry, before submitting — so it's not a black box.
-    const currencySelect = modal.element.querySelector<HTMLSelectElement>('select[name="currency"]')!
-    const dateInput = modal.element.querySelector<HTMLInputElement>('input[name="date"]')!
-    const ratePreviewEl = modal.element.querySelector<HTMLElement>('#rate-preview')!
     let ratePreviewToken = 0
-    const updateRatePreview = () => {
+    const updateRatePreview = (row: HTMLElement) => {
+      const currencySelect = row.querySelector<HTMLSelectElement>('[data-field="currency"]')!
+      const dateInput = row.querySelector<HTMLInputElement>('[data-field="date"]')!
+      const ratePreviewEl = row.querySelector<HTMLElement>('[data-rate-preview]')!
       const currency = currencySelect.value as Currency
       if (currency === 'ILS' || !dateInput.value) {
         ratePreviewEl.hidden = true
@@ -1041,53 +1065,118 @@ export class TransactionsView {
         ratePreviewEl.textContent = rate !== null ? `1${symbol} = ${formatCurrency(rate)} בתאריך זה` : 'לא נמצא שער לתאריך זה — ישמש שער הגיבוי'
       })
     }
-    updateRatePreview()
-    currencySelect.addEventListener('change', updateRatePreview)
-    dateInput.addEventListener('change', updateRatePreview)
+
+    container.addEventListener('change', (event) => {
+      const target = event.target as HTMLElement
+      const row = target.closest<HTMLElement>('.expense-row')
+      if (!row) return
+      const field = (target as HTMLInputElement | HTMLSelectElement).dataset.field
+      if (field === 'account') syncPersonToAccount(row)
+      if (field === 'currency' || field === 'date') updateRatePreview(row)
+    })
+  }
+
+  private openExpenseModal(existing?: Transaction): void {
+    const isEdit = !!existing
+    const modal = new Modal(
+      `
+        <h2 class="modal__title">${isEdit ? 'עריכת תנועה' : 'הוספת תנועה'}</h2>
+        <form class="modal__form" id="add-expense-form">
+          <div id="expense-rows">
+            <div class="expense-row">
+              ${this.expenseRowFieldsHtml(
+                existing && {
+                  date: existing.date,
+                  categoryId: existing.categoryId,
+                  merchant: existing.merchant,
+                  amount: existing.originalAmount.toFixed(2),
+                  currency: existing.currency,
+                  account: existing.account,
+                  person: existing.person,
+                },
+              )}
+            </div>
+          </div>
+          ${!isEdit ? `<button type="button" class="btn btn--sm" id="add-row-btn">+ הוספת תנועה נוספת</button>` : ''}
+          <div class="modal__actions">
+            <button type="button" class="btn" id="modal-cancel">ביטול</button>
+            <button type="submit" class="btn btn--primary">${isEdit ? 'שמירת שינויים' : 'הוספת תנועה'}</button>
+          </div>
+        </form>
+      `,
+      { ariaLabel: isEdit ? 'עריכת תנועה' : 'הוספת תנועה' },
+    )
+
+    const rowsEl = modal.element.querySelector<HTMLElement>('#expense-rows')!
+    this.wireExpenseRowBehaviors(rowsEl)
+
+    // Add-row copies the last row's current values (not blank) — batch-add
+    // exists for catching up several months of the same bill/category, so
+    // repeating everything but the date is the common case; easy to
+    // overwrite whatever differs.
+    modal.element.querySelector<HTMLButtonElement>('#add-row-btn')?.addEventListener('click', () => {
+      const rows = Array.from(rowsEl.querySelectorAll<HTMLElement>('.expense-row'))
+      const last = rows[rows.length - 1]
+      const prefill = {
+        date: last.querySelector<HTMLInputElement>('[data-field="date"]')!.value,
+        categoryId: last.querySelector<HTMLSelectElement>('[data-field="categoryId"]')!.value,
+        merchant: last.querySelector<HTMLInputElement>('[data-field="merchant"]')!.value,
+        amount: last.querySelector<HTMLInputElement>('[data-field="amount"]')!.value,
+        currency: last.querySelector<HTMLSelectElement>('[data-field="currency"]')!.value as Currency,
+        account: last.querySelector<HTMLSelectElement>('[data-field="account"]')!.value as Account,
+        person: last.querySelector<HTMLSelectElement>('[data-field="person"]')!.value as Person,
+      }
+      const row = document.createElement('div')
+      row.className = 'expense-row'
+      row.innerHTML = `
+        <div class="expense-row__header">
+          <span class="expense-row__label">תנועה ${rows.length + 1}</span>
+          <button type="button" class="icon-btn" data-remove-row aria-label="הסרת שורה">✕</button>
+        </div>
+        ${this.expenseRowFieldsHtml(prefill)}
+      `
+      rowsEl.appendChild(row)
+      this.wireExpenseRowBehaviors(row)
+    })
+
+    rowsEl.addEventListener('click', (event) => {
+      const removeBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-remove-row]')
+      if (!removeBtn) return
+      removeBtn.closest('.expense-row')!.remove()
+      // Renumber the remaining rows' headers so they stay sequential.
+      Array.from(rowsEl.querySelectorAll<HTMLElement>('.expense-row__label')).forEach((label, i) => {
+        label.textContent = `תנועה ${i + 2}` // row 0 has no header, so labels start at "תנועה 2"
+      })
+    })
 
     modal.element.querySelector<HTMLButtonElement>('#modal-cancel')!.addEventListener('click', () => modal.close())
     modal.element.querySelector<HTMLFormElement>('#add-expense-form')!.addEventListener('submit', async (event) => {
       event.preventDefault()
       const form = event.currentTarget as HTMLFormElement
       const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]')!
-      const data = new FormData(form)
-      const categoryId = String(data.get('categoryId'))
-      const account = data.get('account') as Account
-      const currency = data.get('currency') as Currency
-      const originalAmount = Number(data.get('amount'))
-      const date = String(data.get('date'))
-      const state = this.#store.getState()
-
       submitBtn.disabled = true
-      const { amount, usedFallback } = await resolveIlsAmount(originalAmount, currency, date, state.exchangeRate)
-      submitBtn.disabled = false
-      if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
 
-      // A manually-typed transaction is considered reviewed the instant it's
-      // entered — 'pending' is reserved for imported rows awaiting a look.
-      const input: NewTransaction = {
-        date,
-        merchant: String(data.get('merchant')).trim(),
-        amount,
-        currency,
-        originalAmount,
-        categoryId,
-        account,
-        person: PERSON_FOR_ACCOUNT[account] ?? (data.get('person') as Person),
-        status: existing?.status ?? computeReviewedStatus(state.transactions, state.categories, categoryId, state.budgetLimitOverrides),
-        source: existing?.source ?? 'manual',
-      }
-      if (isEdit) {
-        this.commitEdit(existing.id, input)
-        modal.close()
-      } else {
-        createTransaction(input).then((created) => {
-          const { transactions } = this.#store.getState()
-          this.#store.setState({ transactions: [created, ...transactions] })
-          this.logTx('created', `נוספה ${created.merchant || 'תנועה'} (${formatCurrency(created.originalAmount, created.currency)})`)
+      try {
+        if (isEdit) {
+          const input = await this.readExpenseRow(rowsEl.querySelector<HTMLElement>('.expense-row')!, existing)
+          this.commitEdit(existing.id, input)
           modal.close()
-          showToast(`✓ נוספה ${created.merchant || 'תנועה'} (${formatCurrency(created.originalAmount, created.currency)})`, [], 2500)
-        })
+          return
+        }
+
+        const rows = Array.from(rowsEl.querySelectorAll<HTMLElement>('.expense-row'))
+        const inputs = await Promise.all(rows.map((row) => this.readExpenseRow(row)))
+        const created = await createTransactions(inputs)
+        const { transactions } = this.#store.getState()
+        this.#store.setState({ transactions: [...created, ...transactions] })
+        const total = created.reduce((sum, tx) => sum + tx.amount, 0)
+        const summary = created.length === 1 ? `נוספה ${created[0].merchant || 'תנועה'} (${formatCurrency(created[0].originalAmount, created[0].currency)})` : `נוספו ${created.length} תנועות (סה"כ ${formatCurrency(total)})`
+        this.logTx('created', summary)
+        modal.close()
+        showToast(`✓ ${summary}`, [], 2500)
+      } catch {
+        showToast('השמירה נכשלה — נסה/י שוב.')
+        submitBtn.disabled = false
       }
     })
   }
