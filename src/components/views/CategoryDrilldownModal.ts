@@ -92,13 +92,21 @@ export function openCategoryDrilldown(
     })
   }
 
+  /** Isolated from renderRows() so a staged edit can refresh just the
+   * count/total without rebuilding the table body — see the change
+   * listener below for why that matters. */
+  function updateDrilldownSummary(): void {
+    const rows = overlaidRows()
+    summaryEl.textContent =
+      rows.length === 0 ? 'אין תנועות בקטגוריה זו לתקופה שנבחרה.' : `${rows.length} תנועות · סה"כ ${formatCurrency(rows.reduce((sum, tx) => sum + tx.amount, 0))}`
+  }
+
   function renderRows(): void {
     const { categories } = store.getState()
     const categoryOptions = (selectedId: string) => categories.map((c) => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')
     const rows = overlaidRows()
 
-    summaryEl.textContent =
-      rows.length === 0 ? 'אין תנועות בקטגוריה זו לתקופה שנבחרה.' : `${rows.length} תנועות · סה"כ ${formatCurrency(rows.reduce((sum, tx) => sum + tx.amount, 0))}`
+    updateDrilldownSummary()
 
     bodyEl.innerHTML = rows
       .map(
@@ -145,7 +153,7 @@ export function openCategoryDrilldown(
       const value = Number(input.value)
       // Negative is valid — a real refund/credit row, not an error.
       if (Number.isNaN(value) || value === 0) {
-        renderRows()
+        input.value = tx.originalAmount.toFixed(2)
         return
       }
       const { amount, usedFallback } = await resolveIlsAmount(value, tx.currency, tx.date, store.getState().exchangeRate)
@@ -153,7 +161,7 @@ export function openCategoryDrilldown(
       if (usedFallback) showToast('לא ניתן היה לאתר את שער החליפין האמיתי לתאריך זה — נעשה שימוש בשער הגיבוי שהוגדר בהגדרות.')
     } else if (field === 'date') {
       if (!input.value) {
-        renderRows()
+        input.value = tx.date
         return
       }
       if (tx.currency !== 'ILS') {
@@ -174,7 +182,15 @@ export function openCategoryDrilldown(
     }
 
     pendingEdits.set(id, { ...pendingEdits.get(id), ...patch })
-    renderRows()
+    // Deliberately not a full renderRows() rebuild — a native
+    // <input type="date"> fires 'change' after each segment is completed,
+    // not just once at the end, so rebuilding the row's innerHTML mid-edit
+    // would destroy the input the person is still typing into. Just flag
+    // the row and refresh the total; the row's own inputs already show
+    // what was typed since nothing touched them.
+    input.closest<HTMLTableRowElement>('tr')!.classList.add('tx-row--pending')
+    updateDrilldownSummary()
+    renderPendingBar()
   })
 
   async function savePendingEdits(): Promise<void> {

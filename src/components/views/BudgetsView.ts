@@ -363,7 +363,14 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     else patch = { [field]: input.value }
 
     recurringPendingEdits.set(id, { ...recurringPendingEdits.get(id), ...patch })
-    renderRecurringManager(store.getState())
+    // Deliberately not a full renderRecurringManager() rebuild — a native
+    // <input type="date"> (like מתאריך) fires 'change' after each segment
+    // is completed, not just once at the end, so rebuilding the row's
+    // innerHTML mid-edit would destroy the input the person is still
+    // typing into. Just flag the row and update the bar; the row's own
+    // inputs already show what was typed since nothing touched them.
+    row.classList.add('recurring-card--pending')
+    renderRecurringPendingBar()
   })
 
   async function saveRecurringPendingEdits(): Promise<void> {
