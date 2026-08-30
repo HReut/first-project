@@ -11,6 +11,7 @@ import { listBudgetLimitOverrides } from '../data/budgetLimitOverridesRepo.ts'
 import { listActivityLog } from '../data/activityLogRepo.ts'
 import { listSavingsGoals } from '../data/savingsGoalsRepo.ts'
 import { generateDueRecurringTransactions } from '../data/generateRecurringTransactions.ts'
+import { dedupeRecurringTransactions } from '../data/dedupeRecurringTransactions.ts'
 import { topBudgetedCategories } from '../utils/insights.ts'
 import { budgetStatus } from '../utils/budget.ts'
 import { formatCurrency } from '../utils/format.ts'
@@ -166,7 +167,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           savingsGoals,
           status: 'ready',
         })
-        return generateDueRecurringTransactions(store)
+        return dedupeRecurringTransactions(store, currentPerson).then(() => generateDueRecurringTransactions(store))
       })
       .catch((err: unknown) => {
         store.setState({ status: 'error', error: err instanceof Error ? err.message : 'טעינת נתוני משק הבית נכשלה.' })
