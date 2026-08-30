@@ -35,11 +35,26 @@ function toRow(input: Partial<NewTransaction>): Partial<Omit<TransactionRow, 'id
   return row
 }
 
+// PostgREST caps a single request at its configured max-rows (commonly
+// 1000) regardless of how many rows actually match — silently truncating
+// the household's data past that point unless explicitly paged through.
+const LIST_PAGE_SIZE = 1000
+
 export async function listTransactions(): Promise<Transaction[]> {
   if (supabase) {
-    const { data, error } = await supabase.from('transactions').select('*').order('date', { ascending: false })
-    if (error) throw error
-    return (data as TransactionRow[]).map(fromRow)
+    const rows: TransactionRow[] = []
+    for (let page = 0; ; page++) {
+      const from = page * LIST_PAGE_SIZE
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('date', { ascending: false })
+        .range(from, from + LIST_PAGE_SIZE - 1)
+      if (error) throw error
+      rows.push(...(data as TransactionRow[]))
+      if (data.length < LIST_PAGE_SIZE) break
+    }
+    return rows.map(fromRow)
   }
   return loadLocalTransactions(loadLocalCategories())
 }
@@ -103,10 +118,19 @@ export async function restoreTransactions(transactions: Transaction[]): Promise<
   return transactions
 }
 
+// PostgREST's `id=in.(...)` filter goes in the request URL, so a very
+// large id list (a big bulk cleanup) risks exceeding URL length limits —
+// chunking keeps every request comfortably small regardless of how many
+// ids are passed in.
+const DELETE_BATCH_SIZE = 200
+
 export async function deleteTransactions(ids: string[]): Promise<void> {
   if (supabase) {
-    const { error } = await supabase.from('transactions').delete().in('id', ids)
-    if (error) throw error
+    for (let i = 0; i < ids.length; i += DELETE_BATCH_SIZE) {
+      const batch = ids.slice(i, i + DELETE_BATCH_SIZE)
+      const { error } = await supabase.from('transactions').delete().in('id', batch)
+      if (error) throw error
+    }
     return
   }
   const idSet = new Set(ids)
