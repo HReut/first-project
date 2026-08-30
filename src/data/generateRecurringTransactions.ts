@@ -40,7 +40,23 @@ export function generateDueRecurringTransactions(store: Store<AppState>, monthKe
 
 async function runGeneration(store: Store<AppState>, monthKey: string): Promise<void> {
   const { recurringRules: rules, transactions, categories, budgetLimitOverrides } = store.getState()
-  const due = rules.map((rule) => ({ rule, months: dueMonthsForRule(rule, monthKey, transactions) })).filter((entry) => entry.months.length > 0)
+  const allDue = rules.map((rule) => ({ rule, months: dueMonthsForRule(rule, monthKey, transactions) }))
+  // TEMPORARY diagnostic logging — remove once the "not generating" issue is confirmed fixed.
+  console.log(
+    '[recurring-debug] monthKey=%s rules=%o',
+    monthKey,
+    allDue.map(({ rule, months }) => ({
+      merchant: rule.merchant,
+      isActive: rule.isActive,
+      anchorMonth: rule.anchorMonth,
+      lastGeneratedMonth: rule.lastGeneratedMonth,
+      intervalMonths: rule.intervalMonths,
+      totalOccurrences: rule.totalOccurrences,
+      occurrencesGenerated: rule.occurrencesGenerated,
+      computedDueMonths: months,
+    })),
+  )
+  const due = allDue.filter((entry) => entry.months.length > 0)
   const stalePending = transactions.filter((tx) => tx.status === 'pending')
   if (due.length === 0 && stalePending.length === 0) return
 
