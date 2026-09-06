@@ -117,11 +117,11 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
           <thead>
             <tr>
               <th><input type="checkbox" id="import-select-all" aria-label="בחירת הכול"></th>
-              <th>תאריך</th>
-              <th>בית עסק</th>
-              <th>סכום</th>
-              <th>קטגוריה</th>
-              <th>מי שילם/ה</th>
+              <th class="import-preview__sortable" data-sort="date">תאריך</th>
+              <th class="import-preview__sortable" data-sort="merchant">בית עסק</th>
+              <th class="import-preview__sortable" data-sort="amount">סכום</th>
+              <th class="import-preview__sortable" data-sort="category">קטגוריה</th>
+              <th class="import-preview__sortable" data-sort="person">מי שילם/ה</th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +133,7 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
                 <td><input type="date" class="filter-input" data-field="date" value="${row.date ?? ''}"></td>
                 <td>
                   <input type="text" class="filter-input" data-field="merchant" value="${row.merchant}">
-                  ${row.matchedRule ? '<span class="import-preview__rule-badge" title="מולא אוטומטית מכלל שמור">כלל</span>' : ''}
+                  ${row.matchedRule ? '<span class="import-preview__rule-badge" title="מולא אוטומטית מכלל שמור או מהיסטוריית הקטגוריות של בית העסק">אוטומטי</span>' : ''}
                   ${row.isPossibleDuplicate ? '<span class="import-preview__rule-badge import-preview__rule-badge--warn" title="אותו תאריך, בית עסק וסכום כמו תנועה קיימת">כפילות אפשרית</span>' : ''}
                 </td>
                 <td><input type="number" class="filter-input${row.amount !== null && row.amount < 0 ? ' import-preview__amount--credit' : ''}" data-field="amount" step="0.01" value="${row.amount !== null ? row.amount.toFixed(2) : ''}"></td>
@@ -178,6 +178,57 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
   })
 
   wireBulkSelection(modal)
+  wireSorting(modal)
+}
+
+type SortField = 'date' | 'merchant' | 'amount' | 'category' | 'person'
+
+/** Reorders the actual <tr> elements already in the DOM rather than
+ * re-rendering from `rows` — a statement can be dozens of rows, and sorting
+ * (e.g. by בית עסק, to group repeats of the same merchant together for
+ * faster bulk-categorizing) must not discard whatever the user's already
+ * typed/picked/checked in the grid. Reads each row's *current* input value,
+ * not the originally-parsed one, so a row edited before sorting still sorts
+ * on what it now shows. */
+function wireSorting(modal: Modal): void {
+  const table = modal.element.querySelector<HTMLTableElement>('.import-preview__table')!
+  const tbody = table.querySelector<HTMLTableSectionElement>('tbody')!
+  let activeSort: { field: SortField; direction: 1 | -1 } | null = null
+
+  function valueForField(row: HTMLTableRowElement, field: SortField): string | number {
+    switch (field) {
+      case 'date':
+        return row.querySelector<HTMLInputElement>('[data-field="date"]')!.value
+      case 'merchant':
+        return row.querySelector<HTMLInputElement>('[data-field="merchant"]')!.value.toLowerCase()
+      case 'amount':
+        return Number(row.querySelector<HTMLInputElement>('[data-field="amount"]')!.value) || 0
+      case 'category':
+        return row.querySelector<HTMLSelectElement>('[data-field="category"]')!.selectedOptions[0]?.textContent?.toLowerCase() ?? ''
+      case 'person':
+        return row.querySelector<HTMLSelectElement>('[data-field="person"]')!.selectedOptions[0]?.textContent?.toLowerCase() ?? ''
+    }
+  }
+
+  table.querySelectorAll<HTMLElement>('[data-sort]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort as SortField
+      const direction: 1 | -1 = activeSort?.field === field && activeSort.direction === 1 ? -1 : 1
+      activeSort = { field, direction }
+
+      const sortedRows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>('tr')).sort((a, b) => {
+        const va = valueForField(a, field)
+        const vb = valueForField(b, field)
+        if (va < vb) return -direction
+        if (va > vb) return direction
+        return 0
+      })
+      for (const row of sortedRows) tbody.appendChild(row)
+
+      table.querySelectorAll('[data-sort]').forEach((el) => el.classList.remove('import-preview__sortable--asc', 'import-preview__sortable--desc'))
+      th.classList.add(direction === 1 ? 'import-preview__sortable--asc' : 'import-preview__sortable--desc')
+    })
+  })
 }
 
 /** Batch imports (a full statement) can be dozens of rows — selecting a

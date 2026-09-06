@@ -38,6 +38,11 @@ export interface ParsedImportRow {
    * pretending the file said something it didn't. */
   categoryId: string | null
   person: Person | null
+  /** True when the category/person shown wasn't in the file itself but was
+   * filled in automatically — either from a saved mapping rule, or (see
+   * buildMostCommonCategoryByMerchant) from how this merchant is usually
+   * categorized elsewhere in the household's data. Shown as a badge so the
+   * guess is visibly a guess, not something the file actually said. */
   matchedRule: boolean
   /** True when an existing transaction already has this exact date +
    * merchant + amount — most likely the same statement imported twice.
@@ -164,6 +169,38 @@ export function buildImportPreview(csvText: string, categories: Category[], mapp
   return buildImportPreviewFromTable(parseCsv(csvText), categories, mappingRules, existingTransactions)
 }
 
+/** Merchant -> whichever category most of its existing transactions already
+ * carry, used as a fallback when there's no saved mapping rule for it. A
+ * category picked by hand in the transactions grid doesn't automatically
+ * become a mapping rule (only accepting the "remember this?" prompt does),
+ * so without this, a merchant the household has consistently categorized
+ * for months would still come back "not detected" on every fresh import
+ * until someone explicitly saves a rule for it. */
+function buildMostCommonCategoryByMerchant(transactions: Transaction[]): Map<string, string> {
+  const countsByMerchant = new Map<string, Map<string, number>>()
+  for (const tx of transactions) {
+    if (!tx.merchant) continue
+    const key = normalizeMerchantKey(tx.merchant)
+    const counts = countsByMerchant.get(key) ?? new Map<string, number>()
+    counts.set(tx.categoryId, (counts.get(tx.categoryId) ?? 0) + 1)
+    countsByMerchant.set(key, counts)
+  }
+
+  const result = new Map<string, string>()
+  for (const [key, counts] of countsByMerchant) {
+    let bestCategoryId = ''
+    let bestCount = 0
+    for (const [categoryId, count] of counts) {
+      if (count > bestCount) {
+        bestCount = count
+        bestCategoryId = categoryId
+      }
+    }
+    if (bestCategoryId) result.set(key, bestCategoryId)
+  }
+  return result
+}
+
 /**
  * Turns an already-tabular file (CSV rows, or an XLSX sheet read into
  * string[][]) into reviewable rows: detects Hebrew/English headers, then —
@@ -185,6 +222,14 @@ export function buildImportPreviewFromTable(
   const columnMapping = detectColumnMapping(headerRow)
   const categoryByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c]))
   const ruleByMerchant = new Map(mappingRules.map((rule) => [rule.merchantKey, rule]))
+  // Falls back to whatever category a merchant is *usually* filed under in
+  // the household's existing data when there's no saved mapping rule for
+  // it — a manual categorization never automatically becomes a rule, so
+  // without this a merchant only ever gets recognized here if someone
+  // happened to accept the "remember this?" prompt for it. existingTransactions
+  // is the whole household's data (not scoped to whoever's importing), so
+  // this already draws on every household member's past corrections.
+  const mostCommonCategoryByMerchant = buildMostCommonCategoryByMerchant(existingTransactions)
   // date+amount+normalized-merchant -> already in the household's data — and
   // added to as rows are processed below, so two identical-looking rows
   // *within this same file* also flag each other, not just rows that match
@@ -203,7 +248,7 @@ export function buildImportPreviewFromTable(
     const personRaw = columnMapping.person !== undefined ? cells[columnMapping.person]?.trim() : undefined
     const personFromFile = personRaw === 'Reut' || personRaw === 'Keren' ? personRaw : null
 
-    const categoryId = categoryFromFile ?? rule?.categoryId ?? null
+    const categoryId = categoryFromFile ?? rule?.categoryId ?? mostCommonCategoryByMerchant.get(normalizeMerchantKey(merchant)) ?? null
     const person = personFromFile ?? rule?.person ?? null
     const date = columnMapping.date !== undefined ? parseDate(cells[columnMapping.date]) : null
     const amount = columnMapping.amount !== undefined ? parseAmount(cells[columnMapping.amount]) : null
@@ -218,7 +263,7 @@ export function buildImportPreviewFromTable(
       amount,
       categoryId,
       person,
-      matchedRule: !categoryFromFile && !personFromFile && !!rule,
+      matchedRule: !categoryFromFile && !personFromFile && (!!rule || mostCommonCategoryByMerchant.has(normalizeMerchantKey(merchant))),
       isPossibleDuplicate,
     }
   })

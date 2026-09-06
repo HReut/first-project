@@ -328,6 +328,7 @@ p {
 }
 
 .sidebar__link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -355,10 +356,25 @@ p {
   color: var(--text-h);
 }
 
+/* A tinted row + accent bar (rather than a solid accent fill, which is
+   reserved for actionable buttons like Import/New transaction) so "this is
+   where you are" doesn't read as "click me" the way the action buttons above
+   it do. */
 .sidebar__link.is-active {
-  background: var(--accent);
-  color: #fff;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
   font-weight: 600;
+}
+
+.sidebar__link.is-active::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
 .sidebar__link:focus-visible,
@@ -2867,6 +2883,34 @@ tr.tx-row--pending td {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+}
+
+.import-preview__table th.import-preview__sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.import-preview__table th.import-preview__sortable:hover {
+  color: var(--accent);
+}
+
+.import-preview__table th.import-preview__sortable::after {
+  content: '⇅';
+  margin-inline-start: 4px;
+  opacity: 0.4;
+  font-size: 11px;
+}
+
+.import-preview__table th.import-preview__sortable--asc::after {
+  content: '↑';
+  opacity: 1;
+  color: var(--accent);
+}
+
+.import-preview__table th.import-preview__sortable--desc::after {
+  content: '↓';
+  opacity: 1;
+  color: var(--accent);
 }
 
 .import-preview__table .filter-input,
