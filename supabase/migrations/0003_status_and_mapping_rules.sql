@@ -18,9 +18,13 @@ alter table transactions add constraint transactions_status_check
   check (status in ('pending', 'on_budget', 'exceeded'));
 alter table transactions alter column status set default 'pending';
 
+-- 'recurring' is included here even though it's not introduced until
+-- 0005_recurring_rules.sql — this constraint gets replaced again there, but
+-- keeping the lists in sync avoids a step where re-running the migrations
+-- in order would (harmlessly) narrow the constraint and then widen it back.
 alter table transactions drop constraint if exists transactions_source_check;
 alter table transactions add constraint transactions_source_check
-  check (source in ('manual', 'email_auto', 'import'));
+  check (source in ('manual', 'email_auto', 'import', 'recurring'));
 
 -- Imported rows with no detectable category fall back to this one —
 -- category_id is not null, so there must be somewhere real to point at.
