@@ -32,16 +32,26 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
  * PdfImportResult.declaredTotal and the reconciliation banner in
  * TransactionsImport.ts. A negative amount (refund/reversal) is kept as a
  * real negative-amount row rather than skipped — see CARD_SUFFIX_TO_PERSON
- * for how the cardholder (and so "מי שילם/ה") is detected. Known
- * limitations: a merchant name that wraps onto a second visual line loses
- * that second line; MAX_CATEGORY_ALIASES only covers category labels seen
- * so far — an unrecognized one just leaves the category blank rather than
+ * for how the cardholder (and so "מי שילם/ה") is detected. When a merchant
+ * name wraps onto a second visual line right at a page break, the wrapped
+ * part lands as orphaned text at the top of the next page — linesToTable()
+ * re-attaches it to the row it belongs to (see pendingEmptyMerchantRowIndex
+ * and isLikelyMerchantContinuation); a wrap that happens to fall in the
+ * middle of a page, rather than at a page break, is still lost. Known
+ * limitations: MAX_CATEGORY_ALIASES only covers category labels seen so far
+ * — an unrecognized one just leaves the category blank rather than
  * guessing; and a statement covering more than one card wouldn't have every
  * row correctly attributed, since cardholder detection is document-wide,
  * not per-row (see detectCardholder).
  */
 
 const DATE_RE = /\b(\d{1,2})[./](\d{1,2})[./](\d{2,4})\b/
+// Global variant of DATE_RE, used to strip every date-shaped substring out
+// of a line before hunting for amounts — a statement period line like
+// "01.11.2025 - 01.05.2024" otherwise gets misread as a transaction, since
+// AMOUNT_RE's "\d+.\d{2}" shape also matches the day.month part of a date
+// (e.g. "01.05" out of "01.05.24").
+const DATE_RE_G = new RegExp(DATE_RE.source, 'g')
 const AMOUNT_RE = /-?\d[\d,]*\.\d{2}(?!\d)(?!%)/g
 // Words/phrases that show up inside a real transaction row but aren't part
 // of the merchant name — stripped out of whatever text is left over once
@@ -93,6 +103,24 @@ const SKIP_IF_CONTAINS = [
   'שם בית העסק',
   'העסקאות שמוצגות',
 ]
+
+// Phrases that rule out a short, digit-free line being read as a wrapped-
+// over merchant-name continuation (see isLikelyMerchantContinuation) — page
+// titles/section headers rather than actual leftover merchant text.
+const CONTINUATION_EXCLUDE = ['MAX', 'עסקאות', 'קטגוריה', 'תאריך', 'https://']
+
+/** True when a line is short, digit-free plain text — the shape of a
+ * merchant name's second visual line, not a page title, disclaimer
+ * sentence, or anything else. Used only to re-attach a merchant name that
+ * PDF pagination pushed onto the start of the next page — see the
+ * pendingEmptyMerchantRowIndex handling in linesToTable(). */
+function isLikelyMerchantContinuation(line: string): boolean {
+  if (line.length === 0 || line.length > 30) return false
+  if (/\d/.test(line)) return false
+  if (CONTINUATION_EXCLUDE.some((word) => line.includes(word))) return false
+  if (SKIP_IF_CONTAINS.some((phrase) => line.includes(phrase))) return false
+  return true
+}
 
 // Card last-4 -> household member — lets the parser fill in "מי שילם/ה"
 // automatically from whichever card the statement is for, instead of
@@ -150,15 +178,17 @@ function linesFromItems(items: { str: string; x: number; y: number }[]): string[
     .filter(Boolean)
 }
 
-/** Reads every page and concatenates their reconstructed lines. A single
- * page failing to extract (corrupt content stream, an image-only page,
- * etc.) is skipped rather than aborting the whole file — otherwise one bad
- * page in a multi-page statement would silently drop every transaction on
- * every other page too. */
-async function extractLines(file: File): Promise<string[]> {
+/** Reads every page into its own reconstructed-lines array (rather than one
+ * flat array) so linesToTable() can tell where a page break falls — needed
+ * to re-attach a merchant name that wraps from the bottom of one page onto
+ * the top of the next. A single page failing to extract (corrupt content
+ * stream, an image-only page, etc.) is skipped rather than aborting the
+ * whole file — otherwise one bad page in a multi-page statement would
+ * silently drop every transaction on every other page too. */
+async function extractLines(file: File): Promise<string[][]> {
   const buffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
-  const lines: string[] = []
+  const pages: string[][] = []
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     try {
       const page = await pdf.getPage(pageNum)
@@ -166,12 +196,12 @@ async function extractLines(file: File): Promise<string[]> {
       const items = content.items
         .filter((it): it is TextItem => 'str' in it && it.str.trim() !== '')
         .map((it) => ({ str: it.str, x: it.transform[4] as number, y: it.transform[5] as number }))
-      lines.push(...linesFromItems(items))
+      pages.push(linesFromItems(items))
     } catch (err) {
       console.warn(`Could not read page ${pageNum} of ${pdf.numPages} — skipping it, continuing with the rest.`, err)
     }
   }
-  return lines
+  return pages
 }
 
 /** Resolves a Max category label to one of the household's actual category
@@ -202,68 +232,103 @@ export interface PdfImportResult {
   declaredTotal: number | null
 }
 
-function linesToTable(lines: string[], categories: Category[], cardholder: Person | null): PdfImportResult {
+function linesToTable(pages: string[][], categories: Category[], cardholder: Person | null): PdfImportResult {
   // Presence of a קטגוריה header column changes how a row's residual text
   // (after date/amount/type removal) is split — with a category column, a
   // known Max category label is peeled off the end of it; without one,
   // that entire residue is just the merchant name.
-  const hasCategoryColumn = lines.some((line) => line.includes('קטגוריה'))
+  const hasCategoryColumn = pages.some((page) => page.some((line) => line.includes('קטגוריה')))
   const rows: string[][] = [['תאריך', 'תיאור', 'קטגוריה', 'סכום', 'מי שילם']]
   let declaredTotal: number | null = null
 
-  for (const rawLine of lines) {
-    if (rawLine.includes('סה"כ')) {
-      const amounts = [...rawLine.matchAll(AMOUNT_RE)].map((m) => Number(m[0].replace(/,/g, '')))
-      const positive = amounts.filter((a) => Number.isFinite(a) && a > 0)
-      if (positive.length > 0) declaredTotal = positive[positive.length - 1]
-    }
-    if (SKIP_IF_CONTAINS.some((phrase) => rawLine.includes(phrase))) continue
+  // Index into `rows` of the most recently pushed transaction whose
+  // merchant name came out empty — set right after such a row is pushed
+  // (and cleared for any other row). A merchant name that wraps onto a
+  // second visual line right at a page break lands as orphaned text at the
+  // very top of the next page instead of on this row — see the page-start
+  // handling below, which splices it back in when found.
+  let pendingEmptyMerchantRowIndex: number | null = null
 
-    // A standalone 1-2 digit token at the start of the line is a footnote
-    // reference marker (e.g. "7 09/07/26 ...") — not transaction data.
-    const line = rawLine.replace(/^\d{1,2}\s+/, '')
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+    const pageLines = pages[pageIndex]
+    let startIndex = 0
 
-    const dateMatch = line.match(DATE_RE)
-    if (!dateMatch) continue
-    const iso = isoDate(dateMatch[1], dateMatch[2], dateMatch[3])
-    if (!iso) continue
-
-    const amounts = [...line.matchAll(AMOUNT_RE)].map((m) => m[0])
-    if (amounts.length === 0 || amounts.length > 3) continue
-
-    // The rightmost/last amount on the line is the actual charge — takes
-    // over an earlier "original transaction amount" column when both are
-    // present (they're usually identical anyway). Kept even when negative
-    // (a refund/reversal) — see CARD_SUFFIX_TO_PERSON's doc comment above.
-    const lastAmount = amounts[amounts.length - 1]
-    const amountValue = Number(lastAmount.replace(/,/g, ''))
-    if (!Number.isFinite(amountValue) || amountValue === 0) continue
-
-    let residue = line.replace(dateMatch[0], ' ')
-    for (const amount of amounts) residue = residue.replace(amount, ' ')
-    residue = residue.replace(/[₪$€]/g, ' ') // currency symbol left behind once its digits are stripped
-    residue = residue.replace(PRORATED_CHARGE_RE, ' ')
-    for (const word of NOISE_WORDS) residue = residue.split(word).join(' ')
-    residue = residue.replace(/\s+/g, ' ').trim()
-
-    let merchant = residue
-    let categoryName = ''
-    if (hasCategoryColumn) {
-      for (const [maxLabel] of MAX_CATEGORY_ALIASES.filter(([label]) => residue.endsWith(label)).sort((a, b) => b[0].length - a[0].length)) {
-        merchant = residue.slice(0, residue.length - maxLabel.length).trim()
-        categoryName = resolveCategoryName(maxLabel, categories)
-        break
+    if (pageIndex > 0 && pendingEmptyMerchantRowIndex !== null) {
+      const continuation: string[] = []
+      while (startIndex < pageLines.length && isLikelyMerchantContinuation(pageLines[startIndex])) {
+        continuation.push(pageLines[startIndex])
+        startIndex++
       }
+      if (continuation.length > 0) rows[pendingEmptyMerchantRowIndex][1] = continuation.join(' ')
+      pendingEmptyMerchantRowIndex = null
     }
 
-    rows.push([iso, merchant, categoryName, lastAmount.replace(/,/g, ''), cardholder ?? ''])
+    for (let i = startIndex; i < pageLines.length; i++) {
+      const rawLine = pageLines[i]
+      if (rawLine.includes('סה"כ')) {
+        const amounts = [...rawLine.matchAll(AMOUNT_RE)].map((m) => Number(m[0].replace(/,/g, '')))
+        const positive = amounts.filter((a) => Number.isFinite(a) && a > 0)
+        if (positive.length > 0) declaredTotal = positive[positive.length - 1]
+      }
+      if (SKIP_IF_CONTAINS.some((phrase) => rawLine.includes(phrase))) continue
+
+      // A standalone 1-2 digit token at the start of the line is a footnote
+      // reference marker (e.g. "7 09/07/26 ...") — not transaction data.
+      const line = rawLine.replace(/^\d{1,2}\s+/, '')
+
+      const dateMatch = line.match(DATE_RE)
+      if (!dateMatch) continue
+      const iso = isoDate(dateMatch[1], dateMatch[2], dateMatch[3])
+      if (!iso) continue
+
+      // Amounts are hunted for with every date-shaped substring stripped
+      // out first — otherwise a line with two dates on it (a statement
+      // period like "01.11.2025 - 01.05.2024") gets misread as a
+      // transaction, since "\d+.\d{2}" also matches a date's day.month.
+      const amounts = [...line.replace(DATE_RE_G, ' ').matchAll(AMOUNT_RE)].map((m) => m[0])
+      if (amounts.length === 0 || amounts.length > 3) continue
+
+      // The rightmost/last amount on the line is the actual charge — takes
+      // over an earlier "original transaction amount" column when both are
+      // present (they're usually identical anyway). Kept even when negative
+      // (a refund/reversal) — see CARD_SUFFIX_TO_PERSON's doc comment above.
+      const lastAmount = amounts[amounts.length - 1]
+      const amountValue = Number(lastAmount.replace(/,/g, ''))
+      if (!Number.isFinite(amountValue) || amountValue === 0) continue
+
+      let residue = line.replace(dateMatch[0], ' ')
+      for (const amount of amounts) residue = residue.replace(amount, ' ')
+      residue = residue.replace(/[₪$€]/g, ' ') // currency symbol left behind once its digits are stripped
+      residue = residue.replace(PRORATED_CHARGE_RE, ' ')
+      for (const word of NOISE_WORDS) residue = residue.split(word).join(' ')
+      residue = residue.replace(/\s+/g, ' ').trim()
+
+      let merchant = residue
+      let categoryName = ''
+      if (hasCategoryColumn) {
+        // The כרטיס (card) column sits between the category and the type/
+        // amount columns and is otherwise never stripped, which stops the
+        // category label from being the last token in residue — so it
+        // must go before the label is peeled off the end.
+        residue = residue.replace(CARD_SUFFIX_RE, ' ').replace(/\s+/g, ' ').trim()
+        merchant = residue
+        for (const [maxLabel] of MAX_CATEGORY_ALIASES.filter(([label]) => residue.endsWith(label)).sort((a, b) => b[0].length - a[0].length)) {
+          merchant = residue.slice(0, residue.length - maxLabel.length).trim()
+          categoryName = resolveCategoryName(maxLabel, categories)
+          break
+        }
+      }
+
+      rows.push([iso, merchant, categoryName, lastAmount.replace(/,/g, ''), cardholder ?? ''])
+      pendingEmptyMerchantRowIndex = merchant === '' ? rows.length - 1 : null
+    }
   }
 
   return { table: rows, declaredTotal }
 }
 
 export async function parseCreditCardStatementPdf(file: File, categories: Category[]): Promise<PdfImportResult> {
-  const lines = await extractLines(file)
-  const cardholder = detectCardholder(lines)
-  return linesToTable(lines, categories, cardholder)
+  const pages = await extractLines(file)
+  const cardholder = detectCardholder(pages.flat())
+  return linesToTable(pages, categories, cardholder)
 }
