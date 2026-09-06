@@ -290,8 +290,14 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
     modal.close()
     showToast(skipped > 0 ? `יובאו ${created.length} תנועות (${skipped} שורות לא מסומנות או חסרות דולגו).` : `יובאו ${created.length} תנועות.`)
     rememberCategoryChoices(inputs)
-  } catch {
-    showToast('הייבוא נכשל — ייתכן שיש להריץ קודם את מיגרציה 0003.')
+  } catch (err) {
+    // Not necessarily migration 0003 specifically — could be any database
+    // rule the inserted rows don't yet satisfy (a missing migration, a
+    // check constraint). The real reason is in the console for whoever's
+    // debugging it; the toast just points at "something's out of sync"
+    // rather than naming a migration number that'll go stale.
+    console.error('Import failed', err)
+    showToast('הייבוא נכשל — ייתכן שיש עדכון במסד הנתונים שטרם הורץ. פרטים נוספים בקונסול הדפדפן.')
   }
 }
 

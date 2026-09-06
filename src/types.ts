@@ -204,10 +204,15 @@ export interface SavingsGoalDeletedBefore {
 /** beforeData shape for a category 'deleted' entry — the category itself,
  * plus any budget_limit_overrides that cascade-deleted along with it (the
  * DB foreign key is ON DELETE CASCADE for that table), so undo can put both
- * back. */
+ * back. reassignedTransactionIds holds any transactions that had to be
+ * moved to another category before the delete could go through (deleting a
+ * category still in use offers a reassignment target rather than blocking
+ * outright) — undo moves exactly those back onto the restored category,
+ * not just anything currently under the target category. */
 export interface CategoryDeletedBefore {
   category: Category
   overrides: BudgetLimitOverride[]
+  reassignedTransactionIds: string[]
 }
 
 /** beforeData shape for a recurring_rule 'deleted' entry — the rule as it

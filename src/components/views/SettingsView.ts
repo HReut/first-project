@@ -1,6 +1,7 @@
 import type { Store } from '../../state/store.ts'
-import type { AppState, CategoryDeletedBefore, NewCategory, Person } from '../../types.ts'
-import { createCategory, deleteCategory, updateCategory } from '../../data/categoriesRepo.ts'
+import type { AppState, Category, CategoryDeletedBefore, NewCategory, Person } from '../../types.ts'
+import { createCategory, deleteCategory, ensureUncategorizedCategory, updateCategory } from '../../data/categoriesRepo.ts'
+import { reassignTransactionsCategory } from '../../data/transactionsRepo.ts'
 import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/emailRulesRepo.ts'
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
 import { setAccountBalance } from '../../data/accountBalanceRepo.ts'
@@ -9,6 +10,7 @@ import { logActivity } from '../../data/activityLogRepo.ts'
 import { showToast } from '../shared/Toast.ts'
 import { personLabel } from '../../utils/format.ts'
 import { confirmDialog } from '../shared/confirmDialog.ts'
+import { Modal } from '../shared/Modal.ts'
 import { formatCurrency, formatDateShort } from '../../utils/format.ts'
 import { effectiveTheme } from '../../lib/theme.ts'
 import { moonIconMarkup, sunIconMarkup } from '../icons/ThemeIcons.ts'
@@ -257,7 +259,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
             <input type="text" class="icon-input" value="${category.icon}" data-field="icon" maxlength="4" title="אייקון">
             <input type="text" class="name-input" value="${category.name}" data-field="name" title="שם">
             <span class="settings-list__usage">${usage} תנועות</span>
-            <button type="button" class="btn btn--sm btn--danger" data-delete-category="${category.id}" ${usage > 0 ? 'disabled title="יש לשייך את התנועות שלה קודם"' : ''}>מחיקה</button>
+            <button type="button" class="btn btn--sm btn--danger" data-delete-category="${category.id}">מחיקה</button>
           </div>
         `
         })
@@ -320,28 +322,91 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     renderCategoryManager(store.getState())
   })
 
+  /** A category with transactions on it can't just be deleted —
+   * transactions.category_id is `not null references categories (id) on
+   * delete restrict` at the database level — so this asks where those
+   * transactions should go first: another existing category, or the
+   * "ללא קטגוריה" default (pre-selected). Resolves the chosen category id,
+   * or null if cancelled. */
+  function promptCategoryReassignment(category: Category, usage: number, options: Category[], uncategorizedId: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const modal = new Modal(
+        `
+          <h2 class="modal__title">מחיקת "${category.name}"</h2>
+          <p class="import-preview__hint">${usage} תנועות משויכות לקטגוריה זו. לאיזו קטגוריה לשייך אותן לפני המחיקה?</p>
+          <select class="filter-select" id="reassign-category-select">
+            ${options.map((c) => `<option value="${c.id}" ${c.id === uncategorizedId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
+          </select>
+          <div class="modal__actions">
+            <button type="button" class="btn" id="reassign-cancel">ביטול</button>
+            <button type="button" class="btn btn--danger" id="reassign-confirm">שיוך ומחיקה</button>
+          </div>
+        `,
+        { ariaLabel: `מחיקת קטגוריה ${category.name}`, onClose: () => resolve(null) },
+      )
+
+      modal.element.querySelector<HTMLButtonElement>('#reassign-cancel')!.addEventListener('click', () => modal.close())
+      modal.element.querySelector<HTMLButtonElement>('#reassign-confirm')!.addEventListener('click', () => {
+        const select = modal.element.querySelector<HTMLSelectElement>('#reassign-category-select')!
+        resolve(select.value)
+        modal.close()
+      })
+    })
+  }
+
+  async function handleDeleteCategory(category: Category, usage: number): Promise<void> {
+    let reassignToId: string | null = null
+
+    if (usage > 0) {
+      const uncategorized = await ensureUncategorizedCategory(store)
+      const options = store.getState().categories.filter((c) => c.id !== category.id)
+      reassignToId = await promptCategoryReassignment(category, usage, options, uncategorized.id)
+      if (!reassignToId) return
+    } else {
+      const confirmed = await confirmDialog(`למחוק את הקטגוריה "${category.name}"? ניתן לבטל זאת מההיסטוריה.`, 'מחיקה')
+      if (!confirmed) return
+    }
+
+    try {
+      // Recorded before reassigning so undo can move exactly these
+      // transactions back onto the restored category, not just whatever's
+      // under the reassignment target by the time undo runs.
+      const reassignedTransactionIds = store.getState().transactions.filter((tx) => tx.categoryId === category.id).map((tx) => tx.id)
+
+      if (reassignToId) {
+        await reassignTransactionsCategory(category.id, reassignToId)
+        const { transactions } = store.getState()
+        store.setState({ transactions: transactions.map((tx) => (tx.categoryId === category.id ? { ...tx, categoryId: reassignToId! } : tx)) })
+      }
+
+      const overrides = store.getState().budgetLimitOverrides.filter((o) => o.categoryId === category.id)
+      await deleteCategory(category.id)
+      const { categories, budgetLimitOverrides } = store.getState()
+      store.setState({
+        categories: categories.filter((c) => c.id !== category.id),
+        budgetLimitOverrides: budgetLimitOverrides.filter((o) => o.categoryId !== category.id),
+      })
+      categoryPendingEdits.delete(category.id)
+      const before: CategoryDeletedBefore = { category, overrides, reassignedTransactionIds }
+      logCategory('deleted', `קטגוריה נמחקה: ${category.name}`, before)
+    } catch {
+      // Reassigning transactions doesn't touch recurring rules or email
+      // capture rules still pointing at this category — both also
+      // `references categories (id) on delete restrict` — so the delete
+      // itself can still fail even after the transactions are moved.
+      showToast('מחיקת הקטגוריה נכשלה — ייתכן שיש כלל הוצאה קבועה או כלל לכידת אימייל שעדיין משתמש בה.')
+    }
+  }
+
   categoryManagerEl.addEventListener('click', (event) => {
     const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-category]')
-    if (deleteBtn && !deleteBtn.disabled) {
+    if (deleteBtn) {
       const id = deleteBtn.dataset.deleteCategory!
       const state = store.getState()
       const category = state.categories.find((c) => c.id === id)
       if (!category) return
-      const overrides = state.budgetLimitOverrides.filter((o) => o.categoryId === id)
-
-      confirmDialog(`למחוק את הקטגוריה "${category.name}"? ניתן לבטל זאת מההיסטוריה.`, 'מחיקה').then((confirmed) => {
-        if (!confirmed) return
-        deleteCategory(id).then(() => {
-          const { categories, budgetLimitOverrides } = store.getState()
-          store.setState({
-            categories: categories.filter((c) => c.id !== id),
-            budgetLimitOverrides: budgetLimitOverrides.filter((o) => o.categoryId !== id),
-          })
-          categoryPendingEdits.delete(id)
-          const before: CategoryDeletedBefore = { category, overrides }
-          logCategory('deleted', `קטגוריה נמחקה: ${category.name}`, before)
-        })
-      })
+      const usage = state.transactions.filter((tx) => tx.categoryId === id).length
+      void handleDeleteCategory(category, usage)
       return
     }
 

@@ -124,6 +124,39 @@ export async function restoreTransactions(transactions: Transaction[]): Promise<
 // ids are passed in.
 const DELETE_BATCH_SIZE = 200
 
+/** Repoints every transaction under one category onto another — used when
+ * deleting a category that's still in use, since transactions.category_id
+ * is `not null references categories (id) on delete restrict` at the
+ * database level and would otherwise block the delete outright. */
+export async function reassignTransactionsCategory(fromCategoryId: string, toCategoryId: string): Promise<void> {
+  if (supabase) {
+    const { error } = await supabase.from('transactions').update({ category_id: toCategoryId }).eq('category_id', fromCategoryId)
+    if (error) throw error
+    return
+  }
+  const transactions = loadLocalTransactions(loadLocalCategories())
+  saveLocalTransactions(transactions.map((tx) => (tx.categoryId === fromCategoryId ? { ...tx, categoryId: toCategoryId } : tx)))
+}
+
+/** Repoints specific transactions (by id) onto another category — used to
+ * undo a category-delete's reassignment step, moving exactly the
+ * transactions that were reassigned back onto the restored category rather
+ * than everything currently under the reassignment target. */
+export async function reassignTransactionsByIds(ids: string[], toCategoryId: string): Promise<void> {
+  if (ids.length === 0) return
+  if (supabase) {
+    for (let i = 0; i < ids.length; i += DELETE_BATCH_SIZE) {
+      const batch = ids.slice(i, i + DELETE_BATCH_SIZE)
+      const { error } = await supabase.from('transactions').update({ category_id: toCategoryId }).in('id', batch)
+      if (error) throw error
+    }
+    return
+  }
+  const idSet = new Set(ids)
+  const transactions = loadLocalTransactions(loadLocalCategories())
+  saveLocalTransactions(transactions.map((tx) => (idSet.has(tx.id) ? { ...tx, categoryId: toCategoryId } : tx)))
+}
+
 export async function deleteTransactions(ids: string[]): Promise<void> {
   if (supabase) {
     for (let i = 0; i < ids.length; i += DELETE_BATCH_SIZE) {

@@ -2,7 +2,7 @@ import type { Store } from '../../state/store.ts'
 import type { ActivityEntityType, ActivityLogEntry, AppState, BudgetLimitChangedBefore, CategoryDeletedBefore, Person, RecurringRuleDeletedBefore, SavingsGoalDeletedBefore, TransactionDeletedBefore } from '../../types.ts'
 import { formatDateTime, personLabel } from '../../utils/format.ts'
 import { markActivityUndone } from '../../data/activityLogRepo.ts'
-import { restoreTransactions } from '../../data/transactionsRepo.ts'
+import { reassignTransactionsByIds, restoreTransactions } from '../../data/transactionsRepo.ts'
 import { updateCategory, restoreCategory } from '../../data/categoriesRepo.ts'
 import { deleteBudgetLimitOverride, restoreBudgetLimitOverrides } from '../../data/budgetLimitOverridesRepo.ts'
 import { restoreRecurringRule } from '../../data/recurringRulesRepo.ts'
@@ -122,10 +122,16 @@ export function mountHistoryView(root: HTMLElement, store: Store<AppState>): voi
       const before = entry.beforeData as CategoryDeletedBefore
       const restoredCategory = await restoreCategory(before.category)
       if (before.overrides.length > 0) await restoreBudgetLimitOverrides(before.overrides)
+      // Moves back exactly the transactions that were reassigned away from
+      // this category before it could be deleted — not everything
+      // currently under the reassignment target.
+      if (before.reassignedTransactionIds.length > 0) await reassignTransactionsByIds(before.reassignedTransactionIds, restoredCategory.id)
+      const reassignedIds = new Set(before.reassignedTransactionIds)
       const state = store.getState()
       store.setState({
         categories: [...state.categories, restoredCategory],
         budgetLimitOverrides: [...state.budgetLimitOverrides, ...before.overrides],
+        transactions: state.transactions.map((tx) => (reassignedIds.has(tx.id) ? { ...tx, categoryId: restoredCategory.id } : tx)),
       })
     } else if (entry.entityType === 'recurring_rule' && entry.action === 'deleted') {
       const { rule } = entry.beforeData as RecurringRuleDeletedBefore
