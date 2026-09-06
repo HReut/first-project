@@ -5,6 +5,7 @@ import { listMappingRules, normalizeMerchantKey, upsertMappingRule } from '../..
 import { ensureUncategorizedCategory } from '../../data/categoriesRepo.ts'
 import { computeReviewedStatus } from '../../utils/insights.ts'
 import { Modal } from '../shared/Modal.ts'
+import { confirmDialog } from '../shared/confirmDialog.ts'
 import { showToast } from '../shared/Toast.ts'
 import { formatCurrency, personLabel } from '../../utils/format.ts'
 
@@ -159,11 +160,19 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
         <button type="button" class="btn btn--primary" id="import-confirm">ייבוא נבחרים</button>
       </div>
     `,
-    { ariaLabel: 'ייבוא תנועות' },
+    {
+      ariaLabel: 'ייבוא תנועות',
+      // Closing here — via ✕, Escape, clicking outside, or the Cancel
+      // button below — would silently drop a parsed statement (potentially
+      // dozens of reviewed rows) with nothing saved yet, so every exit path
+      // routes through this guard rather than only the ones a user is
+      // likely to try on purpose. Same pattern as CategoryDrilldownModal.
+      onBeforeClose: () => confirmDialog('התנועות בתצוגה הזו עדיין לא יובאו. לצאת בכל זאת?', 'צא'),
+    },
   )
   modal.element.classList.add('modal--import-preview')
 
-  modal.element.querySelector<HTMLButtonElement>('#import-cancel')!.addEventListener('click', () => modal.close())
+  modal.element.querySelector<HTMLButtonElement>('#import-cancel')!.addEventListener('click', () => void modal.requestClose())
   modal.element.querySelector<HTMLButtonElement>('#import-confirm')!.addEventListener('click', () => {
     void submitImport(modal, store, currentPerson)
   })
