@@ -231,10 +231,18 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   })
 
   statusBannerEl.addEventListener('click', (event) => {
-    if (!(event.target as HTMLElement).closest('[data-mark-settled]')) return
+    const settleBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mark-settled]')
+    if (!settleBtn) return
     const state = store.getState()
     const balance = computeSplitBalance(state.transactions, new Date(), resolveSettledAfter(state.activityLog))
     if (!balance) return
+
+    // The card only re-renders (swapping the debt line for "מסודר החודש")
+    // once this resolves — a disabled/loading state on the button itself is
+    // the only feedback that the click actually registered before then.
+    settleBtn.disabled = true
+    settleBtn.textContent = 'סוגר...'
+
     logActivity({
       entityType: 'settlement',
       action: 'settled',
@@ -245,8 +253,14 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
       .then((entry) => {
         const { activityLog } = store.getState()
         store.setState({ activityLog: [entry, ...activityLog] })
+        showToast('החוב נסגר.', [], 2500)
       })
       .catch((err: unknown) => {
+        // Only reached on failure — a success re-renders the whole card
+        // (removing this button along with it), so there's no stuck
+        // "סוגר..." state to worry about resetting there.
+        settleBtn.disabled = false
+        settleBtn.textContent = 'סגירת חוב'
         // Not necessarily migration 0009 specifically — that's already
         // confirmed applied — so log the real reason rather than pointing
         // at a migration number that turned out to be a red herring once

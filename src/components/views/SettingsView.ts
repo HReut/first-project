@@ -57,11 +57,10 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     <section class="band">
       <div class="band__inner">
         <section class="settings-card" aria-label="יתרת חשבון משותף">
-          <h2 class="settings-card__title">יתרת חשבון משותף</h2>
+          <h2 class="settings-card__title">יתרת חשבון משותף <span class="badge-pill">בקרוב</span></h2>
           <p class="settings-card__desc">
-            "סה"כ זמין" (בסקירה כללית ובתנועות) הוא היתרה הזו פחות הוצאות מהחשבון ה'משותף'
-            שנרשמו מהתאריך שלמטה. עדכן/י בכל פעם שאת/ה בודק/ת את היתרה בבנק בפועל — כל שמירה
-            מאפסת את נקודת ההתחלה להיום.
+            "סה"כ זמין" — היתרה הזו פחות הוצאות מהחשבון ה'משותף' שנרשמו מהתאריך שלמטה —
+            יוצג בעתיד בסקירה כללית ובתנועות. עדיין אפשר לשמור את היתרה כאן מראש.
           </p>
           <div class="settings-list__row" id="account-balance-row">
             <input type="number" class="budget-input" id="account-balance-input" placeholder="יתרה נוכחית" min="0" step="1">
