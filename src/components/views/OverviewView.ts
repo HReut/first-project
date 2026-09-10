@@ -1,6 +1,6 @@
 import type { Store } from '../../state/store.ts'
-import type { Account, AppState, BudgetLimitOverride, Category, Person, Transaction } from '../../types.ts'
-import { computeCategoryBreakdown, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
+import type { Account, AppState, Person, Transaction } from '../../types.ts'
+import { computeBudgetPaceTip, computeCategoryBreakdown, computeCategoryDeltaTips, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveSettledAfter } from '../../utils/activity.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel, monthKeyFromDate, personLabel } from '../../utils/format.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
@@ -12,84 +12,6 @@ const RECENT_ACTIVITY_LIMIT = 5
 const BUDGET_PROGRESS_LIMIT = 3
 const EXPENSE_LIST_LIMIT = 6
 const TREND_MONTHS = 4
-
-interface Tip {
-  icon: string
-  html: string
-  /** How notable this is, so the most worth-mentioning tip(s) win the
-   * limited slots in the insights row when several apply at once. */
-  significance: number
-}
-
-const CATEGORY_DELTA_THRESHOLD = 10 // % swing before a category move is worth mentioning at all
-
-/** Every category with a big enough month-over-month swing — a drop reads
- * as good news (money saved), a jump as a heads-up. Real, computed from
- * actual transactions, not canned copy. */
-function computeCategoryDeltaTips(transactions: Transaction[], categories: Category[]): Tip[] {
-  const thisMonth = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' })
-  const lastMonthDate = new Date()
-  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1)
-  const lastMonth = computeCategoryBreakdown(transactions, { categoryId: 'all', person: 'all' }, lastMonthDate)
-  const lastByCategory = new Map(lastMonth.map((entry) => [entry.categoryId, entry.amount]))
-  const categoryById = new Map(categories.map((category) => [category.id, category]))
-
-  const tips: Tip[] = []
-  for (const entry of thisMonth) {
-    const prev = lastByCategory.get(entry.categoryId) ?? 0
-    if (prev <= 0) continue
-    const deltaPercent = ((entry.amount - prev) / prev) * 100
-    if (Math.abs(deltaPercent) < CATEGORY_DELTA_THRESHOLD) continue
-    const category = categoryById.get(entry.categoryId)
-    if (!category) continue
-
-    if (deltaPercent < 0) {
-      const saved = prev - entry.amount
-      tips.push({
-        icon: '💡',
-        html: `ההוצאה על ${category.name} <strong class="is-good">נמוכה ב-${Math.round(Math.abs(deltaPercent))}%</strong> מהחודש שעבר — את/ה בדרך לחסוך עוד ${formatCurrency(saved)}.`,
-        significance: Math.abs(deltaPercent),
-      })
-    } else {
-      const extra = entry.amount - prev
-      tips.push({
-        icon: '📈',
-        html: `ההוצאה על ${category.name} <strong class="is-bad">עלתה ב-${Math.round(deltaPercent)}%</strong> מהחודש שעבר — ${formatCurrency(extra)} יותר.`,
-        significance: Math.abs(deltaPercent),
-      })
-    }
-  }
-  return tips
-}
-
-/** How the household's total spend compares to its total budgeted limits
- * this month — only categories that actually have a limit set count toward
- * either side. Null when nothing's budgeted, or the pace isn't notable
- * either way (comfortably mid-range). */
-function computeBudgetPaceTip(transactions: Transaction[], categories: Category[], budgetLimitOverrides: BudgetLimitOverride[]): Tip | null {
-  const budgeted = topBudgetedCategories(transactions, categories, budgetLimitOverrides)
-  if (budgeted.length === 0) return null
-  const spent = budgeted.reduce((sum, row) => sum + row.spent, 0)
-  const limit = budgeted.reduce((sum, row) => sum + (row.limit ?? 0), 0)
-  if (limit <= 0) return null
-  const percent = (spent / limit) * 100
-
-  if (percent >= 100) {
-    return {
-      icon: '🚨',
-      html: `ההוצאות בקטגוריות עם תקציב <strong class="is-bad">חורגות ב-${formatCurrency(spent - limit)}</strong> מהמגבלה הכוללת שהוגדרה החודש.`,
-      significance: percent,
-    }
-  }
-  if (percent <= 70) {
-    return {
-      icon: '🎯',
-      html: `את/ה ב-${Math.round(percent)}% מהתקציב הכולל לקטגוריות עם מגבלה החודש — <strong class="is-good">מרווח נשימה של ${formatCurrency(limit - spent)}</strong> עד סוף החודש.`,
-      significance: 100 - percent,
-    }
-  }
-  return null
-}
 
 interface SpendTrend {
   series: number[] // oldest → newest, TREND_MONTHS entries

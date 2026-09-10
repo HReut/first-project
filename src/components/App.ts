@@ -12,7 +12,7 @@ import { listActivityLog } from '../data/activityLogRepo.ts'
 import { listSavingsGoals } from '../data/savingsGoalsRepo.ts'
 import { generateDueRecurringTransactions } from '../data/generateRecurringTransactions.ts'
 import { dedupeRecurringTransactions, removeFutureRecurringTransactions, resyncRecurringRuleCounters } from '../data/dedupeRecurringTransactions.ts'
-import { computeSplitBalance, topBudgetedCategories } from '../utils/insights.ts'
+import { computeBudgetPaceTip, computeCategoryDeltaTips, computeSplitBalance, topBudgetedCategories } from '../utils/insights.ts'
 import { budgetStatus } from '../utils/budget.ts'
 import { resolveSettledAfter } from '../utils/activity.ts'
 import { formatCurrency, monthKeyFromDate, personLabel } from '../utils/format.ts'
@@ -95,14 +95,21 @@ interface NotificationItem {
   view: View
 }
 
-/** What the bell actually has to say — pending reviews, categories over
- * budget this month, and an open settle-up balance. All three are things
+const MAX_TIP_NOTIFICATIONS = 3
+
+/** What the bell actually has to say — pending reviews, per-category budget
+ * overruns, an open settle-up balance, and the same "worth knowing" signals
+ * (category spend swings, overall budget pace) already computed for
+ * Overview's insights row, both good news and bad. All of this is things
  * the app already knows and tracks, so surfacing them here saves a trip to
  * Transactions/Budgets/Overview to notice, rather than inventing new
- * signals. The balance one recurs every month on its own — a recurring
- * personal-account bill (e.g. the monthly internet charge) creates a fresh
- * balance each month even right after the previous one was settled, so
- * this isn't a one-time nudge, it's however things stand right now. */
+ * signals — the bell and the insights row read from the same functions, so
+ * they never disagree. The balance one recurs every month on its own — a
+ * recurring personal-account bill (e.g. the monthly internet charge)
+ * creates a fresh balance each month even right after the previous one was
+ * settled, so this isn't a one-time nudge, it's however things stand right
+ * now. Tips are capped and ranked by significance (see computeCategoryDeltaTips/
+ * computeBudgetPaceTip) so the bell doesn't fill up with minor swings. */
 function computeNotifications(state: AppState): NotificationItem[] {
   const items: NotificationItem[] = []
 
@@ -120,6 +127,14 @@ function computeNotifications(state: AppState): NotificationItem[] {
   const balance = computeSplitBalance(state.transactions, new Date(), resolveSettledAfter(state.activityLog))
   if (balance) {
     items.push({ text: `${personLabel(balance.owingPerson)} חייב/ת ל${personLabel(balance.owedPerson)} ${formatCurrency(balance.amount)}`, view: 'overview' })
+  }
+
+  const budgetPaceTip = computeBudgetPaceTip(state.transactions, state.categories, state.budgetLimitOverrides)
+  const tips = [...computeCategoryDeltaTips(state.transactions, state.categories), ...(budgetPaceTip ? [budgetPaceTip] : [])]
+    .sort((a, b) => b.significance - a.significance)
+    .slice(0, MAX_TIP_NOTIFICATIONS)
+  for (const tip of tips) {
+    items.push({ text: `${tip.icon} ${tip.html}`, view: 'overview' })
   }
 
   return items
