@@ -18,7 +18,6 @@ export function renderMerchantCell(tx: Transaction, category?: Category): string
               <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true">
                 <path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h12a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5v-9Z M3 5.5l7 5 7-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
               </svg>
-              <span>אוטומטי</span>
             </span>`
           : ''
       }
@@ -29,7 +28,6 @@ export function renderMerchantCell(tx: Transaction, category?: Category): string
                 <path d="M10 3v9M6.5 8.5 10 12l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M4 13.5v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
               </svg>
-              <span>יובא</span>
             </span>`
           : ''
       }
@@ -40,7 +38,6 @@ export function renderMerchantCell(tx: Transaction, category?: Category): string
                 <path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
                 <path d="M14.2 3.5v2.5h-2.5M5.8 16.5v-2.5h2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span>קבוע</span>
             </span>`
           : ''
       }
