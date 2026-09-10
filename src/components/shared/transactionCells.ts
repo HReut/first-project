@@ -84,7 +84,12 @@ export const STATUS_LABEL: Record<Transaction['status'], string> = {
   exceeded: 'חריגה',
 }
 
+/** No badge for 'on_budget' — that's the ordinary/expected case for most
+ * rows, and showing it on every single row was pure visual noise; only
+ * 'exceeded' (needs attention) and 'pending' (needs review) are worth
+ * flagging. */
 export function renderStatusBadge(status: Transaction['status']): string {
+  if (status === 'on_budget') return ''
   return `<span class="status-badge status-badge--${status.replace('_', '-')}">${STATUS_LABEL[status]}</span>`
 }
 
