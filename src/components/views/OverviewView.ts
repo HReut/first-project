@@ -1,6 +1,6 @@
 import type { Store } from '../../state/store.ts'
 import type { Account, AppState, BudgetLimitOverride, Category, Person, Transaction } from '../../types.ts'
-import { computeCategoryBreakdown, computeSplitBalance, computeTotalAvailable, topBudgetedCategories } from '../../utils/insights.ts'
+import { computeCategoryBreakdown, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveSettledAfter } from '../../utils/activity.ts'
 import { formatCurrency, formatDateShort, monthKeyFromDate, personLabel } from '../../utils/format.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
@@ -246,8 +246,13 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         const { activityLog } = store.getState()
         store.setState({ activityLog: [entry, ...activityLog] })
       })
-      .catch(() => {
-        showToast('לא ניתן היה לסגור את החוב — האם הרצת את מיגרציה 0009?')
+      .catch((err: unknown) => {
+        // Not necessarily migration 0009 specifically — that's already
+        // confirmed applied — so log the real reason rather than pointing
+        // at a migration number that turned out to be a red herring once
+        // before (see the PDF-import error message fix).
+        console.error('Settle debt failed', err)
+        showToast('לא ניתן היה לסגור את החוב. פרטים נוספים בקונסול הדפדפן.')
       })
   })
 
@@ -273,41 +278,35 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   }
 
   function renderStatusBanner(state: AppState): void {
-    const total = computeTotalAvailable(state.transactions, state.accountBalance)
     const trend = computeSpendTrend(scopedTransactions(state))
+    // The trend series' last point is always the current month — same
+    // figure the "הוצאות חודשיות" donut card above shows, computed the same
+    // way, so the two stay consistent with each other.
+    const monthlyTotal = trend.series[trend.series.length - 1] ?? 0
     const balance = computeSplitBalance(state.transactions, new Date(), resolveSettledAfter(state.activityLog))
 
     statusBannerEl.innerHTML = `
       <div class="card-header">
         <div>
-          <h2 class="card-header__title">סה"כ זמין</h2>
+          <h2 class="card-header__title">הוצאות החודש</h2>
           <p class="card-header__meta">
-            ${
-              total === null
-                ? 'עדיין לא נמדד'
-                : `<span class="status-dot" aria-hidden="true"></span>נכון ל-${formatDateShort(state.accountBalance!.setAt)}`
-            }
-            ${dataContext === 'private' ? ' · תמיד הסכום המשותף הכולל, ללא קשר למתג הזה' : ''}
+            ${dataContext === 'private' ? 'רק ההוצאות הפרטיות שלך' : 'כל ההוצאות המשותפות'}
           </p>
         </div>
-        <a class="card-link" href="#settings">${total === null ? 'הגדרת יתרה ←' : 'עדכון יתרה ←'}</a>
+        <a class="card-link" href="#analytics">צפייה בהכול ←</a>
       </div>
       <div class="hero-card__split">
         <div class="hero-card__left">
+          <p class="total-available__value">${formatCurrency(monthlyTotal)}</p>
           ${
-            total === null
-              ? `<p class="total-available__empty">הזן/י את יתרת החשבון המשותף בהגדרות כדי לעקוב אחרי זה.</p>`
-              : `<p class="total-available__value">${formatCurrency(total)}</p>
-                 ${
-                   trend.deltaPercent === null
-                     ? ''
-                     : `<div class="hero-card__trend">
-                          ${renderSparkline(trend.series)}
-                          <span class="hero-card__trend-label ${trend.deltaPercent <= 0 ? 'is-good' : 'is-bad'}">
-                            ${trend.deltaPercent <= 0 ? '↓' : '↑'} ${Math.abs(Math.round(trend.deltaPercent * 10) / 10)}% <span class="hero-card__trend-caption">לעומת ממוצע 3 החודשים האחרונים</span>
-                          </span>
-                        </div>`
-                 }`
+            trend.deltaPercent === null
+              ? ''
+              : `<div class="hero-card__trend">
+                   ${renderSparkline(trend.series)}
+                   <span class="hero-card__trend-label ${trend.deltaPercent <= 0 ? 'is-good' : 'is-bad'}">
+                     ${trend.deltaPercent <= 0 ? '↓' : '↑'} ${Math.abs(Math.round(trend.deltaPercent * 10) / 10)}% <span class="hero-card__trend-caption">לעומת ממוצע 3 החודשים האחרונים</span>
+                   </span>
+                 </div>`
           }
         </div>
         <div class="hero-card__right">
