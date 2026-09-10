@@ -222,7 +222,11 @@ export class TransactionsView {
     ])
     const csv = [header, ...lines].map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(',')).join('\n')
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    // Excel ignores the Blob's charset and guesses the file's encoding from
+    // its bytes — without a UTF-8 BOM it assumes the system's legacy
+    // codepage, turning every Hebrew character into mojibake. Prepending
+    // U+FEFF is Excel's signal to read the file as UTF-8.
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
