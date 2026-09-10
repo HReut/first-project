@@ -111,7 +111,20 @@ const SKIP_IF_CONTAINS = [
   'שעורי ריבית',
   'שם בית העסק',
   'העסקאות שמוצגות',
+  'הצטרפו לשירות', // the "high bill? join revolving credit" upsell line MAX prints under the total
 ]
+
+/** MAX prints the page-bottom total as a bare amount on its own line,
+ * immediately followed by a separate "סה"כ ..." caption line — without this,
+ * the bare amount looks exactly like an ordinary amount that wrapped onto
+ * its own line and gets glued onto whichever transaction happens to be
+ * last, replacing its real amount with the statement's grand total. Strips
+ * both lines of the pair as one unit, before either line is ever seen by
+ * the boilerplate/continuation checks. */
+function stripTotalSummaryLines(lines: string[]): string[] {
+  const BARE_AMOUNT_RE = /^-?₪?[\d,]+\.\d{2}$/
+  return lines.filter((line, i) => !(BARE_AMOUNT_RE.test(line.trim()) && lines[i + 1]?.includes('סה"כ')))
+}
 
 /** Lines that are never part of a transaction and never a continuation of
  * one either — statement chrome (page titles, footers, URLs, page numbers)
@@ -231,6 +244,12 @@ function linesFromItems(items: { str: string; x: number; y: number }[]): string[
         .map((i) => i.str)
         .join(' ')
         .replace(/\s+/g, ' ')
+        // Hebrew's proper punctuation mark for an abbreviation like סה"כ is
+        // the gershayim (״, U+05F4), not a plain quote — MAX's PDFs use it
+        // in some places and a plain " in others. Every 'סה"כ' check in this
+        // file is written with a plain quote, so without this normalization
+        // those checks silently miss any line using the correct character.
+        .replace(/״/g, '"')
         .trim(),
     )
     .filter(Boolean)
@@ -344,7 +363,9 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   return [iso, merchant, categoryName, lastAmount.replace(/,/g, ''), cardholder ?? '']
 }
 
-function linesToTable(lines: string[], categories: Category[], cardholder: Person | null): PdfImportResult {
+function linesToTable(rawLines: string[], categories: Category[], cardholder: Person | null): PdfImportResult {
+  const lines = stripTotalSummaryLines(rawLines)
+
   // Presence of a קטגוריה header column changes how a row's residual text
   // (after date/amount/type removal) is split — with a category column, a
   // known Max category label is peeled off of it; without one, that entire
