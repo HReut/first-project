@@ -12,9 +12,10 @@ import { listActivityLog } from '../data/activityLogRepo.ts'
 import { listSavingsGoals } from '../data/savingsGoalsRepo.ts'
 import { generateDueRecurringTransactions } from '../data/generateRecurringTransactions.ts'
 import { dedupeRecurringTransactions, removeFutureRecurringTransactions, resyncRecurringRuleCounters } from '../data/dedupeRecurringTransactions.ts'
-import { topBudgetedCategories } from '../utils/insights.ts'
+import { computeSplitBalance, topBudgetedCategories } from '../utils/insights.ts'
 import { budgetStatus } from '../utils/budget.ts'
-import { formatCurrency, monthKeyFromDate } from '../utils/format.ts'
+import { resolveSettledAfter } from '../utils/activity.ts'
+import { formatCurrency, monthKeyFromDate, personLabel } from '../utils/format.ts'
 import { personFromEmail, signOut } from '../lib/auth.ts'
 import { effectiveTheme, toggleTheme } from '../lib/theme.ts'
 import { mountAuthGate } from './AuthGate.ts'
@@ -94,10 +95,14 @@ interface NotificationItem {
   view: View
 }
 
-/** What the bell actually has to say — pending reviews and categories over
- * budget this month. Deliberately just these two: both are things the app
- * already knows and tracks, so surfacing them here saves a trip to
- * Transactions/Budgets to notice, rather than inventing new signals. */
+/** What the bell actually has to say — pending reviews, categories over
+ * budget this month, and an open settle-up balance. All three are things
+ * the app already knows and tracks, so surfacing them here saves a trip to
+ * Transactions/Budgets/Overview to notice, rather than inventing new
+ * signals. The balance one recurs every month on its own — a recurring
+ * personal-account bill (e.g. the monthly internet charge) creates a fresh
+ * balance each month even right after the previous one was settled, so
+ * this isn't a one-time nudge, it's however things stand right now. */
 function computeNotifications(state: AppState): NotificationItem[] {
   const items: NotificationItem[] = []
 
@@ -110,6 +115,11 @@ function computeNotifications(state: AppState): NotificationItem[] {
     if (budgetStatus(spent, limit) === 'critical') {
       items.push({ text: `${category.icon} ${category.name} חרגה מהתקציב (${formatCurrency(spent)} מתוך ${formatCurrency(limit ?? 0)})`, view: 'budgets' })
     }
+  }
+
+  const balance = computeSplitBalance(state.transactions, new Date(), resolveSettledAfter(state.activityLog))
+  if (balance) {
+    items.push({ text: `${personLabel(balance.owingPerson)} חייב/ת ל${personLabel(balance.owedPerson)} ${formatCurrency(balance.amount)}`, view: 'overview' })
   }
 
   return items
