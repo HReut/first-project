@@ -2,7 +2,7 @@ import type { Store } from '../../state/store.ts'
 import type { Account, AppState, BudgetLimitOverride, Category, Person, Transaction } from '../../types.ts'
 import { computeCategoryBreakdown, computeSplitBalance, topBudgetedCategories } from '../../utils/insights.ts'
 import { resolveSettledAfter } from '../../utils/activity.ts'
-import { formatCurrency, formatDateShort, monthKeyFromDate, personLabel } from '../../utils/format.ts'
+import { formatCurrency, formatDateShort, formatMonthLabel, monthKeyFromDate, personLabel } from '../../utils/format.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
 import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
@@ -297,7 +297,8 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
     // figure the "הוצאות חודשיות" donut card above shows, computed the same
     // way, so the two stay consistent with each other.
     const monthlyTotal = trend.series[trend.series.length - 1] ?? 0
-    const balance = computeSplitBalance(state.transactions, new Date(), resolveSettledAfter(state.activityLog))
+    const settledAfter = resolveSettledAfter(state.activityLog)
+    const balance = computeSplitBalance(state.transactions, new Date(), settledAfter)
 
     statusBannerEl.innerHTML = `
       <div class="card-header">
@@ -325,7 +326,7 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
         </div>
         <div class="hero-card__right">
           <div class="hero-card__right-header">
-            <span class="hero-card__right-title">מאזן</span>
+            <span class="hero-card__right-title">מאזן — ${formatMonthLabel(monthKeyFromDate(new Date()))}</span>
             <a class="card-link" href="#history">צפייה בפירוט ←</a>
           </div>
           ${
@@ -334,6 +335,11 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
                    <span class="settlement-card__debt-names">${personLabel(balance.owingPerson)} חייב/ת ל${personLabel(balance.owedPerson)}</span>
                    <span class="settlement-card__debt-amount">${formatCurrency(balance.amount)}</span>
                  </p>
+                 ${
+                   settledAfter
+                     ? `<p class="settlement-card__since">מתנועות שנוספו מאז הסגירה האחרונה, ${formatDateShort(settledAfter)}</p>`
+                     : ''
+                 }
                  <button type="button" class="btn btn--primary btn--sm" data-mark-settled>סגירת חוב</button>`
               : `<p class="settlement-card__settled"><span class="review-center__empty-check" aria-hidden="true">✓</span>מסודר החודש</p>`
           }
