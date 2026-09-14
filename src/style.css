@@ -3260,6 +3260,20 @@ tr.tx-row--pending td {
   flex: 1;
 }
 
+.recurring-card__end-month {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recurring-card__end-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .recurring-card__bottom {
   display: flex;
   align-items: center;

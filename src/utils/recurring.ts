@@ -5,6 +5,7 @@ import { computeReviewedStatus } from './insights.ts'
  * anchor month, or anchor month plus a whole multiple of intervalMonths.
  * A rule due every 2 months from 2025-01 is due in 01, 03, 05… not 02, 04. */
 export function isRuleDueForMonth(rule: RecurringRule, monthKey: string): boolean {
+  if (rule.endMonth !== null && monthKey > rule.endMonth) return false
   const [anchorYear, anchorMonth] = rule.anchorMonth.split('-').map(Number)
   const [year, month] = monthKey.split('-').map(Number)
   const monthsSinceAnchor = (year - anchorYear) * 12 + (month - anchorMonth)

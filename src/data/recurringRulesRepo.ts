@@ -13,6 +13,7 @@ function fromRow(row: RecurringRuleRow): RecurringRule {
     person: row.person,
     intervalMonths: row.interval_months,
     anchorMonth: row.anchor_month,
+    endMonth: row.end_month,
     dayOfMonth: row.day_of_month,
     totalOccurrences: row.total_occurrences,
     occurrencesGenerated: row.occurrences_generated,
@@ -32,6 +33,7 @@ function toRow(input: RecurringRulePatch): Partial<Omit<RecurringRuleRow, 'id' |
   if (input.person !== undefined) row.person = input.person
   if (input.intervalMonths !== undefined) row.interval_months = input.intervalMonths
   if (input.anchorMonth !== undefined) row.anchor_month = input.anchorMonth
+  if (input.endMonth !== undefined) row.end_month = input.endMonth
   if (input.dayOfMonth !== undefined) row.day_of_month = input.dayOfMonth
   if (input.totalOccurrences !== undefined) row.total_occurrences = input.totalOccurrences
   if (input.occurrencesGenerated !== undefined) row.occurrences_generated = input.occurrencesGenerated

@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.ts'
 import type { Account, AppState, BudgetLimitChangedBefore, Category, NewRecurringRule, Person, RecurringRuleDeletedBefore } from '../../types.ts'
 import { computeCategoryBreakdown, resolveBudgetLimitForMonth, resolveBudgetLimitForPeriod } from '../../utils/insights.ts'
-import { formatCurrency, monthKeyFromDate } from '../../utils/format.ts'
+import { formatCurrency, monthKeyFromDate, personLabel } from '../../utils/format.ts'
 import { budgetStatus } from '../../utils/budget.ts'
 import { periodPresetToFilter, type PeriodPreset } from '../../utils/filters.ts'
 import { ensureUncategorizedCategory, updateCategory } from '../../data/categoriesRepo.ts'
@@ -29,6 +29,7 @@ type BudgetScope = 'this-month' | 'from-now-on' | 'all-months'
 const ACCOUNT_VALUES: Account[] = ['shared', 'reut_personal', 'keren_personal']
 /** A personal account locks the person, same rule as the transaction form. */
 const PERSON_FOR_ACCOUNT: Partial<Record<Account, Person>> = { reut_personal: 'Reut', keren_personal: 'Keren' }
+const PEOPLE: Person[] = ['Reut', 'Keren']
 
 const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
 const ANCHOR_YEARS_BACK = 10
@@ -104,14 +105,15 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
 
     <section class="band">
       <div class="band__inner">
-        <section class="settings-card" aria-label="הוצאות קבועות ותשלומים">
-          <h2 class="settings-card__title">הוצאות קבועות ותשלומים</h2>
+        <section class="settings-card" aria-label="הוראות קבע ותשלומים קבועים">
+          <h2 class="settings-card__title">הוראות קבע ותשלומים קבועים</h2>
           <p class="settings-card__desc">
             חשבונות שחוזרים כל N חודשים (שכר דירה, אינטרנט, ועד בית…) — השאר/י את "תשלומים"
             ריק עבורם, הם ימשיכו לרוץ עד שתכבה/י אותם. לרכישה בכרטיס אשראי המחולקת
             לתשלומים קבועים (למשל רהיט ב-12 תשלומים), הגדר/י את "תשלומים" למספר הזה — זה ייפסק
-            להיווצר אוטומטית לאחר שכל התשלומים בוצעו. בכל מקרה, כל כלל שמגיע זמנו מוסיף תנועה
-            ממתינה אוטומטית בטעינת האפליקציה.
+            להיווצר אוטומטית לאחר שכל התשלומים בוצעו. יש "עד תאריך" נפרד לכלל שידוע מתי הוא
+            מפסיק להיות רלוונטי (למשל סכום ישן שהוחלף בסכום חדש בתאריך ידוע) — גם בלי לספור
+            כמה תשלומים זה יצא. בכל מקרה, כל כלל שמגיע זמנו מוסיף תנועה אוטומטית בטעינת האפליקציה.
           </p>
           <div class="settings-list settings-list--recurring" id="recurring-manager"></div>
           <div class="pending-bar" id="recurring-pending-bar" hidden>
@@ -259,7 +261,28 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     const categoryOptions = (selectedId: string) =>
       state.categories.map((c) => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')
     const accountOptions = (selected: Account) => ACCOUNT_VALUES.map((a) => `<option value="${a}" ${a === selected ? 'selected' : ''}>${ACCOUNT_LABEL[a]}</option>`).join('')
+    const personOptions = (selected: Person) => PEOPLE.map((p) => `<option value="${p}" ${p === selected ? 'selected' : ''}>${personLabel(p)}</option>`).join('')
     const currentMonth = currentMonthKey()
+
+    // Same markup for the create-form and every existing card — kept as one
+    // small helper since both need the exact same toggle-then-picker
+    // behavior, unlike the rest of this file's fields which differ just
+    // enough (id vs data-rule-field) not to share code. Takes raw attribute
+    // strings (same convention as monthYearSelectHtml) since the create-form
+    // uses plain ids and each card uses data-rule-field.
+    const endMonthField = (hasEndAttr: string, monthAttr: string, yearAttr: string, endMonth: string | null): string =>
+      fieldLabel(
+        'עד תאריך (אופציונלי)',
+        `<span class="recurring-card__end-month">
+          <label class="recurring-card__end-toggle">
+            <input type="checkbox" ${hasEndAttr} ${endMonth !== null ? 'checked' : ''}>
+            <span>יש תאריך סיום</span>
+          </label>
+          <span class="recurring-card__end-month-picker" data-end-month-picker ${endMonth === null ? 'hidden' : ''}>
+            ${monthYearSelectHtml(monthAttr, yearAttr, endMonth ?? currentMonth)}
+          </span>
+        </span>`,
+      )
 
     const statusText = (rule: (typeof state.recurringRules)[number]): string => {
       if (rule.totalOccurrences !== null) return `שולמו ${rule.occurrencesGenerated} מתוך ${rule.totalOccurrences}`
@@ -290,6 +313,10 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
           <div class="recurring-card__row">
             ${fieldLabel('קטגוריה', `<select class="filter-select" data-rule-field="categoryId">${categoryOptions(rule.categoryId)}</select>`)}
             ${fieldLabel('חשבון', `<select class="filter-select" data-rule-field="account">${accountOptions(rule.account)}</select>`)}
+            ${fieldLabel(
+              'מי שילם/ה',
+              `<select class="filter-select" data-rule-field="person" ${PERSON_FOR_ACCOUNT[rule.account] ? 'disabled' : ''}>${personOptions(rule.person)}</select>`,
+            )}
           </div>
           <div class="recurring-card__row">
             ${fieldLabel(
@@ -305,6 +332,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
               'מתאריך',
               monthYearSelectHtml('data-rule-field="anchorMonth-month"', 'data-rule-field="anchorMonth-year"', rule.anchorMonth),
             )}
+            ${endMonthField('data-rule-field="hasEndMonth"', 'data-rule-field="endMonth-month"', 'data-rule-field="endMonth-year"', rule.endMonth)}
           </div>
           <div class="recurring-card__bottom">
             <span class="settings-list__usage">${statusText(rule)}</span>
@@ -326,6 +354,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
         <div class="recurring-card__row">
           ${fieldLabel('קטגוריה', `<select class="filter-select" id="new-recurring-category"><option value="">❔ ללא קטגוריה</option>${categoryOptions('')}</select>`)}
           ${fieldLabel('חשבון', `<select class="filter-select" id="new-recurring-account">${accountOptions('shared')}</select>`)}
+          ${fieldLabel('מי שילם/ה', `<select class="filter-select" id="new-recurring-person">${personOptions('Reut')}</select>`)}
         </div>
         <div class="recurring-card__row">
           ${fieldLabel('כל כמה חודשים', `<input type="number" class="icon-input" id="new-recurring-interval" value="1" min="1" max="24">`)}
@@ -335,9 +364,10 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
             `<input type="number" class="icon-input" id="new-recurring-installments" min="1" max="60" placeholder="∞" title="ריק = חשבון מתמשך; מספר = תוכנית תשלומים שנעצרת אחרי מספר זה של תשלומים">`,
           )}
           ${fieldLabel('מתאריך', monthYearSelectHtml('id="new-recurring-anchor-month"', 'id="new-recurring-anchor-year"', currentMonth))}
+          ${endMonthField('id="new-recurring-has-end"', 'id="new-recurring-end-month"', 'id="new-recurring-end-year"', null)}
         </div>
         <div class="recurring-card__bottom">
-          <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ הוספת הוצאה קבועה</button>
+          <button type="button" class="btn btn--primary btn--sm" id="add-recurring-btn">+ הוספת הוראת קבע</button>
         </div>
       </div>
     `
@@ -361,7 +391,26 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
   }
 
   recurringManagerEl.addEventListener('change', (event) => {
-    const input = (event.target as HTMLElement).closest<HTMLElement>('[data-rule-field]') as HTMLInputElement | HTMLSelectElement | null
+    const target = event.target as HTMLElement
+
+    // The not-yet-created row: nothing to stage, just live UX feedback —
+    // mirrors the per-existing-card account/end-month handling below, read
+    // fresh from these same ids by the add-recurring-btn handler at submit.
+    if (target.id === 'new-recurring-account') {
+      const account = (target as HTMLSelectElement).value as Account
+      const forcedPerson = PERSON_FOR_ACCOUNT[account]
+      const personSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-person')!
+      personSelect.disabled = !!forcedPerson
+      if (forcedPerson) personSelect.value = forcedPerson
+      return
+    }
+    if (target.id === 'new-recurring-has-end') {
+      const pickerEl = target.closest<HTMLElement>('.recurring-card')!.querySelector<HTMLElement>('[data-end-month-picker]')!
+      pickerEl.hidden = !(target as HTMLInputElement).checked
+      return
+    }
+
+    const input = target.closest<HTMLElement>('[data-rule-field]') as HTMLInputElement | HTMLSelectElement | null
     if (!input) return
     const row = input.closest<HTMLElement>('.recurring-card')!
     const id = row.dataset.id
@@ -377,6 +426,25 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       const monthSelect = row.querySelector<HTMLSelectElement>('[data-rule-field="anchorMonth-month"]')!
       const yearSelect = row.querySelector<HTMLSelectElement>('[data-rule-field="anchorMonth-year"]')!
       recurringPendingEdits.set(id, { ...recurringPendingEdits.get(id), anchorMonth: `${yearSelect.value}-${monthSelect.value.padStart(2, '0')}` })
+      row.classList.add('recurring-card--pending')
+      renderRecurringPendingBar()
+      return
+    }
+
+    // Same combining logic as anchorMonth, but endMonth is optional — the
+    // checkbox is the source of truth for whether it's null at all, and the
+    // picker (shown/hidden alongside it) only matters while checked.
+    if (rawField === 'hasEndMonth' || rawField === 'endMonth-month' || rawField === 'endMonth-year') {
+      const hasEndInput = row.querySelector<HTMLInputElement>('[data-rule-field="hasEndMonth"]')!
+      const pickerEl = row.querySelector<HTMLElement>('[data-end-month-picker]')!
+      pickerEl.hidden = !hasEndInput.checked
+      if (!hasEndInput.checked) {
+        recurringPendingEdits.set(id, { ...recurringPendingEdits.get(id), endMonth: null })
+      } else {
+        const monthSelect = row.querySelector<HTMLSelectElement>('[data-rule-field="endMonth-month"]')!
+        const yearSelect = row.querySelector<HTMLSelectElement>('[data-rule-field="endMonth-year"]')!
+        recurringPendingEdits.set(id, { ...recurringPendingEdits.get(id), endMonth: `${yearSelect.value}-${monthSelect.value.padStart(2, '0')}` })
+      }
       row.classList.add('recurring-card--pending')
       renderRecurringPendingBar()
       return
@@ -401,7 +469,11 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
     else if (field === 'amount' || field === 'intervalMonths' || field === 'dayOfMonth') patch = { [field]: Number(input.value) }
     else if (field === 'account') {
       const account = input.value as Account
-      patch = { account, person: PERSON_FOR_ACCOUNT[account] ?? rule.person }
+      const forcedPerson = PERSON_FOR_ACCOUNT[account]
+      patch = { account, person: forcedPerson ?? rule.person }
+      const personSelect = row.querySelector<HTMLSelectElement>('[data-rule-field="person"]')!
+      personSelect.disabled = !!forcedPerson
+      if (forcedPerson) personSelect.value = forcedPerson
     } else patch = { [field]: input.value }
 
     recurringPendingEdits.set(id, { ...recurringPendingEdits.get(id), ...patch })
@@ -472,6 +544,10 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
       const installmentsInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-installments')!
       const anchorMonthSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-anchor-month')!
       const anchorYearSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-anchor-year')!
+      const personSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-person')!
+      const hasEndInput = recurringManagerEl.querySelector<HTMLInputElement>('#new-recurring-has-end')!
+      const endMonthSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-end-month')!
+      const endYearSelect = recurringManagerEl.querySelector<HTMLSelectElement>('#new-recurring-end-year')!
 
       const merchant = merchantInput.value.trim()
       const amount = Number(amountInput.value)
@@ -489,9 +565,10 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
             amount,
             categoryId,
             account,
-            person: PERSON_FOR_ACCOUNT[account] ?? 'Reut',
+            person: PERSON_FOR_ACCOUNT[account] ?? (personSelect.value as Person),
             intervalMonths: Math.max(1, Number(intervalInput.value) || 1),
             anchorMonth: `${anchorYearSelect.value}-${anchorMonthSelect.value.padStart(2, '0')}`,
+            endMonth: hasEndInput.checked ? `${endYearSelect.value}-${endMonthSelect.value.padStart(2, '0')}` : null,
             dayOfMonth: Math.min(28, Math.max(1, Number(dayInput.value) || 1)),
             totalOccurrences: installmentsInput.value.trim() === '' ? null : Math.max(1, Number(installmentsInput.value)),
             isActive: true,
@@ -504,7 +581,7 @@ export function mountBudgetsView(root: HTMLElement, store: Store<AppState>, curr
           await generateDueRecurringTransactions(store)
           if (created.anchorMonth < currentMonthKey()) showToast('התנועות שהוחמצו נוצרו אוטומטית — ניתן לבדוק אותן בעמוד התנועות.', [], 3000)
         } catch {
-          showToast('לא ניתן היה להוסיף את ההוצאה הקבועה — נסה/י שוב.')
+          showToast('לא ניתן היה להוסיף את ההוראה — נסה/י שוב.')
         }
       })()
     }

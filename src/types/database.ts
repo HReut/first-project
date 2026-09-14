@@ -102,6 +102,7 @@ export interface RecurringRuleRow {
   person: PersonRow
   interval_months: number
   anchor_month: string
+  end_month: string | null
   day_of_month: number
   total_occurrences: number | null
   occurrences_generated: number

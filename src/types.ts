@@ -95,6 +95,11 @@ export interface RecurringRule {
   person: Person
   intervalMonths: number // 1 = every month, 2 = every other month, etc.
   anchorMonth: string // YYYY-MM
+  /** YYYY-MM, inclusive; null = open-ended. An explicit calendar cutoff —
+   * independent of totalOccurrences, which stops by count instead of date.
+   * Useful when a bill's amount changed on a known date (see
+   * dueMonthsForRule() in src/utils/recurring.ts). */
+  endMonth: string | null
   dayOfMonth: number // 1-28, day of month the generated transaction is dated
   totalOccurrences: number | null // null = ongoing bill; N = installment plan
   occurrencesGenerated: number
