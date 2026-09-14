@@ -65,7 +65,6 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
           </p>
           <div class="settings-list__row" id="account-balance-row">
             <input type="number" class="budget-input" id="account-balance-input" placeholder="יתרה נוכחית" min="0" step="1">
-            <button type="button" class="btn btn--primary btn--sm" id="account-balance-save">שמירת יתרה</button>
             <span class="settings-list__usage" id="account-balance-status"></span>
           </div>
         </section>
@@ -83,12 +82,10 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
           </p>
           <div class="settings-list__row" id="exchange-rate-row-usd">
             <input type="number" class="budget-input" id="exchange-rate-input-usd" placeholder="שער $ ל-₪" min="0" step="0.01">
-            <button type="button" class="btn btn--primary btn--sm" id="exchange-rate-save-usd">שמירת שער $</button>
             <span class="settings-list__usage" id="exchange-rate-status-usd"></span>
           </div>
           <div class="settings-list__row" id="exchange-rate-row-eur">
             <input type="number" class="budget-input" id="exchange-rate-input-eur" placeholder="שער € ל-₪" min="0" step="0.01">
-            <button type="button" class="btn btn--primary btn--sm" id="exchange-rate-save-eur">שמירת שער €</button>
             <span class="settings-list__usage" id="exchange-rate-status-eur"></span>
           </div>
         </section>
@@ -116,11 +113,6 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
           <h2 class="settings-card__title">קטגוריות</h2>
           <p class="settings-card__desc">צבעים ואייקונים מתאימים אישית תגים, אריחים וגרפים בכל האפליקציה.</p>
           <div class="settings-list" id="category-manager"></div>
-          <div class="pending-bar" id="category-pending-bar" hidden>
-            <span class="pending-bar__count" id="category-pending-count"></span>
-            <button type="button" class="btn btn--sm" id="category-discard-btn">ביטול שינויים</button>
-            <button type="button" class="btn btn--primary btn--sm" id="category-save-btn">שמירת שינויים</button>
-          </div>
         </section>
       </div>
     </section>
@@ -152,14 +144,43 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
         </section>
       </div>
     </section>
+
+    <div class="pending-bar pending-bar--page" id="settings-pending-bar" hidden>
+      <span class="pending-bar__count" id="settings-pending-count"></span>
+      <button type="button" class="btn btn--sm" id="settings-discard-btn">ביטול שינויים</button>
+      <button type="button" class="btn btn--primary btn--sm" id="settings-save-btn">שמירת שינויים</button>
+    </div>
   `
 
   const categoryManagerEl = root.querySelector<HTMLElement>('#category-manager')!
-  const categoryPendingBarEl = root.querySelector<HTMLElement>('#category-pending-bar')!
-  const categoryPendingCountEl = root.querySelector<HTMLElement>('#category-pending-count')!
   const emailAccountsEl = root.querySelector<HTMLElement>('#email-accounts')!
   const ruleBuilderEl = root.querySelector<HTMLElement>('#rule-builder')!
   const cardMappingManagerEl = root.querySelector<HTMLElement>('#card-mapping-manager')!
+  const settingsPendingBarEl = root.querySelector<HTMLElement>('#settings-pending-bar')!
+  const settingsPendingCountEl = root.querySelector<HTMLElement>('#settings-pending-count')!
+
+  /** One combined pending-changes bar covers every *editable-field* section
+   * (balance, exchange rates, category edits) — typed values only commit to
+   * the database when "שמירת שינויים" is clicked, per the household's
+   * explicit request. "Add new" rows (category, card mapping) and deletes
+   * stay immediate: nothing is created until their own dedicated button is
+   * clicked, and deletes already get their own Yes/Cancel confirm. */
+  function pendingChangesSummary(): { balanceChanged: boolean; rateUsdChanged: boolean; rateEurChanged: boolean; categoryEditCount: number; total: number } {
+    const savedBalance = store.getState().accountBalance
+    const balanceChanged = accountBalanceInput.value.trim() !== (savedBalance ? String(savedBalance.startingBalance) : '')
+    const savedRate = store.getState().exchangeRate
+    const rateUsdChanged = exchangeRateInputUsd.value.trim() !== (savedRate?.usdToIls ? String(savedRate.usdToIls) : '')
+    const rateEurChanged = exchangeRateInputEur.value.trim() !== (savedRate?.eurToIls ? String(savedRate.eurToIls) : '')
+    const categoryEditCount = categoryPendingEdits.size
+    const total = (balanceChanged ? 1 : 0) + (rateUsdChanged ? 1 : 0) + (rateEurChanged ? 1 : 0) + categoryEditCount
+    return { balanceChanged, rateUsdChanged, rateEurChanged, categoryEditCount, total }
+  }
+
+  function updatePendingBar(): void {
+    const { total } = pendingChangesSummary()
+    settingsPendingBarEl.hidden = total === 0
+    settingsPendingCountEl.textContent = `${total} שינויים לא שמורים`
+  }
 
   // ---------- Card-to-person mapping ----------
 
@@ -239,35 +260,41 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     accountBalanceStatusEl.textContent = balance ? `נכון ל-${formatDateShort(balance.setAt)} — כרגע ${formatCurrency(balance.startingBalance)}` : 'עדיין לא הוגדר'
   }
 
-  root.querySelector<HTMLButtonElement>('#account-balance-save')!.addEventListener('click', () => {
+  accountBalanceInput.addEventListener('input', () => updatePendingBar())
+
+  /** Called from the page-wide "שמירת שינויים" — resolves once the balance
+   * is either saved or confirmed unchanged; throws only on an invalid value
+   * so the caller can report it without aborting the other pending saves. */
+  async function saveBalanceIfChanged(): Promise<void> {
+    const { balanceChanged } = pendingChangesSummary()
+    if (!balanceChanged) return
     const raw = accountBalanceInput.value.trim()
     const startingBalance = Number(raw)
     if (!raw || !Number.isFinite(startingBalance) || startingBalance < 0) {
-      showToast('הזן/י יתרה תקינה תחילה.')
-      return
+      showToast('היתרה שהוזנה אינה תקינה — השינוי לא נשמר.')
+      throw new Error('invalid balance')
     }
     const today = new Date().toISOString().slice(0, 10)
-    setAccountBalance({ startingBalance, setAt: today })
-      .then((accountBalance) => {
-        store.setState({ accountBalance })
-        showToast('היתרה נשמרה.', [], 2500)
-        logActivity({
-          entityType: 'account_balance',
-          action: 'changed',
-          summary: `יתרת החשבון המשותף הוגדרה ל${formatCurrency(startingBalance)}`,
-          beforeData: null,
-          performedBy: currentPerson,
+    try {
+      const accountBalance = await setAccountBalance({ startingBalance, setAt: today })
+      store.setState({ accountBalance })
+      logActivity({
+        entityType: 'account_balance',
+        action: 'changed',
+        summary: `יתרת החשבון המשותף הוגדרה ל${formatCurrency(startingBalance)}`,
+        beforeData: null,
+        performedBy: currentPerson,
+      })
+        .then((entry) => {
+          const { activityLog } = store.getState()
+          store.setState({ activityLog: [entry, ...activityLog] })
         })
-          .then((entry) => {
-            const { activityLog } = store.getState()
-            store.setState({ activityLog: [entry, ...activityLog] })
-          })
-          .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
-      })
-      .catch(() => {
-        showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0007?')
-      })
-  })
+        .catch((err: unknown) => console.warn('Could not write to History — has migration 0009 been run?', err))
+    } catch {
+      showToast('שמירת היתרה נכשלה — האם הרצת את מיגרציה 0007?')
+      throw new Error('save failed')
+    }
+  }
 
   // ---------- Exchange rates (USD + EUR) ----------
 
@@ -291,30 +318,39 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       rate?.eurToIls ? `נכון ל-${formatDateShort(rate.setAt)} — כרגע €1 = ${formatCurrency(rate.eurToIls)}` : 'עדיין לא הוגדר — תנועות ביורו יומרו 1:1 עד שיוגדר'
   }
 
-  /** Saving one currency's rate carries the other currency's current value
-   * forward unchanged — see setExchangeRate()'s doc comment for why. */
-  function saveExchangeRate(currency: 'usd' | 'eur', input: HTMLInputElement): void {
-    const raw = input.value.trim()
-    const value = Number(raw)
-    if (!raw || !Number.isFinite(value) || value <= 0) {
-      showToast('הזן/י שער תקין תחילה.')
-      return
-    }
-    const today = new Date().toISOString().slice(0, 10)
-    const current = store.getState().exchangeRate
-    const next = currency === 'usd' ? { usdToIls: value, eurToIls: current?.eurToIls ?? null } : { usdToIls: current?.usdToIls ?? null, eurToIls: value }
-    setExchangeRate({ ...next, setAt: today })
-      .then((exchangeRate) => {
-        store.setState({ exchangeRate })
-        showToast('השער נשמר.', [], 2500)
-      })
-      .catch(() => {
-        showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0012?')
-      })
-  }
+  exchangeRateInputUsd.addEventListener('input', () => updatePendingBar())
+  exchangeRateInputEur.addEventListener('input', () => updatePendingBar())
 
-  root.querySelector<HTMLButtonElement>('#exchange-rate-save-usd')!.addEventListener('click', () => saveExchangeRate('usd', exchangeRateInputUsd))
-  root.querySelector<HTMLButtonElement>('#exchange-rate-save-eur')!.addEventListener('click', () => saveExchangeRate('eur', exchangeRateInputEur))
+  /** Called from the page-wide "שמירת שינויים". Saving one currency's rate
+   * carries the other currency's current value forward unchanged — see
+   * setExchangeRate()'s doc comment for why. */
+  async function saveExchangeRateIfChanged(): Promise<void> {
+    const { rateUsdChanged, rateEurChanged } = pendingChangesSummary()
+    if (!rateUsdChanged && !rateEurChanged) return
+    const current = store.getState().exchangeRate
+    const rawUsd = exchangeRateInputUsd.value.trim()
+    const rawEur = exchangeRateInputEur.value.trim()
+
+    if (rateUsdChanged && (!rawUsd || !Number.isFinite(Number(rawUsd)) || Number(rawUsd) <= 0)) {
+      showToast('שער הדולר שהוזן אינו תקין — השינוי לא נשמר.')
+      throw new Error('invalid usd rate')
+    }
+    if (rateEurChanged && (!rawEur || !Number.isFinite(Number(rawEur)) || Number(rawEur) <= 0)) {
+      showToast('שער היורו שהוזן אינו תקין — השינוי לא נשמר.')
+      throw new Error('invalid eur rate')
+    }
+
+    const usdToIls = rateUsdChanged ? Number(rawUsd) : (current?.usdToIls ?? null)
+    const eurToIls = rateEurChanged ? Number(rawEur) : (current?.eurToIls ?? null)
+    const today = new Date().toISOString().slice(0, 10)
+    try {
+      const exchangeRate = await setExchangeRate({ usdToIls, eurToIls, setAt: today })
+      store.setState({ exchangeRate })
+    } catch {
+      showToast('שמירת השער נכשלה — האם הרצת את מיגרציה 0012?')
+      throw new Error('save failed')
+    }
+  }
 
   // ---------- Category manager ----------
 
@@ -352,8 +388,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
         <button type="button" class="btn btn--primary btn--sm" id="add-category-btn">+ הוספה</button>
       </div>
     `
-    categoryPendingBarEl.hidden = categoryPendingEdits.size === 0
-    categoryPendingCountEl.textContent = `${categoryPendingEdits.size} שינויים לא שמורים`
+    updatePendingBar()
   }
 
   /** Fire-and-forget, same reasoning as TransactionsView's logTx: a logging
@@ -377,7 +412,8 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     renderCategoryManager(store.getState())
   })
 
-  async function saveCategoryPendingEdits(): Promise<void> {
+  /** Called from the page-wide "שמירת שינויים". */
+  async function saveCategoryPendingEditsIfAny(): Promise<void> {
     const entries = [...categoryPendingEdits]
     if (entries.length === 0) return
 
@@ -387,21 +423,13 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       const { categories } = store.getState()
       store.setState({ categories: categories.map((c) => updatedById.get(c.id) ?? c) })
       categoryPendingEdits.clear()
-      showToast(entries.length === 1 ? 'השינוי נשמר.' : `${entries.length} שינויים נשמרו.`, [], 2000)
       logCategory('updated', entries.length === 1 ? `קטגוריה עודכנה: ${updated[0]?.name}` : `${entries.length} קטגוריות עודכנו`)
       renderCategoryManager(store.getState())
     } catch {
-      showToast('שמירת השינויים נכשלה — נסה/י שוב.')
+      showToast('שמירת שינויי הקטגוריות נכשלה — נסה/י שוב.')
+      throw new Error('save failed')
     }
   }
-
-  root.querySelector<HTMLButtonElement>('#category-save-btn')!.addEventListener('click', () => {
-    void saveCategoryPendingEdits()
-  })
-  root.querySelector<HTMLButtonElement>('#category-discard-btn')!.addEventListener('click', () => {
-    categoryPendingEdits.clear()
-    renderCategoryManager(store.getState())
-  })
 
   /** A category with transactions on it can't just be deleted —
    * transactions.category_id is `not null references categories (id) on
@@ -631,12 +659,43 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     }
   })
 
+  // ---------- Page-wide save / discard ----------
+
+  const settingsSaveBtn = root.querySelector<HTMLButtonElement>('#settings-save-btn')!
+  const settingsDiscardBtn = root.querySelector<HTMLButtonElement>('#settings-discard-btn')!
+
+  settingsSaveBtn.addEventListener('click', () => {
+    void (async () => {
+      settingsSaveBtn.disabled = true
+      settingsDiscardBtn.disabled = true
+      const results = await Promise.allSettled([saveBalanceIfChanged(), saveExchangeRateIfChanged(), saveCategoryPendingEditsIfAny()])
+      settingsSaveBtn.disabled = false
+      settingsDiscardBtn.disabled = false
+      renderAccountBalance(store.getState())
+      renderExchangeRate(store.getState())
+      updatePendingBar()
+      if (results.every((r) => r.status === 'fulfilled')) {
+        showToast('השינויים נשמרו.', [], 2500)
+      }
+      // Each failed step already showed its own specific toast above.
+    })()
+  })
+
+  settingsDiscardBtn.addEventListener('click', () => {
+    categoryPendingEdits.clear()
+    renderAccountBalance(store.getState())
+    renderExchangeRate(store.getState())
+    renderCategoryManager(store.getState())
+    updatePendingBar()
+  })
+
   store.subscribe((state) => {
     renderAccountBalance(state)
     renderExchangeRate(state)
     renderCategoryManager(state)
     renderRuleBuilder(state)
     renderCardMappingManager(state)
+    updatePendingBar()
   })
 
   renderAccountBalance(store.getState())
@@ -645,23 +704,17 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
   renderEmailAccounts()
   renderRuleBuilder(store.getState())
   renderCardMappingManager(store.getState())
+  updatePendingBar()
 
   /** Typed-but-not-yet-committed edits: the "add new" rows only save on an
-   * explicit button click, and staged category edits only save on
-   * "שמירת שינויים" — both leave a window where a nav click would otherwise
-   * discard input silently. Checked by App.ts before letting a
+   * explicit button click, and balance/rate/category edits only save on the
+   * page-wide "שמירת שינויים" — both leave a window where a nav click would
+   * otherwise discard input silently. Checked by App.ts before letting a
    * sidebar/logo click navigate away. */
   return function hasUnsavedChanges(): boolean {
     const newCategoryName = root.querySelector<HTMLInputElement>('#new-category-name')?.value.trim()
     const newRuleKeyword = root.querySelector<HTMLInputElement>('#new-rule-keyword')?.value.trim()
-    const balanceInput = root.querySelector<HTMLInputElement>('#account-balance-input')
-    const savedBalance = store.getState().accountBalance
-    const balanceChanged = !!balanceInput && balanceInput.value.trim() !== (savedBalance ? String(savedBalance.startingBalance) : '')
-    const savedRate = store.getState().exchangeRate
-    const rateInputUsd = root.querySelector<HTMLInputElement>('#exchange-rate-input-usd')
-    const rateUsdChanged = !!rateInputUsd && rateInputUsd.value.trim() !== (savedRate?.usdToIls ? String(savedRate.usdToIls) : '')
-    const rateInputEur = root.querySelector<HTMLInputElement>('#exchange-rate-input-eur')
-    const rateEurChanged = !!rateInputEur && rateInputEur.value.trim() !== (savedRate?.eurToIls ? String(savedRate.eurToIls) : '')
-    return !!newCategoryName || !!newRuleKeyword || balanceChanged || rateUsdChanged || rateEurChanged || categoryPendingEdits.size > 0
+    const newCardSuffix = root.querySelector<HTMLInputElement>('#new-card-suffix')?.value.trim()
+    return !!newCategoryName || !!newRuleKeyword || !!newCardSuffix || pendingChangesSummary().total > 0
   }
 }

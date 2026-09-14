@@ -2234,6 +2234,15 @@ p {
   margin-inline-end: auto;
 }
 
+.pending-bar--page {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  max-width: 640px;
+  margin: 0 auto 24px;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--status-warning) 25%, transparent);
+}
+
 tr.tx-row--pending td {
   background: color-mix(in srgb, var(--status-warning) 8%, transparent);
 }
