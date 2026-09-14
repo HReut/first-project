@@ -10,6 +10,7 @@ import { logActivity } from '../../data/activityLogRepo.ts'
 import { normalizeMerchantKey, upsertMappingRule } from '../../data/mappingRulesRepo.ts'
 import {
   ACCOUNT_LABEL,
+  computeDuplicateTransactionIds,
   renderAccountBadge,
   renderCategoryBadge,
   renderMerchantCell,
@@ -145,6 +146,11 @@ export class TransactionsView {
    * totals) until Save is actually clicked. The add/edit modal is exempt —
    * its own explicit Save/Add button already *is* that deliberate moment. */
   #pendingEdits = new Map<string, Partial<NewTransaction>>()
+  /** Recomputed at the top of each renderTable() from the full household
+   * transaction list (not just the currently-filtered rows) so a duplicate
+   * still gets flagged even if a filter/sort happens to split the pair
+   * across different views of the table. */
+  #duplicateIds = new Set<string>()
 
   constructor(container: HTMLElement, store: Store<AppState>, currentPerson: Person) {
     this.#container = container
@@ -1230,6 +1236,7 @@ export class TransactionsView {
 
   private renderTable(state: AppState): void {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
+    this.#duplicateIds = computeDuplicateTransactionIds(state.transactions)
     const rows = this.visibleRows(state)
     const visibleIds = new Set(rows.map((tx) => tx.id))
     for (const id of [...this.#selection]) {
@@ -1409,7 +1416,7 @@ export class TransactionsView {
         <td class="select-cell"><input type="checkbox" class="row-select" data-id="${tx.id}" ${this.#selection.has(tx.id) ? 'checked' : ''}></td>
         <td class="editable-cell" data-field="date" data-id="${tx.id}">${formatDateShort(tx.date)}</td>
         <td class="editable-cell" data-field="merchant" data-id="${tx.id}">
-          ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
+          ${renderMerchantCell(tx, categoryById.get(tx.categoryId), this.#duplicateIds.has(tx.id))}
           <span class="editable-cell editable-cell--status" data-field="status" data-id="${tx.id}">${renderStatusBadge(tx.status)}</span>
           ${renderWaitingBadge(tx)}
         </td>
@@ -1428,7 +1435,7 @@ export class TransactionsView {
         <input type="checkbox" class="row-select tx-card__select" data-id="${tx.id}" aria-label="בחירת תנועה" ${this.#selection.has(tx.id) ? 'checked' : ''}>
         <div class="tx-card__body">
           <div class="tx-card__top">
-            ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
+            ${renderMerchantCell(tx, categoryById.get(tx.categoryId), this.#duplicateIds.has(tx.id))}
             <span class="tx-card__amount${tx.originalAmount < 0 ? ' is-credit' : ''}">${formatCurrency(tx.originalAmount, tx.currency)}</span>
           </div>
           <div class="tx-card__meta">

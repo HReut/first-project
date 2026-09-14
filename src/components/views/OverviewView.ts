@@ -5,7 +5,7 @@ import { resolveSettledAfter } from '../../utils/activity.ts'
 import { formatCurrency, formatDateShort, formatMonthLabel, monthKeyFromDate, personLabel } from '../../utils/format.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { renderProgressBar } from '../shared/ProgressBar.ts'
-import { renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
+import { computeDuplicateTransactionIds, renderCategoryBadge, renderMerchantCell, renderPersonBadge } from '../shared/transactionCells.ts'
 import { showToast } from '../shared/Toast.ts'
 
 const RECENT_ACTIVITY_LIMIT = 5
@@ -465,13 +465,14 @@ export function mountOverviewView(root: HTMLElement, store: Store<AppState>, cur
   function renderActivity(state: AppState): void {
     const categoryById = new Map(state.categories.map((category) => [category.id, category]))
     const recent = [...scopedTransactions(state)].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, RECENT_ACTIVITY_LIMIT)
+    const duplicateIds = computeDuplicateTransactionIds(state.transactions)
 
     activityEl.innerHTML = recent
       .map(
         (tx) => `
       <div class="activity-row">
         <span class="activity-row__date">${formatDateShort(tx.date)}</span>
-        ${renderMerchantCell(tx, categoryById.get(tx.categoryId))}
+        ${renderMerchantCell(tx, categoryById.get(tx.categoryId), duplicateIds.has(tx.id))}
         ${renderCategoryBadge(categoryById.get(tx.categoryId))}
         <span class="activity-row__person">${renderPersonBadge(tx.person)}</span>
         <span class="activity-row__amount">${formatCurrency(tx.originalAmount, tx.currency)}</span>

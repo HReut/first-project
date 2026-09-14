@@ -2618,6 +2618,11 @@ tr.tx-row--pending td {
   padding: 4px;
 }
 
+.email-badge--warning {
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 14%, var(--surface));
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
