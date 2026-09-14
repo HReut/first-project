@@ -180,6 +180,25 @@ export function detectColumnMapping(headers: string[]): Partial<Record<Canonical
   return mapping
 }
 
+/** Max's own XLSX export (and possibly other bank exports) put a few
+ * title/metadata rows above the real header row — cardholder name, card
+ * digits, statement month — each a single cell with the rest of the row
+ * empty. Scans the first several rows and picks whichever matches the most
+ * known column names, rather than assuming the header is always row 0. */
+function findHeaderRowIndex(table: string[][]): number {
+  let bestIndex = 0
+  let bestScore = -1
+  const searchLimit = Math.min(table.length, 20)
+  for (let i = 0; i < searchLimit; i++) {
+    const score = Object.keys(detectColumnMapping(table[i])).length
+    if (score > bestScore) {
+      bestScore = score
+      bestIndex = i
+    }
+  }
+  return bestIndex
+}
+
 // Sign is preserved (not Math.abs'd) — a negative amount is a real
 // refund/credit row, imported as a real negative-amount transaction rather
 // than dropped. See ParsedImportRow.amount.
@@ -283,7 +302,9 @@ export function buildImportPreviewFromTable(
 ): ParsedImportRow[] {
   if (table.length < 2) return []
 
-  const [headerRow, ...dataRows] = table
+  const headerRowIndex = findHeaderRowIndex(table)
+  const headerRow = table[headerRowIndex]
+  const dataRows = table.slice(headerRowIndex + 1)
   const columnMapping = detectColumnMapping(headerRow)
   const categoryByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c]))
   const ruleByMerchant = new Map(mappingRules.map((rule) => [rule.merchantKey, rule]))
@@ -355,6 +376,10 @@ export function buildImportPreviewFromTable(
       isDisputed,
     }
   })
+    .filter((row) => row.date !== null || row.merchant !== '' || row.amount !== null)
+  // Drops rows carrying no recognizable data at all — a blank spacer row, or
+  // (in Max's own XLSX export) the trailing "סך הכל" total line — which would
+  // otherwise show up in the preview grid as a bogus all-blank row.
 }
 
 /**
