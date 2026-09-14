@@ -60,6 +60,13 @@ const AMOUNT_RE = /-?\d[\d,]*\.\d{2}(?!\d)(?!%)/g
 // the date and amounts are removed. These are all "סוג עסקה" (transaction
 // type) column values.
 const NOISE_WORDS = ['רגילה', 'תשלומים', 'הוראת קבע', 'ביטול עסקה']
+// "עסקה בבירור" (transaction under dispute) rows show the disputed amount
+// next to a ₪0.00 — nothing's actually been charged yet, and Max's own
+// footnote says these "may never be charged at all". Skipped outright (see
+// parseTransactionBlock) rather than imported at either amount: if/when it
+// resolves, it reappears as an ordinary רגילה row in a later statement and
+// gets imported then.
+const DISPUTED_TRANSACTION_MARKER = 'עסקה בבירור'
 // "חיוב יחסי עבור 9 ימים" (a prorated partial-month charge) — the day count
 // varies, so this is a pattern, not a fixed word; anything from "חיוב יחסי"
 // onward on the residual line is noise, since the amount was already
@@ -320,6 +327,8 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   // A standalone 1-2 digit token at the start of the block is a footnote
   // reference marker (e.g. "7 09/07/26 ...") — not transaction data.
   const line = blockLines.join(' ').replace(/^\d{1,2}\s+/, '')
+
+  if (line.includes(DISPUTED_TRANSACTION_MARKER)) return null
 
   const dateMatch = line.match(DATE_RE)
   if (!dateMatch) return null
