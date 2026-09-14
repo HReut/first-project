@@ -341,13 +341,19 @@ export function computeReviewedStatus(transactions: Transaction[], categories: C
  *   own pocket, so Keren owes half of it back to Reut (and symmetrically for
  *   'keren_personal'). Returns null when nothing is owed either way.
  *
- * `settledAfter`, if given, excludes transactions dated on/before that ISO
- * date — this is how "mark as settled" clears the balance without touching
- * the underlying transactions.
+ * `settledAfter`, if given, excludes any transaction *entered* (createdAt)
+ * on or before that timestamp — this is how "mark as settled" clears the
+ * balance without touching the underlying transactions. Deliberately
+ * compared against createdAt, not the transaction's own `date`: a
+ * recurring bill can be generated dated later in the current month (e.g.
+ * day_of_month 28, generated on the 14th) — comparing by `date` would put
+ * it "after" a same-day settlement forever, so it could never actually be
+ * cleared until the 28th arrived, even though it already existed at
+ * settlement time.
  */
 export function computeSplitBalance(transactions: Transaction[], referenceDate = new Date(), settledAfter?: string | null): SplitBalance | null {
   const currentMonth = monthKey(referenceDate)
-  const currentTx = transactions.filter((tx) => tx.date.startsWith(currentMonth) && (!settledAfter || tx.date > settledAfter))
+  const currentTx = transactions.filter((tx) => tx.date.startsWith(currentMonth) && (!settledAfter || tx.createdAt > settledAfter))
   const owedToReut = sum(currentTx.filter((tx) => tx.account === 'reut_personal')) / 2
   const owedToKeren = sum(currentTx.filter((tx) => tx.account === 'keren_personal')) / 2
   const diff = owedToReut - owedToKeren
