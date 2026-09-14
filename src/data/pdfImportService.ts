@@ -346,14 +346,14 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   // The rightmost/last amount on the line is the actual charge — takes over
   // an earlier "original transaction amount" column when both are present
   // (they're usually identical anyway). Kept even when negative (a refund/
-  // reversal) — see buildCardSuffixLookup's doc comment above. A disputed
-  // row is the one exception: Max prints the disputed amount next to a
-  // separate ₪0.00 ("not actually charged"), and the ₪0.00 is what ends up
-  // last — so the rightmost *non-zero* amount is used instead, since that's
-  // the number worth showing someone deciding whether to import it early.
-  const chosenAmount = isDisputed ? (amounts.filter((a) => Number(a.replace(/,/g, '')) !== 0).at(-1) ?? amounts[0]) : amounts[amounts.length - 1]
+  // reversal) — see buildCardSuffixLookup's doc comment above.
+  const chosenAmount = amounts[amounts.length - 1]
   const amountValue = Number(chosenAmount.replace(/,/g, ''))
-  if (!Number.isFinite(amountValue) || amountValue === 0) return null
+  // A ₪0.00 line is ordinarily junk (a stray total/subtotal that slipped
+  // through), not a real row, and gets dropped — except a disputed row,
+  // where ₪0.00 in the amount column is the real, meaningful value (nothing
+  // charged yet), not a parsing artifact.
+  if (!Number.isFinite(amountValue) || (amountValue === 0 && !isDisputed)) return null
 
   let residue = line.replace(dateMatch[0], ' ')
   for (const amount of amounts) residue = residue.replace(amount, ' ')
