@@ -2,7 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { TextItem } from 'pdfjs-dist/types/src/display/api.js'
 import type { CardPersonMapping, Category, Person } from '../types.ts'
-import { DISPUTED_ROW_TAG } from './importService.ts'
+import { DISPUTED_ROW_TAG, DISPUTED_TRANSACTION_TYPE } from './importService.ts'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
 
@@ -66,8 +66,10 @@ const NOISE_WORDS = ['רגילה', 'תשלומים', 'הוראת קבע', 'בי�
 // footnote says these "may never be charged at all". Still shown in the
 // preview grid (tagged via DISPUTED_ROW_TAG) rather than dropped, but left
 // unchecked by default — the household decides whether to bring it in
-// early rather than wait for it to clear as an ordinary row later.
-const DISPUTED_TRANSACTION_MARKER = 'עסקה בבירור'
+// early rather than wait for it to clear as an ordinary row later. Uses the
+// same DISPUTED_TRANSACTION_TYPE text importService.ts's XLSX path checks a
+// dedicated column for — this PDF layout has no such column, just this
+// phrase embedded in the line's free text.
 // "חיוב יחסי עבור 9 ימים" (a prorated partial-month charge) — the day count
 // varies, so this is a pattern, not a fixed word; anything from "חיוב יחסי"
 // onward on the residual line is noise, since the amount was already
@@ -329,7 +331,7 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   // reference marker (e.g. "7 09/07/26 ...") — not transaction data.
   const line = blockLines.join(' ').replace(/^\d{1,2}\s+/, '')
 
-  const isDisputed = line.includes(DISPUTED_TRANSACTION_MARKER)
+  const isDisputed = line.includes(DISPUTED_TRANSACTION_TYPE)
 
   const dateMatch = line.match(DATE_RE)
   if (!dateMatch) return null
@@ -359,7 +361,7 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   for (const amount of amounts) residue = residue.replace(amount, ' ')
   residue = residue.replace(/[₪$€]/g, ' ') // currency symbol left behind once its digits are stripped
   residue = residue.replace(PRORATED_CHARGE_RE, ' ')
-  residue = residue.split(DISPUTED_TRANSACTION_MARKER).join(' ')
+  residue = residue.split(DISPUTED_TRANSACTION_TYPE).join(' ')
   for (const word of NOISE_WORDS) residue = residue.split(word).join(' ')
   residue = residue.replace(/\s+/g, ' ').trim()
 

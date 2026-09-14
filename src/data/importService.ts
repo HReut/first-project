@@ -1,9 +1,15 @@
 import { readSheet } from 'read-excel-file/browser'
-import type { Category, MappingRule, NewTransaction, Person, Transaction } from '../types.ts'
+import type { CardPersonMapping, Category, MappingRule, NewTransaction, Person, Transaction } from '../types.ts'
 import { normalizeMerchantKey } from './mappingRulesRepo.ts'
 import { createTransactions } from './transactionsRepo.ts'
 
-export type CanonicalField = 'date' | 'merchant' | 'amount' | 'category' | 'person'
+export type CanonicalField = 'date' | 'merchant' | 'amount' | 'category' | 'person' | 'cardSuffix' | 'transactionType'
+
+/** Max's "סוג עסקה" (transaction type) column value for a disputed/
+ * under-review row — nothing's actually been charged yet, and it may never
+ * be. Shared with pdfImportService.ts (same underlying Max data, just a
+ * different layout) so both recognize the same exact status text. */
+export const DISPUTED_TRANSACTION_TYPE = 'עסקה בבירור'
 
 /** Prefixed onto a row's merchant cell (only ever produced by
  * pdfImportService.ts, for a Max "עסקה בבירור" — under-review/disputed —
@@ -43,6 +49,12 @@ const HEADER_ALIASES: Record<string, CanonicalField> = {
   'paid by': 'person',
   paidby: 'person',
   'מי שילם': 'person',
+  // Only present in Max's own XLSX export — used to resolve "who paid"
+  // per row (see buildCardMappingLookup) and to detect a disputed row
+  // (see DISPUTED_TRANSACTION_TYPE) more precisely than the PDF path,
+  // which only has an aggregated document-wide cardholder guess.
+  '4 ספרות אחרונות של כרטיס האשראי': 'cardSuffix',
+  'סוג עסקה': 'transactionType',
 }
 
 export interface ParsedImportRow {
@@ -67,10 +79,13 @@ export interface ParsedImportRow {
    * them, since a same-day coincidence (two identical coffees) is
    * possible and the user should get to decide. */
   isPossibleDuplicate: boolean
-  /** True for a Max "עסקה בבירור" (under review/disputed) row — see
-   * DISPUTED_ROW_TAG. Nothing's actually been charged yet and it may never
-   * be, so the preview starts these unchecked too, same as a possible
-   * duplicate — the household decides whether to bring it in early. */
+  /** True for a Max "עסקה בבירור" (under review/disputed) row — detected
+   * either via DISPUTED_ROW_TAG (PDF import, which has no separate "סוג
+   * עסקה" column of its own) or a "transactionType" column matching
+   * DISPUTED_TRANSACTION_TYPE (XLSX import). Nothing's actually been
+   * charged yet and it may never be, so the preview starts these unchecked
+   * too, same as a possible duplicate — the household decides whether to
+   * bring it in early. */
   isDisputed: boolean
 }
 
@@ -195,8 +210,14 @@ function parseDate(raw: string | undefined): string | null {
  * Parses a CSV file into reviewable rows — see buildImportPreviewFromTable()
  * for the shared logic; this just adds the CSV-specific text -> table step.
  */
-export function buildImportPreview(csvText: string, categories: Category[], mappingRules: MappingRule[], existingTransactions: Transaction[]): ParsedImportRow[] {
-  return buildImportPreviewFromTable(parseCsv(csvText), categories, mappingRules, existingTransactions)
+export function buildImportPreview(
+  csvText: string,
+  categories: Category[],
+  mappingRules: MappingRule[],
+  existingTransactions: Transaction[],
+  cardMappings: CardPersonMapping[],
+): ParsedImportRow[] {
+  return buildImportPreviewFromTable(parseCsv(csvText), categories, mappingRules, existingTransactions, cardMappings)
 }
 
 /** Merchant -> whichever category most of its existing transactions already
@@ -245,6 +266,7 @@ export function buildImportPreviewFromTable(
   categories: Category[],
   mappingRules: MappingRule[],
   existingTransactions: Transaction[],
+  cardMappings: CardPersonMapping[],
 ): ParsedImportRow[] {
   if (table.length < 2) return []
 
@@ -252,6 +274,10 @@ export function buildImportPreviewFromTable(
   const columnMapping = detectColumnMapping(headerRow)
   const categoryByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c]))
   const ruleByMerchant = new Map(mappingRules.map((rule) => [rule.merchantKey, rule]))
+  // Only ever populated for a file with its own "4 ספרות אחרונות..." column
+  // (Max's XLSX export) — every other source leaves this empty and
+  // personFromCardSuffix below is always null, a no-op.
+  const personByCardSuffix = new Map(cardMappings.map((m) => [m.cardSuffix, m.person]))
   // Falls back to whatever category a merchant is *usually* filed under in
   // the household's existing data when there's no saved mapping rule for
   // it — a manual categorization never automatically becomes a rule, so
@@ -270,8 +296,8 @@ export function buildImportPreviewFromTable(
 
   return dataRows.map((cells) => {
     const merchantRaw = (columnMapping.merchant !== undefined ? cells[columnMapping.merchant] : '')?.trim() ?? ''
-    const isDisputed = merchantRaw.includes(DISPUTED_ROW_TAG)
-    const merchant = (isDisputed ? merchantRaw.split(DISPUTED_ROW_TAG).join('') : merchantRaw).trim()
+    const isDisputedTag = merchantRaw.includes(DISPUTED_ROW_TAG)
+    const merchant = (isDisputedTag ? merchantRaw.split(DISPUTED_ROW_TAG).join('') : merchantRaw).trim()
     const rule = ruleByMerchant.get(normalizeMerchantKey(merchant))
 
     const categoryRaw = columnMapping.category !== undefined ? cells[columnMapping.category]?.trim() : undefined
@@ -279,14 +305,25 @@ export function buildImportPreviewFromTable(
 
     const personRaw = columnMapping.person !== undefined ? cells[columnMapping.person]?.trim() : undefined
     const personFromFile = personRaw === 'Reut' || personRaw === 'Keren' ? personRaw : null
+    // Which card a row's own line was charged to is a fact the statement
+    // states (same reasoning as pdfImportService.ts's detectCardholder),
+    // not a merchant-history guess — so, unlike rule?.person below, this is
+    // a legitimate source for "who paid", just resolved per row instead of
+    // once for the whole file.
+    const cardSuffixRaw = columnMapping.cardSuffix !== undefined ? cells[columnMapping.cardSuffix]?.trim() : undefined
+    const personFromCardSuffix = cardSuffixRaw ? (personByCardSuffix.get(cardSuffixRaw) ?? null) : null
+
+    const transactionTypeRaw = columnMapping.transactionType !== undefined ? cells[columnMapping.transactionType]?.trim() : undefined
+    const isDisputed = isDisputedTag || transactionTypeRaw === DISPUTED_TRANSACTION_TYPE
 
     const categoryId = categoryFromFile ?? rule?.categoryId ?? mostCommonCategoryByMerchant.get(normalizeMerchantKey(merchant)) ?? null
     // Deliberately not rule?.person: who paid isn't a property of the
     // merchant (the same supermarket run could land on either person's
     // card), it's whoever's statement this is — the preview defaults it to
     // the current importer instead (see openPreviewModal in
-    // TransactionsImport.ts), unless the file itself states otherwise.
-    const person = personFromFile ?? null
+    // TransactionsImport.ts), unless the file itself states otherwise
+    // (personFromFile) or the row's own card tells us (personFromCardSuffix).
+    const person = personFromFile ?? personFromCardSuffix ?? null
     const date = columnMapping.date !== undefined ? parseDate(cells[columnMapping.date]) : null
     const amount = columnMapping.amount !== undefined ? parseAmount(cells[columnMapping.amount]) : null
 

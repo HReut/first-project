@@ -57,16 +57,16 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
   let rows: ParsedImportRow[]
   let declaredTotal: number | null = null
   if (isCsv) {
-    rows = buildImportPreview(await file.text(), state.categories, mappingRules, state.transactions)
+    rows = buildImportPreview(await file.text(), state.categories, mappingRules, state.transactions, state.cardMappings)
   } else if (isXlsx) {
-    rows = buildImportPreviewFromTable(await parseXlsx(file), state.categories, mappingRules, state.transactions)
+    rows = buildImportPreviewFromTable(await parseXlsx(file), state.categories, mappingRules, state.transactions, state.cardMappings)
   } else {
     // pdfjs-dist is ~850KB — split into its own chunk so it only loads for
     // people who actually import a PDF, not on every page visit.
     const { parseCreditCardStatementPdf } = await import('../../data/pdfImportService.ts')
     const parsed = await parseCreditCardStatementPdf(file, state.categories, state.cardMappings)
     declaredTotal = parsed.declaredTotal
-    rows = buildImportPreviewFromTable(parsed.table, state.categories, mappingRules, state.transactions)
+    rows = buildImportPreviewFromTable(parsed.table, state.categories, mappingRules, state.transactions, state.cardMappings)
   }
 
   if (rows.length === 0) {
