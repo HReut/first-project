@@ -803,7 +803,7 @@ export class TransactionsView {
     select.addEventListener('change', () => {
       settled = true
       this.stageEdit(tx.id, { categoryId: select.value })
-      this.promptSaveMappingRule(tx, 'category', select.value)
+      this.promptSaveMappingRule(tx, select.value)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -835,7 +835,6 @@ export class TransactionsView {
       settled = true
       const nextPerson = select.value as Person
       this.stageEdit(tx.id, { person: nextPerson })
-      this.promptSaveMappingRule(tx, 'person', nextPerson)
     })
     select.addEventListener('blur', () => {
       if (!settled) this.renderTable(this.#store.getState())
@@ -903,22 +902,23 @@ export class TransactionsView {
     })
   }
 
-  /** Offers to remember an inline Category/Person edit as a mapping rule for
-   * this merchant, so future CSV imports auto-fill it. Self-dismissing toast
-   * — no blocking modal, since this is a nice-to-have not a required step. */
-  private promptSaveMappingRule(tx: Transaction, field: 'category' | 'person', value: string): void {
+  /** Offers to remember an inline category edit as a mapping rule for this
+   * merchant, so future imports auto-fill its category. Self-dismissing
+   * toast — no blocking modal, since this is a nice-to-have not a required
+   * step. Category only, deliberately — "who paid" isn't a property of the
+   * merchant (the same supermarket run could land on either person's card),
+   * it's just whoever's statement is being imported right now, so it
+   * always defaults to the current importer instead of being remembered. */
+  private promptSaveMappingRule(tx: Transaction, categoryId: string): void {
     // No merchant to key a future-import rule off of — nothing to offer.
     if (!tx.merchant) return
     const merchantKey = normalizeMerchantKey(tx.merchant)
-    const fieldLabel = field === 'category' ? 'הקטגוריה' : 'מי שילם/ה'
-    showToast(`לזכור את ${fieldLabel} הזו עבור "${tx.merchant}" בייבואים עתידיים?`, [
+    showToast(`לזכור את הקטגוריה הזו עבור "${tx.merchant}" בייבואים עתידיים?`, [
       {
         label: 'שמירת כלל',
         primary: true,
         onClick: () => {
-          upsertMappingRule(merchantKey, field === 'category' ? { categoryId: value } : { person: value as Person }).catch(() =>
-            showToast('לא ניתן היה לשמור את הכלל.'),
-          )
+          upsertMappingRule(merchantKey, { categoryId }).catch(() => showToast('לא ניתן היה לשמור את הכלל.'))
         },
       },
       { label: 'התעלמות', onClick: () => {} },

@@ -249,7 +249,12 @@ export function buildImportPreviewFromTable(
     const personFromFile = personRaw === 'Reut' || personRaw === 'Keren' ? personRaw : null
 
     const categoryId = categoryFromFile ?? rule?.categoryId ?? mostCommonCategoryByMerchant.get(normalizeMerchantKey(merchant)) ?? null
-    const person = personFromFile ?? rule?.person ?? null
+    // Deliberately not rule?.person: who paid isn't a property of the
+    // merchant (the same supermarket run could land on either person's
+    // card), it's whoever's statement this is — the preview defaults it to
+    // the current importer instead (see openPreviewModal in
+    // TransactionsImport.ts), unless the file itself states otherwise.
+    const person = personFromFile ?? null
     const date = columnMapping.date !== undefined ? parseDate(cells[columnMapping.date]) : null
     const amount = columnMapping.amount !== undefined ? parseAmount(cells[columnMapping.amount]) : null
 
@@ -263,7 +268,7 @@ export function buildImportPreviewFromTable(
       amount,
       categoryId,
       person,
-      matchedRule: !categoryFromFile && !personFromFile && (!!rule || mostCommonCategoryByMerchant.has(normalizeMerchantKey(merchant))),
+      matchedRule: !categoryFromFile && (!!rule?.categoryId || mostCommonCategoryByMerchant.has(normalizeMerchantKey(merchant))),
       isPossibleDuplicate,
     }
   })

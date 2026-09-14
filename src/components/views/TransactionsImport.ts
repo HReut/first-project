@@ -352,18 +352,21 @@ async function submitImport(modal: Modal, store: Store<AppState>, currentPerson:
   }
 }
 
-/** Remembers each merchant's category/person from this import — whether it
- * was auto-filled by an existing rule or corrected in the preview grid —
- * so the next statement for the same merchant comes in pre-categorized.
- * Fire-and-forget: this is a nice-to-have on top of an import that already
- * succeeded, not something worth blocking or erroring the import over. */
+/** Remembers each merchant's category from this import — whether it was
+ * auto-filled by an existing rule or corrected in the preview grid — so
+ * the next statement for the same merchant comes in pre-categorized.
+ * Category only, deliberately: who paid isn't a property of the merchant,
+ * it's whoever's statement is being imported, so it's never remembered
+ * (see the person comment in buildImportPreviewFromTable). Fire-and-forget:
+ * this is a nice-to-have on top of an import that already succeeded, not
+ * something worth blocking or erroring the import over. */
 function rememberCategoryChoices(inputs: NewTransaction[]): void {
-  const choiceByMerchant = new Map<string, { categoryId: string; person: Person }>()
+  const categoryByMerchant = new Map<string, string>()
   for (const input of inputs) {
     if (!input.merchant) continue
-    choiceByMerchant.set(normalizeMerchantKey(input.merchant), { categoryId: input.categoryId, person: input.person })
+    categoryByMerchant.set(normalizeMerchantKey(input.merchant), input.categoryId)
   }
-  for (const [merchantKey, patch] of choiceByMerchant) {
-    upsertMappingRule(merchantKey, patch).catch(() => {})
+  for (const [merchantKey, categoryId] of categoryByMerchant) {
+    upsertMappingRule(merchantKey, { categoryId }).catch(() => {})
   }
 }
