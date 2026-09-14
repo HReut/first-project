@@ -2,6 +2,14 @@ import { readSheet } from 'read-excel-file/browser'
 import type { CardPersonMapping, Category, MappingRule, NewTransaction, Person, Transaction } from '../types.ts'
 import { normalizeMerchantKey } from './mappingRulesRepo.ts'
 import { createTransactions } from './transactionsRepo.ts'
+import { personLabel } from '../utils/format.ts'
+
+const PEOPLE: Person[] = ['Reut', 'Keren']
+// Accepts either the raw 'Reut'/'Keren' value or its Hebrew display label
+// (רעות/קרן) — the latter is what this app's own CSV export writes (see
+// TransactionsView.ts), so re-importing an exported file needs it too, not
+// just files that happen to spell it out in English.
+const PERSON_BY_LABEL: Record<string, Person> = Object.fromEntries(PEOPLE.map((p) => [personLabel(p), p]))
 
 export type CanonicalField = 'date' | 'merchant' | 'amount' | 'category' | 'person' | 'cardSuffix' | 'transactionType'
 
@@ -38,6 +46,10 @@ const HEADER_ALIASES: Record<string, CanonicalField> = {
   'תיאור עסקה': 'merchant',
   תיאור: 'merchant',
   'שם בית העסק': 'merchant',
+  // This app's own CSV export (TransactionsView.ts's "ייצוא" button) —
+  // needed so re-importing an exported file (e.g. after editing it in
+  // Excel) actually works, rather than silently mapping no columns at all.
+  'בית עסק': 'merchant',
   amount: 'amount',
   sum: 'amount',
   total: 'amount',
@@ -49,6 +61,7 @@ const HEADER_ALIASES: Record<string, CanonicalField> = {
   'paid by': 'person',
   paidby: 'person',
   'מי שילם': 'person',
+  'משלם/ת': 'person',
   // Only present in Max's own XLSX export — used to resolve "who paid"
   // per row (see buildCardMappingLookup) and to detect a disputed row
   // (see DISPUTED_TRANSACTION_TYPE) more precisely than the PDF path,
@@ -304,7 +317,7 @@ export function buildImportPreviewFromTable(
     const categoryFromFile = categoryRaw ? (categoryByName.get(categoryRaw.toLowerCase())?.id ?? null) : null
 
     const personRaw = columnMapping.person !== undefined ? cells[columnMapping.person]?.trim() : undefined
-    const personFromFile = personRaw === 'Reut' || personRaw === 'Keren' ? personRaw : null
+    const personFromFile = personRaw === 'Reut' || personRaw === 'Keren' ? personRaw : (personRaw ? (PERSON_BY_LABEL[personRaw] ?? null) : null)
     // Which card a row's own line was charged to is a fact the statement
     // states (same reasoning as pdfImportService.ts's detectCardholder),
     // not a merchant-history guess — so, unlike rule?.person below, this is
