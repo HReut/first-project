@@ -198,8 +198,8 @@ function groupIntoTransactionBlocks(lines: string[]): string[][] {
 // leaving every imported row on the current user by default. Extend as
 // more cards are added to the household.
 const CARD_SUFFIX_TO_PERSON: Record<string, Person> = {
-  '4022': 'Reut',
-  '3925': 'Keren',
+  '3925': 'Reut',
+  '4022': 'Keren',
 }
 const CARD_SUFFIX_RE = new RegExp(`\\b(${Object.keys(CARD_SUFFIX_TO_PERSON).join('|')})\\b`)
 
