@@ -101,8 +101,9 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
           <h2 class="settings-card__title">מיפוי כרטיסי אשראי</h2>
           <p class="settings-card__desc">
             כשמייבאים דוח PDF, 4 הספרות האחרונות של הכרטיס שמופיעות בדוח קובעות אוטומטית
-            את "מי שילם/ה" — בלי קשר למי שמייבא בפועל. עדכנו כאן כשמקבלים כרטיס חדש
-            (המספר מתחלף כל כמה שנים בחידוש).
+            את "מי שילם/ה" — בלי קשר למי שמייבא בפועל. כשמקבלים כרטיס חדש —
+            <strong>מוסיפים</strong> אותו כאן ומשאירים את הישן ברשימה, כדי שדוחות ישנים
+            שמתייחסים אליו ימשיכו להשתייך נכון. "מחיקה" מיועדת רק לתיקון כרטיס שנוסף בטעות.
           </p>
           <div class="settings-list" id="card-mapping-manager"></div>
         </section>
@@ -190,7 +191,10 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
       const id = deleteBtn.dataset.deleteCardMapping!
       const mapping = store.getState().cardMappings.find((m) => m.id === id)
       if (!mapping) return
-      confirmDialog(`להסיר את השיוך של כרטיס ${mapping.cardSuffix} (${personLabel(mapping.person)})?`, 'הסרה').then((confirmed) => {
+      confirmDialog(
+        `להסיר את השיוך של כרטיס ${mapping.cardSuffix} (${personLabel(mapping.person)})? זה מתאים רק אם הכרטיס נוסף בטעות — אם הוא פשוט לא בשימוש יותר, עדיף להשאיר אותו כדי שדוחות ישנים ימשיכו להשתייך נכון.`,
+        'הסרה',
+      ).then((confirmed) => {
         if (!confirmed) return
         deleteCardMapping(id).then(() => {
           const { cardMappings } = store.getState()
