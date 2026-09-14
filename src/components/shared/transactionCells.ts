@@ -57,8 +57,9 @@ export function renderMerchantCell(tx: Transaction, category?: Category, isPossi
         isPossibleDuplicate
           ? `<span class="email-badge email-badge--warning" title="יש עוד תנועה עם אותו תאריך, סכום ובית עסק — יתכן שזו כפילות">
               <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true">
-                <rect x="6" y="6" width="9.5" height="9.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M4.5 13.5v-8a1 1 0 0 1 1-1h8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                <path d="M10 3.2 17.5 16H2.5L10 3.2Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                <path d="M10 8.3v3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                <circle cx="10" cy="13.7" r="0.9" fill="currentColor"/>
               </svg>
             </span>`
           : ''
