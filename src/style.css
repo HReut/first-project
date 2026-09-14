@@ -2301,19 +2301,23 @@ tr.tx-row--pending td {
 .transactions__table th {
   text-align: start;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--text);
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  color: var(--text-h);
+  padding: 10px;
+  border-bottom: 2px solid var(--border);
   white-space: nowrap;
   /* Sits right below the sticky .app-topbar (16px padding + 34px avatar +
      16px padding + 1px border = 67px) so it stays visible while scrolling
      through a long transaction list, on desktop only — the mobile layout
-     hides this table for card rows instead (.tx-cards). */
+     hides this table for card rows instead (.tx-cards). A tinted
+     background (not var(--surface), which matches the row background and
+     made the header blend in) plus bolder text and a shadow give it its
+     own visual layer, distinct from the data rows scrolling underneath. */
   position: sticky;
   top: 67px;
   z-index: 3;
-  background: var(--surface);
+  background: var(--bg);
+  box-shadow: 0 1px 0 var(--border), 0 6px 8px -6px rgba(0, 0, 0, 0.12);
 }
 
 .transactions__table th[data-sort] {
