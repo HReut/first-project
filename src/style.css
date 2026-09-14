@@ -2964,7 +2964,8 @@ tr.tx-row--pending td {
   background: color-mix(in srgb, var(--status-warning) 14%, var(--surface));
 }
 
-.import-preview__row--duplicate {
+.import-preview__row--duplicate,
+.import-preview__row--disputed {
   background: color-mix(in srgb, var(--status-warning) 6%, transparent);
 }
 

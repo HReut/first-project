@@ -2,6 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { TextItem } from 'pdfjs-dist/types/src/display/api.js'
 import type { CardPersonMapping, Category, Person } from '../types.ts'
+import { DISPUTED_ROW_TAG } from './importService.ts'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
 
@@ -62,10 +63,10 @@ const AMOUNT_RE = /-?\d[\d,]*\.\d{2}(?!\d)(?!%)/g
 const NOISE_WORDS = ['רגילה', 'תשלומים', 'הוראת קבע', 'ביטול עסקה']
 // "עסקה בבירור" (transaction under dispute) rows show the disputed amount
 // next to a ₪0.00 — nothing's actually been charged yet, and Max's own
-// footnote says these "may never be charged at all". Skipped outright (see
-// parseTransactionBlock) rather than imported at either amount: if/when it
-// resolves, it reappears as an ordinary רגילה row in a later statement and
-// gets imported then.
+// footnote says these "may never be charged at all". Still shown in the
+// preview grid (tagged via DISPUTED_ROW_TAG) rather than dropped, but left
+// unchecked by default — the household decides whether to bring it in
+// early rather than wait for it to clear as an ordinary row later.
 const DISPUTED_TRANSACTION_MARKER = 'עסקה בבירור'
 // "חיוב יחסי עבור 9 ימים" (a prorated partial-month charge) — the day count
 // varies, so this is a pattern, not a fixed word; anything from "חיוב יחסי"
@@ -328,7 +329,7 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   // reference marker (e.g. "7 09/07/26 ...") — not transaction data.
   const line = blockLines.join(' ').replace(/^\d{1,2}\s+/, '')
 
-  if (line.includes(DISPUTED_TRANSACTION_MARKER)) return null
+  const isDisputed = line.includes(DISPUTED_TRANSACTION_MARKER)
 
   const dateMatch = line.match(DATE_RE)
   if (!dateMatch) return null
@@ -345,15 +346,20 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   // The rightmost/last amount on the line is the actual charge — takes over
   // an earlier "original transaction amount" column when both are present
   // (they're usually identical anyway). Kept even when negative (a refund/
-  // reversal) — see buildCardSuffixLookup's doc comment above.
-  const lastAmount = amounts[amounts.length - 1]
-  const amountValue = Number(lastAmount.replace(/,/g, ''))
+  // reversal) — see buildCardSuffixLookup's doc comment above. A disputed
+  // row is the one exception: Max prints the disputed amount next to a
+  // separate ₪0.00 ("not actually charged"), and the ₪0.00 is what ends up
+  // last — so the rightmost *non-zero* amount is used instead, since that's
+  // the number worth showing someone deciding whether to import it early.
+  const chosenAmount = isDisputed ? (amounts.filter((a) => Number(a.replace(/,/g, '')) !== 0).at(-1) ?? amounts[0]) : amounts[amounts.length - 1]
+  const amountValue = Number(chosenAmount.replace(/,/g, ''))
   if (!Number.isFinite(amountValue) || amountValue === 0) return null
 
   let residue = line.replace(dateMatch[0], ' ')
   for (const amount of amounts) residue = residue.replace(amount, ' ')
   residue = residue.replace(/[₪$€]/g, ' ') // currency symbol left behind once its digits are stripped
   residue = residue.replace(PRORATED_CHARGE_RE, ' ')
+  residue = residue.split(DISPUTED_TRANSACTION_MARKER).join(' ')
   for (const word of NOISE_WORDS) residue = residue.split(word).join(' ')
   residue = residue.replace(/\s+/g, ' ').trim()
 
@@ -375,7 +381,12 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
     }
   }
 
-  return [iso, merchant, categoryName, lastAmount.replace(/,/g, ''), cardholder ?? '']
+  // The tag rides along in the merchant cell — see DISPUTED_ROW_TAG — since
+  // this string[][] table shape has no column of its own for it; stripped
+  // back off in buildImportPreviewFromTable.
+  const taggedMerchant = isDisputed ? `${DISPUTED_ROW_TAG}${merchant}` : merchant
+
+  return [iso, taggedMerchant, categoryName, chosenAmount.replace(/,/g, ''), cardholder ?? '']
 }
 
 function linesToTable(rawLines: string[], categories: Category[], cardholder: Person | null, cardSuffixRe: RegExp): PdfImportResult {

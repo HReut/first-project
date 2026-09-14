@@ -80,6 +80,7 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
 function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, currentPerson: Person, declaredTotal: number | null): void {
   const { categories } = store.getState()
   const duplicateCount = rows.filter((row) => row.isPossibleDuplicate).length
+  const disputedCount = rows.filter((row) => row.isDisputed).length
 
   // Cross-checks the parser's own work against the statement's stated
   // total, when one was found — a wrong/missing row is far easier to catch
@@ -99,6 +100,7 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
       <p class="import-preview__hint">
         סקור/י ותקן/י כל דבר לפני הייבוא — אלה נשמרות רק לאחר אישור.
         ${duplicateCount > 0 ? `${duplicateCount} שורות נראות כאילו כבר קיימות בנתונים שלך, ומתחילות לא מסומנות.` : ''}
+        ${disputedCount > 0 ? `${disputedCount} שורות הן עסקאות בבירור (טרם חויבו בפועל), ומתחילות לא מסומנות.` : ''}
       </p>
       ${reconciliationBanner}
       <div class="bulk-bar" id="import-bulk-bar" hidden>
@@ -128,13 +130,22 @@ function openPreviewModal(rows: ParsedImportRow[], store: Store<AppState>, curre
             ${rows
               .map(
                 (row, index) => `
-              <tr data-row="${index}" class="${row.isPossibleDuplicate ? 'import-preview__row--duplicate' : ''}">
-                <td><input type="checkbox" class="row-select" data-field="include" ${row.isPossibleDuplicate ? '' : 'checked'}></td>
+              <tr data-row="${index}" class="${row.isPossibleDuplicate ? 'import-preview__row--duplicate' : ''} ${row.isDisputed ? 'import-preview__row--disputed' : ''}">
+                <td><input type="checkbox" class="row-select" data-field="include" ${row.isPossibleDuplicate || row.isDisputed ? '' : 'checked'}></td>
                 <td><input type="date" class="filter-input" data-field="date" value="${row.date ?? ''}"></td>
                 <td>
                   <input type="text" class="filter-input" data-field="merchant" value="${row.merchant}">
                   ${row.matchedRule ? '<span class="import-preview__rule-badge" title="מולא אוטומטית מכלל שמור או מהיסטוריית הקטגוריות של בית העסק">אוטומטי</span>' : ''}
                   ${row.isPossibleDuplicate ? '<span class="import-preview__rule-badge import-preview__rule-badge--warn" title="אותו תאריך, בית עסק וסכום כמו תנועה קיימת">כפילות אפשרית</span>' : ''}
+                  ${
+                    row.isDisputed
+                      ? `<span class="import-preview__rule-badge import-preview__rule-badge--warn" title="עסקה בבירור — טרם חויבה בפועל, וייתכן שלא תחויב כלל">
+                          <svg viewBox="0 0 20 20" width="11" height="11" aria-hidden="true" style="vertical-align:-1px;margin-inline-end:2px">
+                            <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+                            <path d="M10 6v4.5l3 2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>עסקה בבירור</span>`
+                      : ''
+                  }
                 </td>
                 <td><input type="number" class="filter-input${row.amount !== null && row.amount < 0 ? ' import-preview__amount--credit' : ''}" data-field="amount" step="0.01" value="${row.amount !== null ? row.amount.toFixed(2) : ''}"></td>
                 <td>
