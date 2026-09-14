@@ -109,3 +109,10 @@ export interface RecurringRuleRow {
   last_generated_month: string | null
   created_at: string
 }
+
+export interface CardPersonMappingRow {
+  id: string
+  card_suffix: string
+  person: PersonRow
+  created_at: string
+}

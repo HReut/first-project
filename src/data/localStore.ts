@@ -1,4 +1,4 @@
-import type { AccountBalance, ActivityLogEntry, BudgetLimitOverride, Category, EmailSyncRule, ExchangeRate, MappingRule, NewActivityLogEntry, RecurringRule, SavingsGoal, Transaction } from '../types.ts'
+import type { AccountBalance, ActivityLogEntry, BudgetLimitOverride, CardPersonMapping, Category, EmailSyncRule, ExchangeRate, MappingRule, NewActivityLogEntry, RecurringRule, SavingsGoal, Transaction } from '../types.ts'
 import { SEED_CATEGORIES } from './mockCategories.ts'
 import { createMockTransactions } from './mockTransactions.ts'
 
@@ -17,6 +17,7 @@ const KEYS = {
   budgetLimitOverrides: 'opa-tulik:budget-limit-overrides',
   activityLog: 'opa-tulik:activity-log',
   savingsGoals: 'opa-tulik:savings-goals',
+  cardMappings: 'opa-tulik:card-mappings',
 } as const
 
 function read<T>(key: string): T | null {
@@ -101,6 +102,21 @@ export function loadLocalRecurringRules(): RecurringRule[] {
 
 export function saveLocalRecurringRules(rules: RecurringRule[]): void {
   write(KEYS.recurringRules, rules)
+}
+
+export function loadLocalCardMappings(): CardPersonMapping[] {
+  const existing = read<CardPersonMapping[]>(KEYS.cardMappings)
+  if (existing) return existing
+  const seeded: CardPersonMapping[] = [
+    { id: crypto.randomUUID(), cardSuffix: '3925', person: 'Reut' },
+    { id: crypto.randomUUID(), cardSuffix: '4022', person: 'Keren' },
+  ]
+  write(KEYS.cardMappings, seeded)
+  return seeded
+}
+
+export function saveLocalCardMappings(mappings: CardPersonMapping[]): void {
+  write(KEYS.cardMappings, mappings)
 }
 
 export function loadLocalAccountBalance(): AccountBalance | null {

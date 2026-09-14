@@ -10,6 +10,7 @@ import { loadExchangeRate } from '../data/exchangeRateRepo.ts'
 import { listBudgetLimitOverrides } from '../data/budgetLimitOverridesRepo.ts'
 import { listActivityLog } from '../data/activityLogRepo.ts'
 import { listSavingsGoals } from '../data/savingsGoalsRepo.ts'
+import { listCardMappings } from '../data/cardMappingRepo.ts'
 import { generateDueRecurringTransactions } from '../data/generateRecurringTransactions.ts'
 import { dedupeRecurringTransactions, removeFutureRecurringTransactions, resyncRecurringRuleCounters } from '../data/dedupeRecurringTransactions.ts'
 import { computeBudgetPaceTip, computeCategoryDeltaTips, computeSplitBalance, topBudgetedCategories } from '../utils/insights.ts'
@@ -157,6 +158,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
     exchangeRate: null,
     activityLog: [],
     savingsGoals: [],
+    cardMappings: [],
     filters: {
       categoryId: 'all',
       person: 'all',
@@ -177,8 +179,9 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
       listBudgetLimitOverrides(),
       listActivityLog(),
       listSavingsGoals(),
+      listCardMappings(),
     ])
-      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, exchangeRate, budgetLimitOverrides, activityLog, savingsGoals]) => {
+      .then(([categories, transactions, emailRules, mappingRules, recurringRules, accountBalance, exchangeRate, budgetLimitOverrides, activityLog, savingsGoals, cardMappings]) => {
         store.setState({
           categories,
           transactions,
@@ -190,6 +193,7 @@ export function mountApp(root: HTMLElement, userEmail: string | null = null): vo
           budgetLimitOverrides,
           activityLog,
           savingsGoals,
+          cardMappings,
           status: 'ready',
         })
         return dedupeRecurringTransactions(store, currentPerson)

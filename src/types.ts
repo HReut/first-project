@@ -102,6 +102,19 @@ export interface RecurringRule {
   lastGeneratedMonth: string | null // YYYY-MM
 }
 
+/** Card last-4-digits -> household member, edited in Settings — lets PDF
+ * import's cardholder detection (see pdfImportService.ts) auto-fill
+ * "מי שילם/ה" from whichever card a statement is for. Household-editable
+ * rather than hardcoded since a physical card's number changes every few
+ * years on renewal. */
+export interface CardPersonMapping {
+  id: string
+  cardSuffix: string // exactly 4 digits
+  person: Person
+}
+
+export type NewCardPersonMapping = Omit<CardPersonMapping, 'id'>
+
 export type NewRecurringRule = Omit<RecurringRule, 'id' | 'lastGeneratedMonth' | 'occurrencesGenerated'>
 
 /** A scoped exception to a category's default monthlyBudgetLimit — "this
@@ -265,5 +278,6 @@ export interface AppState {
   exchangeRate: ExchangeRate | null
   activityLog: ActivityLogEntry[]
   savingsGoals: SavingsGoal[]
+  cardMappings: CardPersonMapping[]
   filters: Filters
 }

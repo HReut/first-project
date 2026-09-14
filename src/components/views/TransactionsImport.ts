@@ -64,7 +64,7 @@ async function handleFile(file: File, store: Store<AppState>, currentPerson: Per
     // pdfjs-dist is ~850KB — split into its own chunk so it only loads for
     // people who actually import a PDF, not on every page visit.
     const { parseCreditCardStatementPdf } = await import('../../data/pdfImportService.ts')
-    const parsed = await parseCreditCardStatementPdf(file, state.categories)
+    const parsed = await parseCreditCardStatementPdf(file, state.categories, state.cardMappings)
     declaredTotal = parsed.declaredTotal
     rows = buildImportPreviewFromTable(parsed.table, state.categories, mappingRules, state.transactions)
   }

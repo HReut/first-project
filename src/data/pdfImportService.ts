@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { TextItem } from 'pdfjs-dist/types/src/display/api.js'
-import type { Category, Person } from '../types.ts'
+import type { CardPersonMapping, Category, Person } from '../types.ts'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
 
@@ -32,7 +32,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
  * the preview screen can flag a mismatch against what was actually parsed —
  * see PdfImportResult.declaredTotal and the reconciliation banner in
  * TransactionsImport.ts. A negative amount (refund/reversal) is kept as a
- * real negative-amount row rather than skipped — see CARD_SUFFIX_TO_PERSON
+ * real negative-amount row rather than skipped — see buildCardSuffixLookup
  * for how the cardholder (and so "מי שילם/ה") is detected.
  *
  * A business name (or a category/card/type/amount tail) that wraps onto its
@@ -193,25 +193,31 @@ function groupIntoTransactionBlocks(lines: string[]): string[][] {
   return blocks
 }
 
-// Card last-4 -> household member — lets the parser fill in "מי שילם/ה"
-// automatically from whichever card the statement is for, instead of
-// leaving every imported row on the current user by default. Extend as
-// more cards are added to the household.
-const CARD_SUFFIX_TO_PERSON: Record<string, Person> = {
-  '3925': 'Reut',
-  '4022': 'Keren',
+/** Card last-4 -> household member, and a regex matching any known suffix —
+ * built fresh per import from the household's editable Settings mapping
+ * (see cardMappingRepo.ts) rather than hardcoded, since a physical card's
+ * number changes every few years on renewal. `/(?!)/` (never matches) is
+ * the safe fallback when no mapping is configured yet, instead of an
+ * alternation with zero options, which is well-defined but matches an
+ * empty string at every position — silently corrupting every row's
+ * merchant text via the strip below. */
+function buildCardSuffixLookup(cardMappings: CardPersonMapping[]): { suffixToPerson: Record<string, Person>; suffixRe: RegExp } {
+  const suffixToPerson: Record<string, Person> = {}
+  for (const mapping of cardMappings) suffixToPerson[mapping.cardSuffix] = mapping.person
+  const suffixes = Object.keys(suffixToPerson)
+  const suffixRe = suffixes.length > 0 ? new RegExp(`\\b(${suffixes.join('|')})\\b`) : /(?!)/
+  return { suffixToPerson, suffixRe }
 }
-const CARD_SUFFIX_RE = new RegExp(`\\b(${Object.keys(CARD_SUFFIX_TO_PERSON).join('|')})\\b`)
 
 /** Scans the whole document (not just transaction rows) for a known card's
  * last 4 digits — usually printed once in the statement header ("כרטיס
  * ...4022") but sometimes repeated per row too, so a document-wide search
  * catches either layout. Assumes one card per statement; the preview grid
  * lets any row be corrected by hand if that's ever wrong. */
-function detectCardholder(lines: string[]): Person | null {
+function detectCardholder(lines: string[], suffixToPerson: Record<string, Person>, suffixRe: RegExp): Person | null {
   for (const line of lines) {
-    const match = line.match(CARD_SUFFIX_RE)
-    if (match) return CARD_SUFFIX_TO_PERSON[match[1]]
+    const match = line.match(suffixRe)
+    if (match) return suffixToPerson[match[1]]
   }
   return null
 }
@@ -310,7 +316,7 @@ export interface PdfImportResult {
 /** Parses one transaction's already-grouped lines (see
  * groupIntoTransactionBlocks) into a table row, or returns null if the
  * merged text doesn't actually hold a valid date+amount transaction. */
-function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean, categories: Category[], cardholder: Person | null): string[] | null {
+function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean, categories: Category[], cardholder: Person | null, cardSuffixRe: RegExp): string[] | null {
   // A standalone 1-2 digit token at the start of the block is a footnote
   // reference marker (e.g. "7 09/07/26 ...") — not transaction data.
   const line = blockLines.join(' ').replace(/^\d{1,2}\s+/, '')
@@ -330,7 +336,7 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   // The rightmost/last amount on the line is the actual charge — takes over
   // an earlier "original transaction amount" column when both are present
   // (they're usually identical anyway). Kept even when negative (a refund/
-  // reversal) — see CARD_SUFFIX_TO_PERSON's doc comment above.
+  // reversal) — see buildCardSuffixLookup's doc comment above.
   const lastAmount = amounts[amounts.length - 1]
   const amountValue = Number(lastAmount.replace(/,/g, ''))
   if (!Number.isFinite(amountValue) || amountValue === 0) return null
@@ -347,7 +353,7 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   if (hasCategoryColumn) {
     // The כרטיס (card) column sits between the merchant/category text and
     // the type/amount columns and is otherwise never stripped.
-    const strippedOfCard = residue.replace(CARD_SUFFIX_RE, ' ').replace(/\s+/g, ' ').trim()
+    const strippedOfCard = residue.replace(cardSuffixRe, ' ').replace(/\s+/g, ' ').trim()
     merchant = strippedOfCard
     // The category label is pulled out wherever it appears in the residue —
     // not assumed to be a trailing suffix — since a page break can leave a
@@ -363,7 +369,7 @@ function parseTransactionBlock(blockLines: string[], hasCategoryColumn: boolean,
   return [iso, merchant, categoryName, lastAmount.replace(/,/g, ''), cardholder ?? '']
 }
 
-function linesToTable(rawLines: string[], categories: Category[], cardholder: Person | null): PdfImportResult {
+function linesToTable(rawLines: string[], categories: Category[], cardholder: Person | null, cardSuffixRe: RegExp): PdfImportResult {
   const lines = stripTotalSummaryLines(rawLines)
 
   // Presence of a קטגוריה header column changes how a row's residual text
@@ -382,15 +388,16 @@ function linesToTable(rawLines: string[], categories: Category[], cardholder: Pe
   }
 
   for (const block of groupIntoTransactionBlocks(lines)) {
-    const row = parseTransactionBlock(block, hasCategoryColumn, categories, cardholder)
+    const row = parseTransactionBlock(block, hasCategoryColumn, categories, cardholder, cardSuffixRe)
     if (row) rows.push(row)
   }
 
   return { table: rows, declaredTotal }
 }
 
-export async function parseCreditCardStatementPdf(file: File, categories: Category[]): Promise<PdfImportResult> {
+export async function parseCreditCardStatementPdf(file: File, categories: Category[], cardMappings: CardPersonMapping[]): Promise<PdfImportResult> {
   const lines = await extractLines(file)
-  const cardholder = detectCardholder(lines)
-  return linesToTable(lines, categories, cardholder)
+  const { suffixToPerson, suffixRe } = buildCardSuffixLookup(cardMappings)
+  const cardholder = detectCardholder(lines, suffixToPerson, suffixRe)
+  return linesToTable(lines, categories, cardholder, suffixRe)
 }

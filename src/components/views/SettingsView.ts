@@ -6,6 +6,7 @@ import { createEmailRule, deleteEmailRule, updateEmailRule } from '../../data/em
 import { loadEmailAccountSettings, saveEmailAccountSettings, type EmailAccountSetting } from '../../data/emailAccountSettings.ts'
 import { setAccountBalance } from '../../data/accountBalanceRepo.ts'
 import { setExchangeRate } from '../../data/exchangeRateRepo.ts'
+import { createCardMapping, deleteCardMapping } from '../../data/cardMappingRepo.ts'
 import { logActivity } from '../../data/activityLogRepo.ts'
 import { showToast } from '../shared/Toast.ts'
 import { personLabel } from '../../utils/format.ts'
@@ -96,6 +97,20 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
 
     <section class="band">
       <div class="band__inner">
+        <section class="settings-card" aria-label="מיפוי כרטיסי אשראי">
+          <h2 class="settings-card__title">מיפוי כרטיסי אשראי</h2>
+          <p class="settings-card__desc">
+            כשמייבאים דוח PDF, 4 הספרות האחרונות של הכרטיס שמופיעות בדוח קובעות אוטומטית
+            את "מי שילם/ה" — בלי קשר למי שמייבא בפועל. עדכנו כאן כשמקבלים כרטיס חדש
+            (המספר מתחלף כל כמה שנים בחידוש).
+          </p>
+          <div class="settings-list" id="card-mapping-manager"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="band__inner">
         <section class="settings-card" aria-label="ניהול קטגוריות">
           <h2 class="settings-card__title">קטגוריות</h2>
           <p class="settings-card__desc">צבעים ואייקונים מתאימים אישית תגים, אריחים וגרפים בכל האפליקציה.</p>
@@ -143,6 +158,69 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
   const categoryPendingCountEl = root.querySelector<HTMLElement>('#category-pending-count')!
   const emailAccountsEl = root.querySelector<HTMLElement>('#email-accounts')!
   const ruleBuilderEl = root.querySelector<HTMLElement>('#rule-builder')!
+  const cardMappingManagerEl = root.querySelector<HTMLElement>('#card-mapping-manager')!
+
+  // ---------- Card-to-person mapping ----------
+
+  function renderCardMappingManager(state: AppState): void {
+    cardMappingManagerEl.innerHTML = `
+      ${state.cardMappings
+        .map(
+          (mapping) => `
+        <div class="settings-list__row" data-id="${mapping.id}">
+          <span class="settings-list__usage">כרטיס המסתיים ב-${mapping.cardSuffix} — ${personLabel(mapping.person)}</span>
+          <button type="button" class="btn btn--sm btn--danger" data-delete-card-mapping="${mapping.id}">מחיקה</button>
+        </div>
+      `,
+        )
+        .join('')}
+      <div class="settings-list__row settings-list__row--add">
+        <input type="text" class="name-input" id="new-card-suffix" placeholder="4 ספרות אחרונות של הכרטיס" maxlength="4" inputmode="numeric">
+        <select class="filter-select filter-select--sm" id="new-card-person">
+          ${PEOPLE.map((p) => `<option value="${p}">${personLabel(p)}</option>`).join('')}
+        </select>
+        <button type="button" class="btn btn--primary btn--sm" id="add-card-mapping-btn">+ הוספה</button>
+      </div>
+    `
+  }
+
+  cardMappingManagerEl.addEventListener('click', (event) => {
+    const deleteBtn = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete-card-mapping]')
+    if (deleteBtn) {
+      const id = deleteBtn.dataset.deleteCardMapping!
+      const mapping = store.getState().cardMappings.find((m) => m.id === id)
+      if (!mapping) return
+      confirmDialog(`להסיר את השיוך של כרטיס ${mapping.cardSuffix} (${personLabel(mapping.person)})?`, 'הסרה').then((confirmed) => {
+        if (!confirmed) return
+        deleteCardMapping(id).then(() => {
+          const { cardMappings } = store.getState()
+          store.setState({ cardMappings: cardMappings.filter((m) => m.id !== id) })
+        })
+      })
+      return
+    }
+
+    if ((event.target as HTMLElement).id === 'add-card-mapping-btn') {
+      const suffixInput = cardMappingManagerEl.querySelector<HTMLInputElement>('#new-card-suffix')!
+      const personSelect = cardMappingManagerEl.querySelector<HTMLSelectElement>('#new-card-person')!
+      const cardSuffix = suffixInput.value.trim()
+      if (!/^\d{4}$/.test(cardSuffix)) {
+        showToast('מספר הכרטיס חייב להיות בדיוק 4 ספרות.')
+        return
+      }
+      if (store.getState().cardMappings.some((m) => m.cardSuffix === cardSuffix)) {
+        showToast('הכרטיס הזה כבר משויך — יש להסיר קודם אם רוצים לשנות.')
+        return
+      }
+      createCardMapping({ cardSuffix, person: personSelect.value as Person })
+        .then((created) => {
+          const { cardMappings } = store.getState()
+          store.setState({ cardMappings: [...cardMappings, created] })
+          showToast('הכרטיס נשמר.', [], 2000)
+        })
+        .catch(() => showToast('לא ניתן היה לשמור — האם הרצת את מיגרציה 0014?'))
+    }
+  })
 
   // ---------- Shared account balance ----------
 
@@ -554,6 +632,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
     renderExchangeRate(state)
     renderCategoryManager(state)
     renderRuleBuilder(state)
+    renderCardMappingManager(state)
   })
 
   renderAccountBalance(store.getState())
@@ -561,6 +640,7 @@ export function mountSettingsView(root: HTMLElement, store: Store<AppState>, cur
   renderCategoryManager(store.getState())
   renderEmailAccounts()
   renderRuleBuilder(store.getState())
+  renderCardMappingManager(store.getState())
 
   /** Typed-but-not-yet-committed edits: the "add new" rows only save on an
    * explicit button click, and staged category edits only save on
